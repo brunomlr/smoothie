@@ -1,5 +1,6 @@
 "use client"
 
+import * as React from "react"
 import { useState, useMemo } from "react"
 import { TrendingUp, PiggyBank, Maximize2 } from "lucide-react"
 import { AreaChart, Area, CartesianGrid, XAxis, YAxis, ReferenceDot } from "recharts"
@@ -89,7 +90,7 @@ const chartConfig = {
   },
 }
 
-export function WalletBalance({ data, chartData, publicKey, assetAddress, positions }: WalletBalanceProps) {
+const WalletBalanceComponent = ({ data, chartData, publicKey, assetAddress, positions }: WalletBalanceProps) => {
   const initialBalance = Number.isFinite(data.rawBalance) ? Math.max(data.rawBalance, 0) : 0
   const apyDecimal = Number.isFinite(data.apyPercentage)
     ? Math.max(data.apyPercentage, 0) / 100
@@ -239,24 +240,22 @@ export function WalletBalance({ data, chartData, publicKey, assetAddress, positi
   const formattedLiveBalance = liveBalanceFormatter.format(displayBalance)
   const formattedLiveGrowth = liveDeltaFormatter.format(liveGrowthAmount)
 
-  const parsedInterest = (() => {
-    const cleaned =
-      typeof data.interestEarned === "string"
-        ? data.interestEarned.replace(/[$,]/g, "")
-        : ""
-    const numeric = Number.parseFloat(cleaned)
-    return Number.isFinite(numeric) ? numeric : 0
-  })()
-
-  const interestEarnedDisplay = showLiveGrowthAmount
-    ? formattedLiveGrowth
-    : liveDeltaFormatter.format(parsedInterest)
-
   // Calculate percentage gain over initial deposit
   const percentageGain = initialBalance > 0
     ? (liveGrowthAmount / initialBalance) * 100
     : 0
   const showPercentageGain = Number.isFinite(percentageGain) && hasSignificantAmount(liveGrowthAmount)
+
+  // Calculate yield projections based on current APY
+  const dailyYield = displayBalance * (data.apyPercentage / 100) / 365
+  const monthlyYield = displayBalance * (data.apyPercentage / 100) / 12
+
+  const yieldFormatter = new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
 
   return (
     <Card className="@container/card">
@@ -449,9 +448,18 @@ export function WalletBalance({ data, chartData, publicKey, assetAddress, positi
 
       <CardFooter className="flex items-stretch gap-4">
         <div className="flex flex-1 flex-col gap-1 py-2">
-          <div className="text-sm text-muted-foreground">Interest Earned</div>
+          <div className="text-sm text-muted-foreground">Daily Yield</div>
           <div className="text-xl font-semibold tabular-nums">
-            {interestEarnedDisplay}
+            {yieldFormatter.format(dailyYield)}
+          </div>
+        </div>
+
+        <Separator orientation="vertical" className="self-stretch" />
+
+        <div className="flex flex-1 flex-col gap-1 py-2">
+          <div className="text-sm text-muted-foreground">Monthly Yield</div>
+          <div className="text-xl font-semibold tabular-nums">
+            {yieldFormatter.format(monthlyYield)}
           </div>
         </div>
 
@@ -467,3 +475,16 @@ export function WalletBalance({ data, chartData, publicKey, assetAddress, positi
     </Card>
   )
 }
+
+// Memoize component to prevent unnecessary re-renders
+// Only re-render when essential data changes
+export const WalletBalance = React.memo(WalletBalanceComponent, (prevProps, nextProps) => {
+  return (
+    prevProps.data.rawBalance === nextProps.data.rawBalance &&
+    prevProps.data.apyPercentage === nextProps.data.apyPercentage &&
+    prevProps.data.growthPercentage === nextProps.data.growthPercentage &&
+    prevProps.publicKey === nextProps.publicKey &&
+    prevProps.assetAddress === nextProps.assetAddress &&
+    prevProps.positions === nextProps.positions
+  )
+})

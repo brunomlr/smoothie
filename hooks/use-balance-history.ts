@@ -80,7 +80,7 @@ export function useBalanceHistory({
       return []
     }
 
-    return fillMissingDates(query.data.history, includeBaselineDay)
+    return fillMissingDates(query.data.history, includeBaselineDay, query.data.firstEventDate)
   }, [query.data, includeBaselineDay])
 
   // Detect position changes (deposits/withdrawals)

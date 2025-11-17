@@ -90,10 +90,23 @@ export class UserRepository {
     userAddress: string,
     assetAddress: string,
     days: number = 30
-  ): Promise<UserBalance[]> {
+  ): Promise<{ history: UserBalance[], firstEventDate: string | null }> {
     if (!pool) {
       throw new Error('Database pool not initialized')
     }
+
+    // First, get the absolute first event date for this user/asset combination
+    const firstEventResult = await pool.query(
+      `
+      SELECT MIN(snapshot_date)::text AS first_event_date
+      FROM user_positions
+      WHERE user_address = $1
+        AND asset_address = $2
+      `,
+      [userAddress, assetAddress]
+    )
+
+    const firstEventDate = firstEventResult.rows[0]?.first_event_date || null
 
     const result = await pool.query(
       `
@@ -174,7 +187,7 @@ export class UserRepository {
       [userAddress, assetAddress, days]
     )
 
-    return result.rows.map((row) => {
+    const historyRecords = result.rows.map((row) => {
       // Parse raw values
       const supply_btokens = parseFloat(row.supply_btokens)
       const collateral_btokens = parseFloat(row.collateral_btokens)
@@ -238,6 +251,11 @@ export class UserRepository {
         position_date: row.position_date,
       }
     })
+
+    return {
+      history: historyRecords,
+      firstEventDate
+    }
   }
 }
 

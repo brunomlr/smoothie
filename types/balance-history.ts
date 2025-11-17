@@ -36,6 +36,7 @@ export interface BalanceHistoryResponse {
   days: number
   count: number
   history: BalanceHistoryRecord[]
+  firstEventDate: string | null // The absolute first event date for this user/asset
 }
 
 /**

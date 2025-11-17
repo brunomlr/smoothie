@@ -18,6 +18,7 @@ import {
 export function fillMissingDates(
   records: BalanceHistoryRecord[],
   includeBaselineDay: boolean = true,
+  firstEventDate: string | null = null,
 ): ChartDataPoint[] {
   if (records.length === 0) {
     return []
@@ -41,16 +42,22 @@ export function fillMissingDates(
   // Get all dates and sort
   const allDates = Array.from(datePoolMap.keys()).sort()
 
-  // Add a $0 baseline day before the first data point (optional)
-  if (includeBaselineDay && allDates.length > 0) {
-    const firstDate = new Date(allDates[0])
-    const dayBefore = new Date(firstDate)
-    dayBefore.setDate(dayBefore.getDate() - 1)
-    const dayBeforeStr = dayBefore.toISOString().split('T')[0]
+  // Add a $0 baseline day before the first data point (only if this IS the first-ever event)
+  // This ensures we only show $0 at the very beginning of the pool history, not at the start of filtered views
+  if (includeBaselineDay && allDates.length > 0 && firstEventDate) {
+    const firstDateInRecords = allDates[0]
 
-    // Add empty pool map for the day before (will show $0)
-    datePoolMap.set(dayBeforeStr, new Map())
-    allDates.unshift(dayBeforeStr)
+    // Only add baseline if the first date in our records matches the absolute first event date
+    if (firstDateInRecords === firstEventDate) {
+      const firstDate = new Date(allDates[0])
+      const dayBefore = new Date(firstDate)
+      dayBefore.setDate(dayBefore.getDate() - 1)
+      const dayBeforeStr = dayBefore.toISOString().split('T')[0]
+
+      // Add empty pool map for the day before (will show $0)
+      datePoolMap.set(dayBeforeStr, new Map())
+      allDates.unshift(dayBeforeStr)
+    }
   }
 
   // Calculate initial deposit amount from first data point (skip $0 baseline if it exists)

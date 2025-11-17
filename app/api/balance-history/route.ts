@@ -40,20 +40,21 @@ export async function GET(request: NextRequest) {
       `[Balance History API] Fetching history for user=${user}, asset=${asset}, days=${days}`,
     )
 
-    // Query database directly
-    const history = await userRepository.getUserBalanceHistory(
+    // Query database directly - now returns { history, firstEventDate }
+    const result = await userRepository.getUserBalanceHistory(
       user,
       asset,
       days,
     )
 
-    // Return data in the same format as the backfill_backend API
+    // Return data with first event date metadata
     const response = {
       user_address: user,
       asset_address: asset,
       days,
-      count: history.length,
-      history,
+      count: result.history.length,
+      history: result.history,
+      firstEventDate: result.firstEventDate,
     }
 
     // Return data with cache headers

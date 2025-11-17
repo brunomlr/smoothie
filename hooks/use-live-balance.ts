@@ -51,7 +51,8 @@ export function useLiveBalance(
   const [warningMessage, setWarningMessage] = useState<string>("")
   const [lastSync, setLastSync] = useState<number>(() => Date.now())
 
-  const animationIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const animationFrameRef = useRef<number | null>(null)
+  const lastUpdateTimeRef = useRef<number>(Date.now())
   const fetchIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const calculatePerSecondIncrease = useCallback((balance: number, annualYield: number) => {
@@ -65,9 +66,9 @@ export function useLiveBalance(
   useEffect(() => {
     let cancelled = false
 
-    if (animationIntervalRef.current) {
-      clearInterval(animationIntervalRef.current)
-      animationIntervalRef.current = null
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current)
+      animationFrameRef.current = null
     }
 
     Promise.resolve().then(() => {
@@ -80,24 +81,42 @@ export function useLiveBalance(
       setLastSync(Date.now())
       setIsWarning(false)
       setWarningMessage("")
+      lastUpdateTimeRef.current = Date.now()
 
       if (!apyDecimal) {
         return
       }
 
-      animationIntervalRef.current = setInterval(() => {
+      // Use requestAnimationFrame for smoother, more efficient animations
+      const animate = () => {
+        // Only animate when tab is visible
+        if (document.visibilityState === 'hidden') {
+          animationFrameRef.current = requestAnimationFrame(animate)
+          return
+        }
+
+        const now = Date.now()
+        const deltaTime = (now - lastUpdateTimeRef.current) / 1000 // Convert to seconds
+        lastUpdateTimeRef.current = now
+
         setDisplayBalance((prev) => {
           const perSecond = calculatePerSecondIncrease(prev, apyDecimal)
-          return prev + perSecond * 0.1 // update every 100ms
+          return prev + perSecond * deltaTime
         })
-      }, 100)
+
+        if (!cancelled) {
+          animationFrameRef.current = requestAnimationFrame(animate)
+        }
+      }
+
+      animationFrameRef.current = requestAnimationFrame(animate)
     })
 
     return () => {
       cancelled = true
-      if (animationIntervalRef.current) {
-        clearInterval(animationIntervalRef.current)
-        animationIntervalRef.current = null
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current)
+        animationFrameRef.current = null
       }
     }
   }, [initialBalance, apyDecimal, calculatePerSecondIncrease])

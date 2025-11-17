@@ -18,7 +18,7 @@ export function useWalletBalances(publicKey: string | undefined) {
 
     const assets: AssetBalance[] = [];
 
-    account.balances.forEach((balance: Horizon.HorizonApi.BalanceLineAsset | Horizon.HorizonApi.BalanceLineNative, index: number) => {
+    account.balances.forEach((balance, index: number) => {
       if (balance.asset_type === "native") {
         assets.push({
           id: `native-${index}`,

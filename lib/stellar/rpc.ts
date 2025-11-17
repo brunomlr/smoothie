@@ -1,4 +1,4 @@
-import { SorobanRpc } from "@stellar/stellar-sdk";
+import { rpc } from "@stellar/stellar-sdk";
 
 const RPC_URLS = {
   testnet: "https://soroban-testnet.stellar.org",
@@ -10,8 +10,8 @@ export function getRpcUrl(): string {
   return RPC_URLS[network];
 }
 
-export function getSorobanRpc(): SorobanRpc.Server {
-  return new SorobanRpc.Server(getRpcUrl(), {
+export function getSorobanRpc(): rpc.Server {
+  return new rpc.Server(getRpcUrl(), {
     allowHttp: process.env.NEXT_PUBLIC_STELLAR_NETWORK === "testnet",
   });
 }

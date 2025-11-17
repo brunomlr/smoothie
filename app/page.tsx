@@ -149,7 +149,7 @@ export default function Home() {
       const { fillMissingDates, detectPositionChanges, calculateEarningsStats } =
         require('@/lib/balance-history-utils')
 
-      const chartData = fillMissingDates(query.data.history, true)
+      const chartData = fillMissingDates(query.data.history, true, query.data.firstEventDate)
       const positionChanges = detectPositionChanges(query.data.history)
       const earningsStats = calculateEarningsStats(chartData, positionChanges)
 
@@ -238,7 +238,7 @@ export default function Home() {
     <div className="min-h-screen bg-background">
       <header className="border-b">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <h1 className="text-2xl font-bold">Stellar Wallet</h1>
+          <h1 className="text-2xl font-bold">Smoothie</h1>
           <WalletSelector
             wallets={wallets}
             activeWallet={activeWallet}
@@ -253,7 +253,7 @@ export default function Home() {
         {!activeWallet ? (
           <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
             <h2 className="text-3xl font-semibold mb-4">
-              Welcome to Stellar Wallet
+              Welcome to Smoothie
             </h2>
             <p className="text-muted-foreground mb-8 max-w-md">
               Connect your wallet or follow an address to view your Blend

@@ -65,7 +65,35 @@ interface PoolSnapshot {
   backstop: Backstop | null;
 }
 
+// Module-level caches with TTL for better performance
+interface CacheEntry<T> {
+  data: T;
+  timestamp: number;
+}
+
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
 const backstopCache = new Map<string, Backstop | null>();
+const tokenMetadataGlobalCache = new Map<string, CacheEntry<TokenMetadata>>();
+const priceGlobalCache = new Map<string, CacheEntry<PriceQuote | null>>();
+
+function isCacheValid<T>(entry: CacheEntry<T> | undefined): boolean {
+  if (!entry) return false;
+  return Date.now() - entry.timestamp < CACHE_TTL;
+}
+
+function getCachedValue<T>(cache: Map<string, CacheEntry<T>>, key: string): T | undefined {
+  const entry = cache.get(key);
+  if (isCacheValid(entry)) {
+    return entry!.data;
+  }
+  cache.delete(key); // Remove stale entry
+  return undefined;
+}
+
+function setCachedValue<T>(cache: Map<string, CacheEntry<T>>, key: string, value: T): void {
+  cache.set(key, { data: value, timestamp: Date.now() });
+}
 
 async function loadBackstop(
   network: Network,
@@ -158,15 +186,17 @@ async function ensureUserLoaded(
 async function getTokenMetadata(
   network: Network,
   assetId: string,
-  cache: Map<string, TokenMetadata>
+  _cache?: Map<string, TokenMetadata> // Legacy parameter, now using global cache
 ): Promise<TokenMetadata | null> {
-  if (cache.has(assetId)) {
-    return cache.get(assetId)!;
+  // Check global cache first
+  const cached = getCachedValue(tokenMetadataGlobalCache, assetId);
+  if (cached) {
+    return cached;
   }
 
   try {
     const metadata = await TokenMetadata.load(network, assetId);
-    cache.set(assetId, metadata);
+    setCachedValue(tokenMetadataGlobalCache, assetId, metadata);
     return metadata;
   } catch (error) {
     console.warn(
@@ -182,18 +212,20 @@ async function getPriceQuote(
   snapshot: PoolSnapshot,
   reserve: Reserve,
   metadata: TokenMetadata | null,
-  cache: Map<string, PriceQuote | null>
+  _cache?: Map<string, PriceQuote | null> // Legacy parameter, now using global cache
 ): Promise<PriceQuote | null> {
   const symbol = metadata?.symbol;
   const cacheKey = `${snapshot.tracked.id}:${reserve.assetId}:${symbol ?? ""}`;
 
-  if (cache.has(cacheKey)) {
-    return cache.get(cacheKey)!;
+  // Check global cache first
+  const cached = getCachedValue(priceGlobalCache, cacheKey);
+  if (cached !== undefined) {
+    return cached;
   }
 
   const oracleId = snapshot.metadata.oracle;
   if (!oracleId) {
-    cache.set(cacheKey, null);
+    setCachedValue(priceGlobalCache, cacheKey, null);
     return null;
   }
 
@@ -214,13 +246,13 @@ async function getPriceQuote(
     );
     const rawPrice = priceResponse.price;
     if (typeof rawPrice !== "bigint") {
-      cache.set(cacheKey, null);
+      setCachedValue(priceGlobalCache, cacheKey, null);
       return null;
     }
 
     const usdPrice = Number(rawPrice) / Math.pow(10, decimals);
     if (!Number.isFinite(usdPrice) || usdPrice <= 0) {
-      cache.set(cacheKey, null);
+      setCachedValue(priceGlobalCache, cacheKey, null);
       return null;
     }
 
@@ -232,14 +264,14 @@ async function getPriceQuote(
       source: "blend-oracle",
     };
 
-    cache.set(cacheKey, quote);
+    setCachedValue(priceGlobalCache, cacheKey, quote);
     return quote;
   } catch (error) {
     console.warn(
       `[blend] Failed to fetch oracle price for ${reserve.assetId}:`,
       (error as Error)?.message ?? error
     );
-    cache.set(cacheKey, null);
+    setCachedValue(priceGlobalCache, cacheKey, null);
     return null;
   }
 }
@@ -504,8 +536,8 @@ export async function fetchWalletBlendSnapshot(
         emissions = typeof result === 'object' && result !== null && 'emissions' in result
           ? Number(result.emissions) / 1e7 // Convert from stroops to tokens
           : 0;
-      } else if (typeof snapshot.user.getEmissionEstimateV2 === 'function') {
-        const estimates = snapshot.user.getEmissionEstimateV2();
+      } else if (typeof (snapshot.user as any).getEmissionEstimateV2 === 'function') {
+        const estimates = (snapshot.user as any).getEmissionEstimateV2();
         if (estimates instanceof Map) {
           for (const [, emissionData] of estimates.entries()) {
             if (emissionData && typeof emissionData === 'object' && 'accrued' in emissionData) {
