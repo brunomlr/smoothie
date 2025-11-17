@@ -1,8 +1,51 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Stellar Crypto Wallet
+
+A modern, secure Stellar cryptocurrency wallet built with Next.js, TypeScript, and shadcn/ui.
+
+## Tech Stack
+
+- **Framework**: Next.js 14+ (App Router) with TypeScript
+- **UI**: shadcn/ui + Tailwind CSS + Lucide Icons
+- **Blockchain**: Stellar SDK (@stellar/stellar-sdk)
+- **State Management**: Zustand
+- **Data Fetching**: TanStack Query (React Query)
+- **Forms**: react-hook-form + zod
+- **Utilities**: crypto-js, bignumber.js, qrcode.react
+
+## Project Structure
+
+```
+├── app/              # Next.js app router pages
+├── components/       # shadcn + custom React components
+├── lib/             # Utility functions and Stellar SDK helpers
+│   ├── stellar/     # Stellar-specific utilities
+│   └── utils.ts     # shadcn utils
+├── hooks/           # Custom React hooks
+├── stores/          # Zustand state stores
+└── types/           # TypeScript type definitions
+```
 
 ## Getting Started
 
-First, run the development server:
+### 1. Environment Setup
+
+Copy the example environment file and configure it:
+
+```bash
+cp .env.local.example .env.local
+```
+
+Edit `.env.local` to set your preferred network (testnet/public).
+
+### 2. Install Dependencies
+
+Dependencies are already installed. If you need to reinstall:
+
+```bash
+npm install
+```
+
+### 3. Run Development Server
 
 ```bash
 npm run dev

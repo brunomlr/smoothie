@@ -1,0 +1,33 @@
+# Netlify Configuration for Smoothie Next.js App
+
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+# Next.js specific settings
+[build.environment]
+  NODE_VERSION = "20"
+
+# Redirect rules for Next.js
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Headers for security
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    X-XSS-Protection = "1; mode=block"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+# Function settings for API routes
+[functions]
+  node_bundler = "esbuild"
+  # Increase timeout for database queries
+  functions_timeout = 10
+
+# Environment variables (set these in Netlify UI)
+# DATABASE_URL = "your-neon-db-url"
