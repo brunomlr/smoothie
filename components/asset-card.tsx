@@ -81,16 +81,13 @@ const AssetCardComponent = ({ data, onAction }: AssetCardProps) => {
 
   const formattedLiveBalance = balanceFormatter.format(displayBalance)
 
-  // Use actual earned yield from balance history if available
-  const hasActualYield = data.earnedYield !== undefined && data.earnedYield > 0
-  const yieldToShow: number = hasActualYield ? (data.earnedYield ?? 0) : 0
-
+  // Use yield calculated as: SDK Balance - Dune Cost Basis
+  const yieldToShow = data.earnedYield ?? 0
   const formattedYield = yieldFormatter.format(yieldToShow)
   const hasSignificantYield = Math.abs(yieldToShow) >= 0.01
 
-  // Calculate percentage increase: (yield / initial balance) * 100
-  const initialBalanceValue = Number.isFinite(data.rawBalance) ? Math.max(data.rawBalance, 0) : 0
-  const yieldPercentage = initialBalanceValue > 0 ? (yieldToShow / initialBalanceValue) * 100 : 0
+  // Use yield percentage: (Yield / Cost Basis) * 100
+  const yieldPercentage = data.yieldPercentage ?? 0
   const formattedYieldPercentage = yieldPercentage !== 0 ? ` (${yieldPercentage >= 0 ? '+' : ''}${yieldPercentage.toFixed(2)}%)` : ''
 
   return (
@@ -206,6 +203,7 @@ export const AssetCard = React.memo(AssetCardComponent, (prevProps, nextProps) =
     prevProps.data.apyPercentage === nextProps.data.apyPercentage &&
     prevProps.data.growthPercentage === nextProps.data.growthPercentage &&
     prevProps.data.earnedYield === nextProps.data.earnedYield &&
+    prevProps.data.yieldPercentage === nextProps.data.yieldPercentage &&
     prevProps.onAction === nextProps.onAction
   )
 })

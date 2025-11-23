@@ -12,8 +12,8 @@ export interface AssetCardData {
   rawBalance: number;
   apyPercentage: number;
   growthPercentage: number;
-  earnedYield?: number; // Total yield earned for this position
-  earnedYieldDays?: number; // Number of days over which yield was earned
+  earnedYield?: number; // Total yield earned: SDK Balance - Cost Basis
+  yieldPercentage?: number; // Yield percentage: (Yield / Cost Basis) * 100
 }
 
 export type AssetAction = 'deposit' | 'withdraw' | 'view-details' | 'remove';

@@ -36,7 +36,6 @@ import {
 } from "@/components/ui/dialog"
 import type { BalanceData, ChartDataPoint as WalletChartDataPoint } from "@/types/wallet-balance"
 import type { ChartDataPoint } from "@/types/balance-history"
-import type { BlendReservePosition } from "@/lib/blend/positions"
 import { useLiveBalance } from "@/hooks/use-live-balance"
 import { FormattedBalance } from "@/components/formatted-balance"
 import { useBalanceHistory } from "@/hooks/use-balance-history"
@@ -47,7 +46,6 @@ interface WalletBalanceProps {
   chartData: WalletChartDataPoint[]
   publicKey?: string
   assetAddress?: string
-  positions?: BlendReservePosition[] // SDK positions with current b_rate
 }
 
 function formatPercentage(value: number): string {
@@ -90,25 +88,25 @@ const chartConfig = {
   },
 }
 
-const WalletBalanceComponent = ({ data, chartData, publicKey, assetAddress, positions }: WalletBalanceProps) => {
+const WalletBalanceComponent = ({ data, chartData, publicKey, assetAddress }: WalletBalanceProps) => {
   const initialBalance = Number.isFinite(data.rawBalance) ? Math.max(data.rawBalance, 0) : 0
   const apyDecimal = Number.isFinite(data.apyPercentage)
     ? Math.max(data.apyPercentage, 0) / 100
     : 0
 
-  // Fetch full history (90 days) for accurate earnings stats and initial b_rate
-  const { earningsStats, data: historyData, chartData: fullHistoryChartData } = useBalanceHistory({
+  // Fetch full history (90 days) for accurate earnings stats
+  const { earningsStats, chartData: fullHistoryChartData } = useBalanceHistory({
     publicKey: publicKey || '',
     assetAddress: assetAddress || '',
     days: 90,
     enabled: !!publicKey && !!assetAddress,
   })
 
-  // Derive 15-day chart data from the full 90-day dataset (eliminates duplicate fetch)
+  // Use full history chart data from the 90-day dataset
   const historyChartData = useMemo(() => {
     if (fullHistoryChartData.length === 0) return []
-    // Get last 15 days from the full dataset
-    return fullHistoryChartData.slice(-15)
+    // Return all historical data
+    return fullHistoryChartData
   }, [fullHistoryChartData])
 
   // Use balance history chart data if available, otherwise fallback to prop
@@ -135,44 +133,11 @@ const WalletBalanceComponent = ({ data, chartData, publicKey, assetAddress, posi
 
   const { displayBalance } = useLiveBalance(initialBalance, apyDecimal, null, 0)
 
-  // Calculate yield using SDK b_rate if positions are available
-  const sdkCalculatedYield = useMemo(() => {
-    if (!positions || positions.length === 0 || !historyData?.history || historyData.history.length === 0) {
-      return null
-    }
-
-    // Group initial b_rates by pool and asset from first historical record
-    const initialBRates = new Map<string, number>()
-    historyData.history.forEach((record) => {
-      const key = `${record.pool_id}-${record.asset_address}`
-      if (!initialBRates.has(key) || record.snapshot_date < historyData.history[0].snapshot_date) {
-        initialBRates.set(key, record.b_rate)
-      }
-    })
-
-    // Calculate yield for each position using SDK b_rate
-    let totalYield = 0
-    positions.forEach((position) => {
-      const key = `${position.poolId}-${position.assetId}`
-      const initialBRate = initialBRates.get(key)
-
-      if (initialBRate && position.bRate > 0 && position.bTokens > 0) {
-        // Yield = bTokens × (current_b_rate - initial_b_rate) × price
-        const bRateDiff = position.bRate - initialBRate
-        const positionYield = position.bTokens * bRateDiff * (position.price?.usdPrice || 0)
-        totalYield += positionYield
-      }
-    })
-
-    return totalYield
-  }, [positions, historyData])
-
-  // Use SDK calculated yield if available, otherwise use historical tracking
-  const actualTotalInterest = sdkCalculatedYield !== null ? sdkCalculatedYield : earningsStats.totalInterest
-  const liveGrowthAmount = actualTotalInterest || (displayBalance - initialBalance)
+  // Use yield calculated from: SDK Balance - Dune Cost Basis
+  const liveGrowthAmount = data.rawInterestEarned
   const showLiveGrowthAmount = hasSignificantAmount(liveGrowthAmount)
 
-  // Enhanced chart data: last 15 days + today + 12 month projection
+  // Enhanced chart data: full history + today + 12 month projection
   const enhancedChartData = useMemo((): ChartDataPoint[] => {
     const today = new Date()
     const todayStr = today.toISOString().split('T')[0]
@@ -240,10 +205,8 @@ const WalletBalanceComponent = ({ data, chartData, publicKey, assetAddress, posi
   const formattedLiveBalance = liveBalanceFormatter.format(displayBalance)
   const formattedLiveGrowth = liveDeltaFormatter.format(liveGrowthAmount)
 
-  // Calculate percentage gain over initial deposit
-  const percentageGain = initialBalance > 0
-    ? (liveGrowthAmount / initialBalance) * 100
-    : 0
+  // Use percentage gain calculated from: (SDK Balance - Cost Basis) / Cost Basis * 100
+  const percentageGain = data.growthPercentage
   const showPercentageGain = Number.isFinite(percentageGain) && hasSignificantAmount(liveGrowthAmount)
 
   // Calculate yield projections based on current APY
@@ -484,7 +447,6 @@ export const WalletBalance = React.memo(WalletBalanceComponent, (prevProps, next
     prevProps.data.apyPercentage === nextProps.data.apyPercentage &&
     prevProps.data.growthPercentage === nextProps.data.growthPercentage &&
     prevProps.publicKey === nextProps.publicKey &&
-    prevProps.assetAddress === nextProps.assetAddress &&
-    prevProps.positions === nextProps.positions
+    prevProps.assetAddress === nextProps.assetAddress
   )
 })

@@ -91,8 +91,59 @@ export default function Home() {
     [wallets, activeWalletId]
   )
 
+  // Fetch balance history to get cost basis from Dune (use first asset for now)
+  // This will give us the total cost basis across all pools
+  const firstAssetQuery = useQueries({
+    queries: [{
+      queryKey: ["balance-history-for-cost-basis", activeWallet?.publicKey || '', 90],
+      queryFn: async () => {
+        // Use USDC asset address for cost basis calculation
+        const usdcAsset = 'CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7SJMI75'
+        const params = new URLSearchParams({
+          user: activeWallet?.publicKey || '',
+          asset: usdcAsset,
+          days: '90',
+        })
+
+        const response = await fetch(`/api/balance-history?${params.toString()}`)
+
+        if (!response.ok) {
+          return null
+        }
+
+        return response.json()
+      },
+      enabled: !!activeWallet?.publicKey,
+      staleTime: 5 * 60 * 1000,
+    }],
+  })[0]
+
+  // Calculate total cost basis from Dune
+  const totalCostBasis = useMemo(() => {
+    if (!firstAssetQuery.data?.history || firstAssetQuery.data.history.length === 0) {
+      return undefined
+    }
+
+    const latestByPool = new Map<string, number>()
+    firstAssetQuery.data.history.forEach((record: any) => {
+      if (record.total_cost_basis !== null && record.total_cost_basis !== undefined) {
+        if (!latestByPool.has(record.pool_id)) {
+          latestByPool.set(record.pool_id, record.total_cost_basis)
+        }
+      }
+    })
+
+    let total = 0
+    latestByPool.forEach((costBasis) => {
+      total += costBasis
+    })
+
+    return total
+  }, [firstAssetQuery.data])
+
   const { balanceData, assetCards, isLoading, error, data: blendSnapshot } = useBlendPositions(
-    activeWallet?.publicKey
+    activeWallet?.publicKey,
+    totalCostBasis
   )
 
   const chartData = useMemo(
@@ -138,47 +189,57 @@ export default function Home() {
     })),
   })
 
-  // Build a mapping from poolId to earnings data
-  const poolEarningsMap = useMemo(() => {
-    const map = new Map<string, { totalInterest: number; dayCount: number }>()
+  // Build a mapping from poolId to cost basis (from Dune)
+  const poolCostBasisMap = useMemo(() => {
+    const map = new Map<string, number>()
 
-    balanceHistoryQueries.forEach((query, index) => {
+    balanceHistoryQueries.forEach((query) => {
       if (!query.data?.history || query.data.history.length === 0) return
 
-      // Calculate earnings stats for this asset
-      const { fillMissingDates, detectPositionChanges, calculateEarningsStats } =
-        require('@/lib/balance-history-utils')
+      // Get latest cost_basis for each pool from this asset's history
+      const latestByPool = new Map<string, number>()
+      query.data.history.forEach((record: any) => {
+        if (record.total_cost_basis !== null && record.total_cost_basis !== undefined) {
+          // Since records are sorted newest first, first occurrence is the latest
+          if (!latestByPool.has(record.pool_id)) {
+            latestByPool.set(record.pool_id, record.total_cost_basis)
+          }
+        }
+      })
 
-      const chartData = fillMissingDates(query.data.history, true, query.data.firstEventDate)
-      const positionChanges = detectPositionChanges(query.data.history)
-      const earningsStats = calculateEarningsStats(chartData, positionChanges)
-
-      // Add per-pool earnings to the map
-      Object.entries(earningsStats.perPool).forEach(([poolId, stats]: [string, any]) => {
-        map.set(poolId, {
-          totalInterest: stats.totalInterest,
-          dayCount: earningsStats.dayCount,
-        })
+      // Add to the overall map
+      latestByPool.forEach((costBasis, poolId) => {
+        map.set(poolId, costBasis)
       })
     })
 
     return map
   }, [balanceHistoryQueries])
 
-  // Enrich asset cards with actual earnings data
+  // Enrich asset cards with yield calculated as: SDK Balance - Dune Cost Basis
   const enrichedAssetCards = useMemo(() => {
     return assetCards.map((asset) => {
       // Extract pool ID from composite ID (format: poolId-assetAddress)
       const poolId = asset.id.includes('-') ? asset.id.split('-')[0] : asset.id
-      const earnings = poolEarningsMap.get(poolId)
+      const costBasis = poolCostBasisMap.get(poolId)
+
+      // Calculate yield: SDK Balance (USD) - Dune Cost Basis (USD)
+      const earnedYield = costBasis !== undefined
+        ? asset.rawBalance - costBasis
+        : 0
+
+      // Calculate yield percentage: (Yield / Cost Basis) * 100
+      const yieldPercentage = costBasis !== undefined && costBasis > 0
+        ? (earnedYield / costBasis) * 100
+        : 0
 
       return {
         ...asset,
-        earnedYield: earnings?.totalInterest ?? 0,
-        earnedYieldDays: earnings?.dayCount ?? 0,
+        earnedYield,
+        yieldPercentage,
       } as AssetCardData
     })
-  }, [assetCards, poolEarningsMap])
+  }, [assetCards, poolCostBasisMap])
 
   // Get the asset address from the first asset card (extract from composite ID)
   const firstAssetAddress = useMemo(() => {
@@ -230,7 +291,6 @@ export default function Home() {
   }
 
   const handleAssetAction = (action: string, assetId: string) => {
-    console.log("Asset action:", action, assetId)
     // Handle asset actions (deposit, withdraw, etc.)
   }
 
@@ -283,7 +343,6 @@ export default function Home() {
                   chartData={chartData}
                   publicKey={activeWallet.publicKey}
                   assetAddress={firstAssetAddress}
-                  positions={blendSnapshot?.positions}
                 />
 
                 {enrichedAssetCards.length > 0 && (
@@ -327,6 +386,29 @@ export default function Home() {
                             publicKey={activeWallet.publicKey}
                             assetAddress={assetAddress}
                             days={30}
+                            totalYield={enrichedAssetCards
+                              .filter(card => {
+                                const cardAssetAddress = card.id.includes('-')
+                                  ? card.id.split('-')[1]
+                                  : card.id
+                                return cardAssetAddress === assetAddress
+                              })
+                              .reduce((sum, card) => sum + (card.earnedYield || 0), 0)}
+                            perPoolYield={new Map(
+                              enrichedAssetCards
+                                .filter(card => {
+                                  const cardAssetAddress = card.id.includes('-')
+                                    ? card.id.split('-')[1]
+                                    : card.id
+                                  return cardAssetAddress === assetAddress
+                                })
+                                .map(card => {
+                                  const poolId = card.id.includes('-')
+                                    ? card.id.split('-')[0]
+                                    : card.id
+                                  return [poolId, card.earnedYield || 0]
+                                })
+                            )}
                           />
 
                           <BalanceHistoryChart

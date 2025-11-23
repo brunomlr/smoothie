@@ -72,6 +72,8 @@ export interface ChartDataPoint {
     poolId: string
     poolName: string
     balance: number
+    deposit: number // Cost basis / principal for this pool
+    yield: number // Yield from Dune (total_yield field)
   }[]
 }
 

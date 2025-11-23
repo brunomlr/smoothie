@@ -62,24 +62,6 @@ export function BalanceHistoryChart({
       days,
     })
 
-  // Debug logging
-  console.log('Balance History Debug:', {
-    publicKey,
-    assetAddress,
-    days,
-    chartDataLength: chartData.length,
-    isLoading,
-    error: error?.message,
-  })
-
-  // Debug: Show sample chart data to verify pool IDs
-  if (chartData.length > 0) {
-    console.log('Sample chart data point:', chartData[0])
-    console.log('Pool YieldBlox values:', chartData.map(d => d.pool_yieldblox))
-    console.log('Pool Blend values:', chartData.map(d => d.pool_blend))
-    console.log('Total values:', chartData.map(d => d.total))
-  }
-
   // Prepare deposit markers for scatter plot
   const depositMarkers = chartData.map((point) => {
     const hasChange = positionChanges.some(

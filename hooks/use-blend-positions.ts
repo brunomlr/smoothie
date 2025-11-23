@@ -51,16 +51,11 @@ function buildBalanceData(snapshot: BlendWalletSnapshot | undefined): BalanceDat
       rawBalance: 0,
       apyPercentage: 0,
       interestEarned: "0.00",
+      rawInterestEarned: 0,
       annualYield: "0.00",
       growthPercentage: 0,
     }
   }
-
-  // Calculate raw balance using native token amounts (same as root app)
-  const totalSupplyRaw = snapshot.positions.reduce(
-    (acc, position) => acc + position.supplyAmount,
-    0
-  )
 
   const totalSupplyUsd = snapshot.positions.reduce(
     (acc, position) => acc + position.supplyUsdValue,
@@ -71,9 +66,10 @@ function buildBalanceData(snapshot: BlendWalletSnapshot | undefined): BalanceDat
 
   return {
     balance: formatUsdWithDecimals(totalSupplyUsd),
-    rawBalance: totalSupplyRaw, // Raw native token amount, not USD
+    rawBalance: totalSupplyUsd, // USD value for yield calculation
     apyPercentage: Number.isFinite(weightedSupplyApy) ? weightedSupplyApy : 0,
     interestEarned: "0.00",
+    rawInterestEarned: 0,
     annualYield: formatUsd(estimatedAnnualYield),
     growthPercentage: snapshot.weightedBlndApy ?? 0,
   }
@@ -90,14 +86,14 @@ function buildAssetCards(snapshot: BlendWalletSnapshot | undefined): AssetCardDa
       assetName: position.symbol,
       logoUrl: resolveAssetLogo(position.symbol),
       balance: formatUsdWithDecimals(position.supplyUsdValue),
-      rawBalance: position.supplyAmount, // Raw native token amount, not USD
+      rawBalance: position.supplyUsdValue, // USD value for yield calculation
       apyPercentage: position.supplyApy,
       growthPercentage: position.blndApy,
-      earnedYield: 0, // Will be populated from balance history in the future
+      earnedYield: 0, // Will be populated from page.tsx using: SDK balance - Dune cost basis
     }))
 }
 
-export function useBlendPositions(walletPublicKey: string | undefined) {
+export function useBlendPositions(walletPublicKey: string | undefined, totalCostBasis?: number) {
   const query = useQuery({
     queryKey: ["blend-wallet-snapshot", walletPublicKey],
     enabled: !!walletPublicKey,
@@ -106,7 +102,25 @@ export function useBlendPositions(walletPublicKey: string | undefined) {
     refetchInterval: 60_000,
   })
 
-  const balanceData = useMemo(() => buildBalanceData(query.data), [query.data])
+  const balanceData = useMemo(() => {
+    const data = buildBalanceData(query.data)
+
+    // If we have cost basis from Dune, calculate real yield: SDK Balance - Cost Basis
+    if (totalCostBasis !== undefined && totalCostBasis > 0) {
+      const realYield = data.rawBalance - totalCostBasis
+      const yieldPercentage = totalCostBasis > 0 ? (realYield / totalCostBasis) * 100 : 0
+
+      return {
+        ...data,
+        interestEarned: formatUsd(realYield),
+        rawInterestEarned: realYield,
+        growthPercentage: yieldPercentage,
+      }
+    }
+
+    return data
+  }, [query.data, totalCostBasis])
+
   const assetCards = useMemo(() => buildAssetCards(query.data), [query.data])
 
   const totalEmissions = useMemo(

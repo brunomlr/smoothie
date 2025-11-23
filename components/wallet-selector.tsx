@@ -72,9 +72,6 @@ export function WalletSelector({
                 onConnectWallet(address, walletName)
               }
             })
-            if (address) {
-              console.log("Wallet connected:", address)
-            }
           } catch (error) {
             console.error("Failed to open wallet modal:", error)
             // Reopen connection modal on error
@@ -103,9 +100,6 @@ export function WalletSelector({
                   onConnectWallet(address, walletName)
                 }
               })
-              if (address) {
-                console.log("Hardware wallet connected:", address)
-              }
             } catch (error) {
               console.error("Failed to open hardware wallet:", error)
               setShowConnectionModal(true)

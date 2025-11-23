@@ -23,4 +23,7 @@ export interface UserBalance {
   snapshot_b_rate?: number | null
   snapshot_d_rate?: number | null
   position_date?: string | null
+  // Dune Analytics fields (when sourced from Dune)
+  total_cost_basis?: number | null
+  total_yield?: number | null
 }

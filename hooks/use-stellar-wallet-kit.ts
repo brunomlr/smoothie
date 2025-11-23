@@ -34,7 +34,6 @@ async function initializeWalletKit(network: Networks) {
       })
       StellarWalletsKit.setNetwork(network)
       isKitInitialized = true
-      console.log("Stellar Wallets Kit initialized")
     } catch (error) {
       console.error("Failed to initialize wallet kit:", error)
       initializationPromise = null

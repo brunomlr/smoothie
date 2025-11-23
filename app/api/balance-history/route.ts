@@ -1,10 +1,14 @@
 /**
  * Balance History API Route
- * Queries balance history directly from Neon DB
+ * Fetches balance history from Dune Analytics
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { userRepository } from '@/lib/db/user-repository'
+import { fetchDuneQueryResults } from '@/lib/dune/client'
+import { transformDuneResults, filterByDays, DuneRow } from '@/lib/dune/transformer'
+// import { userRepository } from '@/lib/db/user-repository' // Kept for reference, not used
+
+const DUNE_QUERY_ID = 6245238
 
 export async function GET(request: NextRequest) {
   try {
@@ -37,30 +41,45 @@ export async function GET(request: NextRequest) {
     }
 
     console.log(
-      `[Balance History API] Fetching history for user=${user}, asset=${asset}, days=${days}`,
+      `[Balance History API] Fetching history from Dune for user=${user}, asset=${asset}, days=${days}`,
     )
 
-    // Query database directly - now returns { history, firstEventDate }
-    const result = await userRepository.getUserBalanceHistory(
+    // Fetch data from Dune Analytics
+    const duneResult = await fetchDuneQueryResults(DUNE_QUERY_ID)
+
+    if (!duneResult.result?.rows) {
+      throw new Error('No data returned from Dune query')
+    }
+
+    // Transform Dune results to UserBalance format
+    const allBalances = transformDuneResults(
+      duneResult.result.rows as DuneRow[],
       user,
-      asset,
-      days,
+      asset
     )
+
+    // Filter by requested days
+    const filteredBalances = filterByDays(allBalances, days)
+
+    // Find first event date (oldest date in the full dataset)
+    const firstEventDate = allBalances.length > 0
+      ? allBalances[allBalances.length - 1].snapshot_date
+      : null
 
     // Return data with first event date metadata
     const response = {
       user_address: user,
       asset_address: asset,
       days,
-      count: result.history.length,
-      history: result.history,
-      firstEventDate: result.firstEventDate,
+      count: filteredBalances.length,
+      history: filteredBalances,
+      firstEventDate,
     }
 
-    // Return data with cache headers
+    // Return data with 12-hour cache headers
     return NextResponse.json(response, {
       headers: {
-        'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
+        'Cache-Control': 'public, s-maxage=43200, stale-while-revalidate=86400',
       },
     })
   } catch (error) {

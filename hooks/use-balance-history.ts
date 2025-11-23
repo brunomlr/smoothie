@@ -29,6 +29,7 @@ export interface UseBalanceHistoryResult {
   chartData: ChartDataPoint[]
   positionChanges: PositionChange[]
   earningsStats: EarningsStats
+  totalCostBasis: number // Total cost basis from Dune (all pools combined)
   refetch: () => void
 }
 
@@ -97,6 +98,32 @@ export function useBalanceHistory({
     return calculateEarningsStats(chartData, positionChanges)
   }, [chartData, positionChanges])
 
+  // Get total cost basis from latest Dune records (sum of all pools)
+  const totalCostBasis = useMemo(() => {
+    if (!query.data?.history || query.data.history.length === 0) {
+      return 0
+    }
+
+    // Group by pool and get latest cost_basis for each
+    const latestByPool = new Map<string, number>()
+    query.data.history.forEach((record) => {
+      if (record.total_cost_basis !== null && record.total_cost_basis !== undefined) {
+        // Since records are sorted newest first, first occurrence is the latest
+        if (!latestByPool.has(record.pool_id)) {
+          latestByPool.set(record.pool_id, record.total_cost_basis)
+        }
+      }
+    })
+
+    // Sum up cost basis from all pools
+    let total = 0
+    latestByPool.forEach((costBasis) => {
+      total += costBasis
+    })
+
+    return total
+  }, [query.data])
+
   return {
     isLoading: query.isLoading,
     error: query.error as Error | null,
@@ -104,6 +131,7 @@ export function useBalanceHistory({
     chartData,
     positionChanges,
     earningsStats,
+    totalCostBasis,
     refetch: query.refetch,
   }
 }

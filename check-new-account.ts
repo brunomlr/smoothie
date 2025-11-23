@@ -30,7 +30,7 @@ async function checkAccount() {
       console.log(`   ${idx + 1}. ${pos.symbol} (${pos.poolName})`)
       console.log(`      Asset ID: ${pos.assetId}`)
       console.log(`      Supply: ${pos.supplyAmount}`)
-      console.log(`      Collateral: ${pos.collateralAmount || 0}`)
+      console.log(`      Borrow: ${pos.borrowAmount}`)
     })
     console.log()
 

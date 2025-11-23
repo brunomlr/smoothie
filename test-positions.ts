@@ -21,8 +21,6 @@ async function testPositions() {
       console.log(`   Position ID: ${pos.id}`)
       console.log(`   Supply Amount: ${pos.supplyAmount}`)
       console.log(`   Supply USD Value: ${pos.supplyUsdValue}`)
-      console.log(`   Collateral Amount: ${pos.collateralAmount}`)
-      console.log(`   Collateral USD Value: ${pos.collateralUsdValue}`)
       console.log(`   Borrow Amount: ${pos.borrowAmount}`)
       console.log(`   Borrow USD Value: ${pos.borrowUsdValue}`)
       console.log(`   Supply APY: ${pos.supplyApy}%`)

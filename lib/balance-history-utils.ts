@@ -67,10 +67,14 @@ export function fillMissingDates(
   // Track cumulative deposits per pool (bTokens and initial b_rate)
   const poolBTokens = new Map<string, number>()
   const poolInitialBRate = new Map<string, number>()
+  // Track if we have Dune cost_basis data (to avoid recalculating)
+  const poolHasCostBasis = new Map<string, boolean>()
   firstDateRecords.forEach((record, poolId) => {
     const totalBTokens = record.supply_btokens + record.collateral_btokens
     poolBTokens.set(poolId, totalBTokens)
     poolInitialBRate.set(poolId, record.b_rate)
+    const hasCostBasis = record.total_cost_basis !== undefined && record.total_cost_basis !== null
+    poolHasCostBasis.set(poolId, hasCostBasis)
   })
 
   // Build chart data - backend already filled missing dates with recalculated rates
@@ -94,15 +98,26 @@ export function fillMissingDates(
         poolInitialBRate.set(poolId, record.b_rate)
       }
 
-      // Calculate deposit amount using INITIAL b_rate (at time of deposit)
-      const initialRate = poolInitialBRate.get(poolId) || record.b_rate
-      const depositAmount = (poolBTokens.get(poolId) || 0) * initialRate
+      // Use Dune cost_basis if available, otherwise calculate from bTokens
+      let depositAmount: number
+      const useDuneCostBasis = poolHasCostBasis.get(poolId) && record.total_cost_basis !== undefined && record.total_cost_basis !== null
+
+      if (useDuneCostBasis) {
+        // Use Dune's pre-calculated cost basis
+        depositAmount = record.total_cost_basis!
+      } else {
+        // Fallback: calculate deposit amount using INITIAL b_rate (at time of deposit)
+        const initialRate = poolInitialBRate.get(poolId) || record.b_rate
+        depositAmount = (poolBTokens.get(poolId) || 0) * initialRate
+      }
       totalDeposit += depositAmount
 
       pools.push({
         poolId,
         poolName: getPoolName(poolId),
         balance,
+        deposit: depositAmount,
+        yield: record.total_yield || 0, // Use Dune's pre-calculated yield
       })
       total += balance
     })
@@ -281,28 +296,18 @@ export function calculateEarningsStats(
 
   // Calculate stats for each pool separately
   poolIds.forEach(poolId => {
-    let totalInterest = 0
+    // Find latest yield from Dune and latest balance for this pool
+    let totalInterest = 0 // This will be Dune's total_yield
+    let latestBalance = 0
     let totalPosition = 0
     let dataPoints = 0
 
-    // For each day, calculate interest from rate increase
-    for (let i = 1; i < chartData.length; i++) {
-      const prevDay = chartData[i - 1]
-      const currDay = chartData[i]
-
-      const prevPool = prevDay.pools.find(p => p.poolId === poolId)
-      const currPool = currDay.pools.find(p => p.poolId === poolId)
-
-      if (prevPool && currPool) {
-        // Interest = balance change from rates only (if no deposits)
-        // If balance increased but no entry_hash change, it's pure interest
-        const balanceChange = currPool.balance - prevPool.balance
-
-        // Simple heuristic: if it's a small daily change, it's likely interest
-        // If it's a large sudden change, it might be a deposit
-        // We'll count all changes as interest for now (can refine later with entry_hash)
-        totalInterest += balanceChange
-
+    for (let i = 0; i < chartData.length; i++) {
+      const currPool = chartData[i].pools.find(p => p.poolId === poolId)
+      if (currPool) {
+        // Use Dune's pre-calculated yield (total_yield field)
+        totalInterest = currPool.yield
+        latestBalance = currPool.balance
         totalPosition += currPool.balance
         dataPoints++
       }
@@ -316,10 +321,7 @@ export function calculateEarningsStats(
       ? (totalInterest / avgPosition) * (365 / dayCount) * 100
       : 0
 
-    // Projected annual
-    const latestPoint = chartData[chartData.length - 1]
-    const latestPool = latestPoint.pools.find(p => p.poolId === poolId)
-    const latestBalance = latestPool?.balance || 0
+    // Projected annual (using latestBalance from loop above)
     const projectedAnnual = (latestBalance * apy) / 100
 
     perPool[poolId] = {

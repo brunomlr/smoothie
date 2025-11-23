@@ -8,6 +8,7 @@ export interface BalanceData {
   rawBalance: number;
   apyPercentage: number;
   interestEarned: string;
+  rawInterestEarned: number; // Numeric yield value for calculations
   annualYield: string;
   growthPercentage: number;
 }
