@@ -25,6 +25,8 @@ export interface BalanceHistoryRecord {
   collateral_balance: number
   debt_balance: number
   net_balance: number
+  total_cost_basis: number | null
+  total_yield: number | null
 }
 
 /**
