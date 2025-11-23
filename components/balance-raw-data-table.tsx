@@ -12,27 +12,21 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
-import { useBalanceHistory } from "@/hooks/use-balance-history"
 import { formatCurrency, formatNumber, getPoolName } from "@/lib/balance-history-utils"
 import { BalanceHistoryRecord } from "@/types/balance-history"
 
 interface BalanceRawDataTableProps {
-  publicKey: string
-  assetAddress: string
-  days?: number
+  records: BalanceHistoryRecord[]
+  isLoading?: boolean
+  error?: Error | null
 }
 
 export function BalanceRawDataTable({
-  publicKey,
-  assetAddress,
-  days = 30,
+  records,
+  isLoading = false,
+  error = null,
 }: BalanceRawDataTableProps) {
   const [isOpen, setIsOpen] = useState(false)
-  const { isLoading, error, data } = useBalanceHistory({
-    publicKey,
-    assetAddress,
-    days,
-  })
 
   if (error) {
     return (
@@ -63,8 +57,6 @@ export function BalanceRawDataTable({
       </Card>
     )
   }
-
-  const records = data?.history || []
 
   // Sort by newest first (snapshot_date DESC, ledger_sequence DESC)
   const sortedRecords = [...records].sort((a, b) => {

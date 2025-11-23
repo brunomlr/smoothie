@@ -1,12 +1,11 @@
 "use client"
 
 import * as React from "react"
-import { useState, useMemo } from "react"
+import { useMemo } from "react"
 import { TrendingUp, PiggyBank, Maximize2 } from "lucide-react"
 import { AreaChart, Area, CartesianGrid, XAxis, YAxis, ReferenceDot } from "recharts"
 import {
   Card,
-  CardAction,
   CardContent,
   CardDescription,
   CardFooter,
@@ -35,10 +34,9 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import type { BalanceData, ChartDataPoint as WalletChartDataPoint } from "@/types/wallet-balance"
-import type { ChartDataPoint } from "@/types/balance-history"
+import type { ChartDataPoint, EarningsStats, PositionChange } from "@/types/balance-history"
 import { useLiveBalance } from "@/hooks/use-live-balance"
 import { FormattedBalance } from "@/components/formatted-balance"
-import { useBalanceHistory } from "@/hooks/use-balance-history"
 import { BalanceHistoryChart } from "@/components/balance-history-chart"
 
 interface WalletBalanceProps {
@@ -46,6 +44,11 @@ interface WalletBalanceProps {
   chartData: WalletChartDataPoint[]
   publicKey?: string
   assetAddress?: string
+  balanceHistoryData?: {
+    earningsStats: EarningsStats
+    chartData: ChartDataPoint[]
+    positionChanges: PositionChange[]
+  }
 }
 
 function formatPercentage(value: number): string {
@@ -88,26 +91,14 @@ const chartConfig = {
   },
 }
 
-const WalletBalanceComponent = ({ data, chartData, publicKey, assetAddress }: WalletBalanceProps) => {
+const WalletBalanceComponent = ({ data, chartData, publicKey, assetAddress, balanceHistoryData }: WalletBalanceProps) => {
   const initialBalance = Number.isFinite(data.rawBalance) ? Math.max(data.rawBalance, 0) : 0
   const apyDecimal = Number.isFinite(data.apyPercentage)
     ? Math.max(data.apyPercentage, 0) / 100
     : 0
 
-  // Fetch full history (90 days) for accurate earnings stats
-  const { earningsStats, chartData: fullHistoryChartData } = useBalanceHistory({
-    publicKey: publicKey || '',
-    assetAddress: assetAddress || '',
-    days: 90,
-    enabled: !!publicKey && !!assetAddress,
-  })
-
-  // Use full history chart data from the 90-day dataset
-  const historyChartData = useMemo(() => {
-    if (fullHistoryChartData.length === 0) return []
-    // Return all historical data
-    return fullHistoryChartData
-  }, [fullHistoryChartData])
+  // Use balance history data from props if available
+  const historyChartData = balanceHistoryData?.chartData || []
 
   // Use balance history chart data if available, otherwise fallback to prop
   // Transform fallback data to have 'total' field for chart compatibility
@@ -135,7 +126,6 @@ const WalletBalanceComponent = ({ data, chartData, publicKey, assetAddress }: Wa
 
   // Use yield calculated from: SDK Balance - Dune Cost Basis
   const liveGrowthAmount = data.rawInterestEarned
-  const showLiveGrowthAmount = hasSignificantAmount(liveGrowthAmount)
 
   // Enhanced chart data: full history + today + 12 month projection
   const enhancedChartData = useMemo((): ChartDataPoint[] => {
@@ -227,70 +217,62 @@ const WalletBalanceComponent = ({ data, chartData, publicKey, assetAddress }: Wa
         <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
           <FormattedBalance value={formattedLiveBalance} />
         </CardTitle>
-        <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
-          {formattedLiveGrowth} yield
-          {showPercentageGain && (
-            <span className="ml-1 text-emerald-500 dark:text-emerald-300">
-              ({formatSignedPercentage(percentageGain)}%)
-            </span>
-          )}
-        </p>
-        <CardAction>
-          <div className="flex gap-2 flex-wrap">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
+            {formattedLiveGrowth} yield
+            {showPercentageGain && (
+              <span className="ml-1">
+                ({formatSignedPercentage(percentageGain)}%)
+              </span>
+            )}
+          </p>
+          {balanceHistoryData?.earningsStats?.currentAPY && (
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger>
-                  <Badge variant="outline">
+                  <Badge variant="outline" className="text-xs py-0.5 px-2 whitespace-nowrap">
                     <TrendingUp className="mr-1 h-3 w-3" />
-                    {formatPercentage(
-                      earningsStats.currentAPY || data.apyPercentage
-                    )}% APY
+                    {formatPercentage(balanceHistoryData.earningsStats.currentAPY)}% APY
                   </Badge>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>
-                    {earningsStats.currentAPY
-                      ? `Realized APY over ${earningsStats.dayCount} days`
-                      : "Annual Percentage Yield"}
-                  </p>
+                  <p>Realized APY over {balanceHistoryData.earningsStats.dayCount} days</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
-
-            {/* Show current weighted APY from pool positions (when different from realized APY) */}
-            {earningsStats.currentAPY && hasNonZeroPercentage(data.apyPercentage) && (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger>
-                    <Badge variant="secondary">
-                      <TrendingUp className="mr-1 h-3 w-3" />
-                      {formatPercentage(data.apyPercentage)}% APY
-                    </Badge>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Current weighted average APY from pool positions</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            )}
-
-            {hasNonZeroPercentage(data.growthPercentage) && (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger>
-                    <Badge variant="outline">
-                      <PiggyBank className="mr-1 h-3 w-3" />
-                      {formatSignedPercentage(data.growthPercentage)}% BLND APY
-                    </Badge>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>BLND emissions APY across supplied positions</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            )}
-          </div>
-        </CardAction>
+          )}
+          {/* Show current weighted APY from pool positions (when different from realized APY) */}
+          {balanceHistoryData?.earningsStats?.currentAPY && balanceHistoryData.earningsStats.currentAPY > 0 && hasNonZeroPercentage(data.apyPercentage) && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger>
+                  <Badge variant="secondary" className="text-xs py-0.5 px-2 whitespace-nowrap">
+                    <TrendingUp className="mr-1 h-3 w-3" />
+                    {formatPercentage(data.apyPercentage)}% APY
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Current weighted average APY from pool positions</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+          {hasNonZeroPercentage(data.growthPercentage) && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger>
+                  <Badge variant="outline" className="text-xs py-0.5 px-2 whitespace-nowrap">
+                    <PiggyBank className="mr-1 h-3 w-3" />
+                    {formatSignedPercentage(data.growthPercentage)}% BLND APY
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>BLND emissions APY across supplied positions</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+        </div>
       </CardHeader>
 
       <CardContent>
@@ -328,7 +310,7 @@ const WalletBalanceComponent = ({ data, chartData, publicKey, assetAddress }: Wa
                   <ChartTooltip
                     content={
                       <ChartTooltipContent
-                        labelFormatter={(value, payload) => {
+                        labelFormatter={(_value, payload) => {
                           // Get the date from the payload data point
                           if (payload && payload[0]?.payload?.date) {
                             return new Date(payload[0].payload.date).toLocaleDateString("en-US", {
@@ -383,7 +365,7 @@ const WalletBalanceComponent = ({ data, chartData, publicKey, assetAddress }: Wa
                 </AreaChart>
               </ChartContainer>
 
-              {publicKey && assetAddress && (
+              {publicKey && assetAddress && balanceHistoryData && (
                 <Dialog>
                   <DialogTrigger asChild>
                     <Button variant="outline" size="sm" className="w-full">
@@ -396,8 +378,8 @@ const WalletBalanceComponent = ({ data, chartData, publicKey, assetAddress }: Wa
                       <DialogTitle>Balance History - Full View</DialogTitle>
                     </DialogHeader>
                     <BalanceHistoryChart
-                      publicKey={publicKey}
-                      assetAddress={assetAddress}
+                      chartData={balanceHistoryData.chartData}
+                      positionChanges={balanceHistoryData.positionChanges}
                     />
                   </DialogContent>
                 </Dialog>
@@ -409,30 +391,28 @@ const WalletBalanceComponent = ({ data, chartData, publicKey, assetAddress }: Wa
 
       <Separator />
 
-      <CardFooter className="flex flex-col sm:flex-row items-stretch gap-4">
-        <div className="flex flex-1 flex-col gap-1 py-2">
-          <div className="text-sm text-muted-foreground">Daily Yield</div>
-          <div className="text-xl font-semibold tabular-nums">
+      <CardFooter className="flex flex-row items-stretch gap-2 @[250px]/card:gap-4">
+        <div className="flex flex-1 flex-col gap-0.5 py-2">
+          <div className="text-[10px] @[250px]/card:text-xs text-muted-foreground">Daily Yield</div>
+          <div className="text-sm @[250px]/card:text-base font-semibold tabular-nums">
             {yieldFormatter.format(dailyYield)}
           </div>
         </div>
 
-        <Separator orientation="vertical" className="hidden sm:block self-stretch" />
-        <Separator className="sm:hidden" />
+        <Separator orientation="vertical" className="self-stretch" />
 
-        <div className="flex flex-1 flex-col gap-1 py-2">
-          <div className="text-sm text-muted-foreground">Monthly Yield</div>
-          <div className="text-xl font-semibold tabular-nums">
+        <div className="flex flex-1 flex-col gap-0.5 py-2">
+          <div className="text-[10px] @[250px]/card:text-xs text-muted-foreground">Monthly Yield</div>
+          <div className="text-sm @[250px]/card:text-base font-semibold tabular-nums">
             {yieldFormatter.format(monthlyYield)}
           </div>
         </div>
 
-        <Separator orientation="vertical" className="hidden sm:block self-stretch" />
-        <Separator className="sm:hidden" />
+        <Separator orientation="vertical" className="self-stretch" />
 
-        <div className="flex flex-1 flex-col gap-1 py-2">
-          <div className="text-sm text-muted-foreground">Annual Yield</div>
-          <div className="text-xl font-semibold tabular-nums">
+        <div className="flex flex-1 flex-col gap-0.5 py-2">
+          <div className="text-[10px] @[250px]/card:text-xs text-muted-foreground">Annual Yield</div>
+          <div className="text-sm @[250px]/card:text-base font-semibold tabular-nums">
             ${data.annualYield}
           </div>
         </div>

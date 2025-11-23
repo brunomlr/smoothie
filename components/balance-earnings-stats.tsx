@@ -2,15 +2,15 @@
 
 import { TrendingUp, DollarSign, Calendar, Target } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { useBalanceHistory } from "@/hooks/use-balance-history"
 import { formatCurrency, formatNumber } from "@/lib/balance-history-utils"
+import type { EarningsStats } from "@/types/balance-history"
 
 interface BalanceEarningsStatsProps {
-  publicKey: string
-  assetAddress: string
-  days?: number
+  earningsStats: EarningsStats // Pass earnings stats directly
   totalYield?: number // Total yield: SDK Balance - Cost Basis
   perPoolYield?: Map<string, number> // Per-pool yield: SDK Balance - Cost Basis per pool
+  isLoading?: boolean
+  error?: Error | null
 }
 
 interface StatCardProps {
@@ -49,18 +49,12 @@ function StatCard({ title, value, icon, subtitle, trend }: StatCardProps) {
 }
 
 export function BalanceEarningsStats({
-  publicKey,
-  assetAddress,
-  days = 30,
+  earningsStats,
   totalYield,
   perPoolYield,
+  isLoading = false,
+  error = null,
 }: BalanceEarningsStatsProps) {
-  const { isLoading, error, earningsStats } = useBalanceHistory({
-    publicKey,
-    assetAddress,
-    days,
-  })
-
   if (error) {
     return (
       <Card>

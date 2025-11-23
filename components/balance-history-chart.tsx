@@ -1,6 +1,5 @@
 "use client"
 
-import { useState } from "react"
 import {
   Area,
   AreaChart,
@@ -18,20 +17,14 @@ import {
   ChartLegendContent,
   type ChartConfig,
 } from "@/components/ui/chart"
-import { useBalanceHistory } from "@/hooks/use-balance-history"
 import { formatCurrency, formatNumber } from "@/lib/balance-history-utils"
-import { POOL_COLORS } from "@/types/balance-history"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+import { POOL_COLORS, type ChartDataPoint, type PositionChange } from "@/types/balance-history"
 
 interface BalanceHistoryChartProps {
-  publicKey: string
-  assetAddress: string
+  chartData: ChartDataPoint[]
+  positionChanges: PositionChange[]
+  isLoading?: boolean
+  error?: Error | null
 }
 
 const chartConfig: ChartConfig = {
@@ -50,18 +43,11 @@ const chartConfig: ChartConfig = {
 } satisfies ChartConfig
 
 export function BalanceHistoryChart({
-  publicKey,
-  assetAddress,
+  chartData,
+  positionChanges,
+  isLoading = false,
+  error = null,
 }: BalanceHistoryChartProps) {
-  const [days, setDays] = useState<number>(30)
-
-  const { isLoading, error, chartData, positionChanges } =
-    useBalanceHistory({
-      publicKey,
-      assetAddress,
-      days,
-    })
-
   // Prepare deposit markers for scatter plot
   const depositMarkers = chartData.map((point) => {
     const hasChange = positionChanges.some(
@@ -123,22 +109,8 @@ export function BalanceHistoryChart({
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+      <CardHeader>
         <CardTitle>Balance History</CardTitle>
-        <Select
-          value={days.toString()}
-          onValueChange={(value) => setDays(parseInt(value))}
-        >
-          <SelectTrigger className="w-[130px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="7">7 days</SelectItem>
-            <SelectItem value="14">14 days</SelectItem>
-            <SelectItem value="30">30 days</SelectItem>
-            <SelectItem value="90">90 days</SelectItem>
-          </SelectContent>
-        </Select>
       </CardHeader>
       <CardContent>
         <ChartContainer config={chartConfig} className="h-[400px] w-full">

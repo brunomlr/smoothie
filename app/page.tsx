@@ -216,6 +216,35 @@ export default function Home() {
     return map
   }, [balanceHistoryQueries])
 
+  // Build a mapping from assetAddress to balance history data
+  // This prevents redundant fetches in child components
+  const balanceHistoryDataMap = useMemo(() => {
+    const map = new Map<string, any>()
+
+    uniqueAssetAddresses.slice(0, 5).forEach((assetAddress, index) => {
+      const query = balanceHistoryQueries[index]
+      if (query?.data) {
+        // Import balance history utilities
+        const { fillMissingDates, detectPositionChanges, calculateEarningsStats } = require('@/lib/balance-history-utils')
+
+        const chartData = fillMissingDates(query.data.history, true, query.data.firstEventDate)
+        const positionChanges = detectPositionChanges(query.data.history)
+        const earningsStats = calculateEarningsStats(chartData, positionChanges)
+
+        map.set(assetAddress, {
+          chartData,
+          positionChanges,
+          earningsStats,
+          rawData: query.data.history,
+          isLoading: query.isLoading,
+          error: query.error,
+        })
+      }
+    })
+
+    return map
+  }, [uniqueAssetAddresses, balanceHistoryQueries])
+
   // Enrich asset cards with yield calculated as: SDK Balance - Dune Cost Basis
   const enrichedAssetCards = useMemo(() => {
     return assetCards.map((asset) => {
@@ -343,6 +372,7 @@ export default function Home() {
                   chartData={chartData}
                   publicKey={activeWallet.publicKey}
                   assetAddress={firstAssetAddress}
+                  balanceHistoryData={firstAssetAddress ? balanceHistoryDataMap.get(firstAssetAddress) : undefined}
                 />
 
                 {enrichedAssetCards.length > 0 && (
@@ -376,51 +406,59 @@ export default function Home() {
                         ? asset.id.split('-')[1]
                         : asset.id
 
+                      const historyData = balanceHistoryDataMap.get(assetAddress)
+
                       return (
                         <div key={`history-${assetAddress}`} className="space-y-4">
                           <h2 className="text-2xl font-semibold">
                             Balance History - {asset.assetName}
                           </h2>
 
-                          <BalanceEarningsStats
-                            publicKey={activeWallet.publicKey}
-                            assetAddress={assetAddress}
-                            days={30}
-                            totalYield={enrichedAssetCards
-                              .filter(card => {
-                                const cardAssetAddress = card.id.includes('-')
-                                  ? card.id.split('-')[1]
-                                  : card.id
-                                return cardAssetAddress === assetAddress
-                              })
-                              .reduce((sum, card) => sum + (card.earnedYield || 0), 0)}
-                            perPoolYield={new Map(
-                              enrichedAssetCards
-                                .filter(card => {
-                                  const cardAssetAddress = card.id.includes('-')
-                                    ? card.id.split('-')[1]
-                                    : card.id
-                                  return cardAssetAddress === assetAddress
-                                })
-                                .map(card => {
-                                  const poolId = card.id.includes('-')
-                                    ? card.id.split('-')[0]
-                                    : card.id
-                                  return [poolId, card.earnedYield || 0]
-                                })
-                            )}
-                          />
+                          {historyData && (
+                            <>
+                              <BalanceEarningsStats
+                                earningsStats={historyData.earningsStats}
+                                totalYield={enrichedAssetCards
+                                  .filter(card => {
+                                    const cardAssetAddress = card.id.includes('-')
+                                      ? card.id.split('-')[1]
+                                      : card.id
+                                    return cardAssetAddress === assetAddress
+                                  })
+                                  .reduce((sum, card) => sum + (card.earnedYield || 0), 0)}
+                                perPoolYield={new Map(
+                                  enrichedAssetCards
+                                    .filter(card => {
+                                      const cardAssetAddress = card.id.includes('-')
+                                        ? card.id.split('-')[1]
+                                        : card.id
+                                      return cardAssetAddress === assetAddress
+                                    })
+                                    .map(card => {
+                                      const poolId = card.id.includes('-')
+                                        ? card.id.split('-')[0]
+                                        : card.id
+                                      return [poolId, card.earnedYield || 0]
+                                    })
+                                )}
+                                isLoading={historyData.isLoading}
+                                error={historyData.error}
+                              />
 
-                          <BalanceHistoryChart
-                            publicKey={activeWallet.publicKey}
-                            assetAddress={assetAddress}
-                          />
+                              <BalanceHistoryChart
+                                chartData={historyData.chartData}
+                                positionChanges={historyData.positionChanges}
+                                isLoading={historyData.isLoading}
+                                error={historyData.error}
+                              />
 
-                          <BalanceRawDataTable
-                            publicKey={activeWallet.publicKey}
-                            assetAddress={assetAddress}
-                            days={30}
-                          />
+                              <BalanceRawDataTable
+                                records={historyData.rawData}
+                                isLoading={historyData.isLoading}
+                                error={historyData.error}
+                              />
+                            </>
+                          )}
                         </div>
                       )
                     })}
