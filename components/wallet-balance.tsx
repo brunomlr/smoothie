@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useMemo } from "react"
-import { TrendingUp, PiggyBank, Maximize2 } from "lucide-react"
+import { TrendingUp, PiggyBank, Maximize2, Eye, EyeOff } from "lucide-react"
 import { AreaChart, Area, CartesianGrid, XAxis, YAxis, ReferenceDot } from "recharts"
 import {
   Card,
@@ -51,6 +51,8 @@ interface WalletBalanceProps {
     positionChanges: PositionChange[]
   }
   loading?: boolean
+  isDemoMode?: boolean
+  onToggleDemoMode?: () => void
 }
 
 function formatPercentage(value: number): string {
@@ -142,26 +144,48 @@ const WalletBalanceSkeleton = () => {
   )
 }
 
-const WalletBalanceComponent = ({ data, chartData, publicKey, assetAddress, balanceHistoryData, loading }: WalletBalanceProps) => {
-  // Show skeleton while loading
-  if (loading) {
-    return <WalletBalanceSkeleton />
-  }
+// Dummy data for demo mode
+const DUMMY_DATA = {
+  rawBalance: 12500.5432109,
+  apyPercentage: 8.75,
+  growthPercentage: 12.34,
+  rawInterestEarned: 1250.45,
+  annualYield: "1093.80",
+}
 
-  const initialBalance = Number.isFinite(data.rawBalance) ? Math.max(data.rawBalance, 0) : 0
-  const apyDecimal = Number.isFinite(data.apyPercentage)
-    ? Math.max(data.apyPercentage, 0) / 100
+const DUMMY_CHART_DATA: WalletChartDataPoint[] = [
+  { date: "2025-01-01", balance: 10000, deposit: 10000, yield: 0, type: 'historical' },
+  { date: "2025-02-01", balance: 10250, deposit: 10000, yield: 250, type: 'historical' },
+  { date: "2025-03-01", balance: 10520, deposit: 10000, yield: 520, type: 'historical' },
+  { date: "2025-04-01", balance: 10800, deposit: 10000, yield: 800, type: 'historical' },
+  { date: "2025-05-01", balance: 11090, deposit: 10000, yield: 1090, type: 'historical' },
+  { date: "2025-06-01", balance: 11390, deposit: 10000, yield: 1390, type: 'historical' },
+  { date: "2025-07-01", balance: 11700, deposit: 10000, yield: 1700, type: 'historical' },
+  { date: "2025-08-01", balance: 12020, deposit: 10000, yield: 2020, type: 'historical' },
+  { date: "2025-09-01", balance: 12350, deposit: 10000, yield: 2350, type: 'historical' },
+  { date: "2025-10-01", balance: 12690, deposit: 10000, yield: 2690, type: 'historical' },
+  { date: "2025-11-01", balance: 13040, deposit: 10000, yield: 3040, type: 'historical' },
+]
+
+const WalletBalanceComponent = ({ data, chartData, publicKey, assetAddress, balanceHistoryData, loading, isDemoMode = false, onToggleDemoMode }: WalletBalanceProps) => {
+  // Use dummy data when in demo mode
+  const activeData = isDemoMode ? DUMMY_DATA : data
+  const activeChartData = isDemoMode ? DUMMY_CHART_DATA : chartData
+
+  const initialBalance = Number.isFinite(activeData.rawBalance) ? Math.max(activeData.rawBalance, 0) : 0
+  const apyDecimal = Number.isFinite(activeData.apyPercentage)
+    ? Math.max(activeData.apyPercentage, 0) / 100
     : 0
 
-  // Use balance history data from props if available
-  const historyChartData = balanceHistoryData?.chartData || []
+  // Use balance history data from props if available (not in demo mode)
+  const historyChartData = isDemoMode ? [] : (balanceHistoryData?.chartData || [])
 
   // Use balance history chart data if available, otherwise fallback to prop
   // Transform fallback data to have 'total' field for chart compatibility
   const displayChartData = useMemo((): ChartDataPoint[] => {
     return historyChartData.length > 0
       ? historyChartData
-      : chartData.map(point => {
+      : activeChartData.map(point => {
           const date = new Date(point.date)
           return {
             date: point.date,
@@ -176,12 +200,12 @@ const WalletBalanceComponent = ({ data, chartData, publicKey, assetAddress, bala
             pools: [],
           }
         })
-  }, [historyChartData, chartData])
+  }, [historyChartData, activeChartData])
 
   const { displayBalance } = useLiveBalance(initialBalance, apyDecimal, null, 0)
 
   // Use yield calculated from: SDK Balance - Dune Cost Basis
-  const liveGrowthAmount = data.rawInterestEarned
+  const liveGrowthAmount = activeData.rawInterestEarned
 
   // Enhanced chart data: full history + today + 12 month projection
   const enhancedChartData = useMemo((): ChartDataPoint[] => {
@@ -208,7 +232,7 @@ const WalletBalanceComponent = ({ data, chartData, publicKey, assetAddress, bala
     baseData.push(todayPoint)
 
     // Generate 12 monthly projections using weighted average APY
-    const monthlyAPY = data.apyPercentage > 0 ? data.apyPercentage / 100 / 12 : 0
+    const monthlyAPY = activeData.apyPercentage > 0 ? activeData.apyPercentage / 100 / 12 : 0
     let projectedBalance = displayBalance
 
     for (let month = 1; month <= 12; month++) {
@@ -231,7 +255,7 @@ const WalletBalanceComponent = ({ data, chartData, publicKey, assetAddress, bala
     }
 
     return baseData
-  }, [displayChartData, displayBalance, initialBalance, data.apyPercentage])
+  }, [displayChartData, displayBalance, initialBalance, activeData.apyPercentage])
 
   const liveBalanceFormatter = new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -252,12 +276,12 @@ const WalletBalanceComponent = ({ data, chartData, publicKey, assetAddress, bala
   const formattedLiveGrowth = liveDeltaFormatter.format(liveGrowthAmount)
 
   // Use percentage gain calculated from: (SDK Balance - Cost Basis) / Cost Basis * 100
-  const percentageGain = data.growthPercentage
+  const percentageGain = activeData.growthPercentage
   const showPercentageGain = Number.isFinite(percentageGain) && hasSignificantAmount(liveGrowthAmount)
 
   // Calculate yield projections based on current APY
-  const dailyYield = displayBalance * (data.apyPercentage / 100) / 365
-  const monthlyYield = displayBalance * (data.apyPercentage / 100) / 12
+  const dailyYield = displayBalance * (activeData.apyPercentage / 100) / 365
+  const monthlyYield = displayBalance * (activeData.apyPercentage / 100) / 12
 
   const yieldFormatter = new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -266,10 +290,32 @@ const WalletBalanceComponent = ({ data, chartData, publicKey, assetAddress, bala
     maximumFractionDigits: 2,
   })
 
+  // Show skeleton while loading (after all hooks are called)
+  if (loading) {
+    return <WalletBalanceSkeleton />
+  }
+
   return (
     <Card className="@container/card">
       <CardHeader>
-        <CardDescription>Total Positions</CardDescription>
+        <div className="flex items-center justify-between">
+          <CardDescription>Total Positions</CardDescription>
+          {onToggleDemoMode && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onToggleDemoMode}
+              className="h-8 w-8 p-0"
+              title={isDemoMode ? "Show real data" : "Show demo data"}
+            >
+              {isDemoMode ? (
+                <Eye className="h-4 w-4" />
+              ) : (
+                <EyeOff className="h-4 w-4" />
+              )}
+            </Button>
+          )}
+        </div>
         <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
           <FormattedBalance value={formattedLiveBalance} />
         </CardTitle>
@@ -282,7 +328,7 @@ const WalletBalanceComponent = ({ data, chartData, publicKey, assetAddress, bala
               </span>
             )}
           </p>
-          {balanceHistoryData?.earningsStats?.currentAPY && (
+          {!isDemoMode && balanceHistoryData?.earningsStats?.currentAPY && (
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger>
@@ -298,13 +344,13 @@ const WalletBalanceComponent = ({ data, chartData, publicKey, assetAddress, bala
             </TooltipProvider>
           )}
           {/* Show current weighted APY from pool positions (when different from realized APY) */}
-          {balanceHistoryData?.earningsStats?.currentAPY && balanceHistoryData.earningsStats.currentAPY > 0 && hasNonZeroPercentage(data.apyPercentage) && (
+          {!isDemoMode && balanceHistoryData?.earningsStats?.currentAPY && balanceHistoryData.earningsStats.currentAPY > 0 && hasNonZeroPercentage(activeData.apyPercentage) && (
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger>
                   <Badge variant="secondary" className="text-xs py-0.5 px-2 whitespace-nowrap">
                     <TrendingUp className="mr-1 h-3 w-3" />
-                    {formatPercentage(data.apyPercentage)}% APY
+                    {formatPercentage(activeData.apyPercentage)}% APY
                   </Badge>
                 </TooltipTrigger>
                 <TooltipContent>
@@ -313,13 +359,28 @@ const WalletBalanceComponent = ({ data, chartData, publicKey, assetAddress, bala
               </Tooltip>
             </TooltipProvider>
           )}
-          {hasNonZeroPercentage(data.growthPercentage) && (
+          {isDemoMode && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger>
+                  <Badge variant="outline" className="text-xs py-0.5 px-2 whitespace-nowrap">
+                    <TrendingUp className="mr-1 h-3 w-3" />
+                    {formatPercentage(DUMMY_DATA.apyPercentage)}% APY
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Demo APY</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+          {hasNonZeroPercentage(activeData.growthPercentage) && (
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger>
                   <Badge variant="outline" className="text-xs py-0.5 px-2 whitespace-nowrap">
                     <PiggyBank className="mr-1 h-3 w-3" />
-                    {formatSignedPercentage(data.growthPercentage)}% BLND APY
+                    {formatSignedPercentage(activeData.growthPercentage)}% BLND APY
                   </Badge>
                 </TooltipTrigger>
                 <TooltipContent>
@@ -421,7 +482,7 @@ const WalletBalanceComponent = ({ data, chartData, publicKey, assetAddress, bala
                 </AreaChart>
               </ChartContainer>
 
-              {publicKey && assetAddress && balanceHistoryData && (
+              {!isDemoMode && publicKey && assetAddress && balanceHistoryData && (
                 <Dialog>
                   <DialogTrigger asChild>
                     <Button variant="outline" size="sm" className="w-full">
@@ -469,7 +530,7 @@ const WalletBalanceComponent = ({ data, chartData, publicKey, assetAddress, bala
         <div className="flex flex-1 flex-col gap-0.5 py-2">
           <div className="text-[10px] @[250px]/card:text-xs text-muted-foreground">Annual Yield</div>
           <div className="text-sm @[250px]/card:text-base font-semibold tabular-nums">
-            ${data.annualYield}
+            ${activeData.annualYield}
           </div>
         </div>
       </CardFooter>
@@ -485,6 +546,7 @@ export const WalletBalance = React.memo(WalletBalanceComponent, (prevProps, next
     prevProps.data.apyPercentage === nextProps.data.apyPercentage &&
     prevProps.data.growthPercentage === nextProps.data.growthPercentage &&
     prevProps.publicKey === nextProps.publicKey &&
-    prevProps.assetAddress === nextProps.assetAddress
+    prevProps.assetAddress === nextProps.assetAddress &&
+    prevProps.isDemoMode === nextProps.isDemoMode
   )
 })

@@ -40,6 +40,7 @@ function generateChartData(balance: number): ChartDataPoint[] {
 export default function Home() {
   const [wallets, setWallets] = useState<Wallet[]>([])
   const [activeWalletId, setActiveWalletId] = useState<string | null>(null)
+  const [isDemoMode, setIsDemoMode] = useState(false)
 
   // Load wallets from localStorage on mount
   useEffect(() => {
@@ -351,12 +352,6 @@ export default function Home() {
           </div>
         ) : (
           <div className="space-y-6">
-            {isLoading && (
-              <div className="text-center py-8 text-muted-foreground">
-                Loading positions...
-              </div>
-            )}
-
             {error && (
               <div className="bg-destructive/10 border border-destructive/20 rounded-md p-4">
                 <p className="text-destructive text-sm">
@@ -365,7 +360,7 @@ export default function Home() {
               </div>
             )}
 
-            {!isLoading && !error && (
+            {!error && (
               <>
                 <WalletBalance
                   data={balanceData}
@@ -373,6 +368,9 @@ export default function Home() {
                   publicKey={activeWallet.publicKey}
                   assetAddress={firstAssetAddress}
                   balanceHistoryData={firstAssetAddress ? balanceHistoryDataMap.get(firstAssetAddress) : undefined}
+                  loading={isLoading}
+                  isDemoMode={isDemoMode}
+                  onToggleDemoMode={() => setIsDemoMode(!isDemoMode)}
                 />
 
                 {enrichedAssetCards.length > 0 && (
@@ -385,6 +383,7 @@ export default function Home() {
                             key={asset.id}
                             data={asset}
                             onAction={handleAssetAction}
+                            isDemoMode={isDemoMode}
                           />
                         ))}
                       </div>
@@ -465,7 +464,7 @@ export default function Home() {
                   </>
                 )}
 
-                {assetCards.length === 0 && (
+                {assetCards.length === 0 && !isLoading && (
                   <div className="text-center py-8 text-muted-foreground">
                     <p>No positions found for this wallet.</p>
                     <p className="text-sm mt-2">
