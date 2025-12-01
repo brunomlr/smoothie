@@ -142,7 +142,7 @@ export default function Home() {
     return total
   }, [firstAssetQuery.data])
 
-  const { balanceData, assetCards, isLoading, error, data: blendSnapshot } = useBlendPositions(
+  const { balanceData, assetCards, isLoading, error, data: blendSnapshot, totalEmissions, blndPrice } = useBlendPositions(
     activeWallet?.publicKey,
     totalCostBasis
   )
@@ -371,6 +371,8 @@ export default function Home() {
                   loading={isLoading}
                   isDemoMode={isDemoMode}
                   onToggleDemoMode={() => setIsDemoMode(!isDemoMode)}
+                  pendingEmissions={totalEmissions}
+                  blndPrice={blndPrice}
                 />
 
                 {enrichedAssetCards.length > 0 && (

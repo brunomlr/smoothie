@@ -54,6 +54,7 @@ function buildBalanceData(snapshot: BlendWalletSnapshot | undefined): BalanceDat
       rawInterestEarned: 0,
       annualYield: "0.00",
       growthPercentage: 0,
+      blndApy: 0,
     }
   }
 
@@ -71,7 +72,8 @@ function buildBalanceData(snapshot: BlendWalletSnapshot | undefined): BalanceDat
     interestEarned: "0.00",
     rawInterestEarned: 0,
     annualYield: formatUsd(estimatedAnnualYield),
-    growthPercentage: snapshot.weightedBlndApy ?? 0,
+    growthPercentage: 0, // Will be set when cost basis is available
+    blndApy: snapshot.weightedBlndApy ?? 0,
   }
 }
 
@@ -128,10 +130,16 @@ export function useBlendPositions(walletPublicKey: string | undefined, totalCost
     [query.data]
   );
 
+  const blndPrice = useMemo(
+    () => query.data?.blndPrice ?? null,
+    [query.data]
+  );
+
   return {
     ...query,
     balanceData,
     assetCards,
     totalEmissions,
+    blndPrice,
   }
 }

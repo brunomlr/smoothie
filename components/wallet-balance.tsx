@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useMemo } from "react"
-import { TrendingUp, PiggyBank, Maximize2, Eye, EyeOff } from "lucide-react"
+import { TrendingUp, PiggyBank, Maximize2, Eye, EyeOff, Gift } from "lucide-react"
 import { AreaChart, Area, CartesianGrid, XAxis, YAxis, ReferenceDot } from "recharts"
 import {
   Card,
@@ -53,6 +53,8 @@ interface WalletBalanceProps {
   loading?: boolean
   isDemoMode?: boolean
   onToggleDemoMode?: () => void
+  pendingEmissions?: number // Pending BLND emissions in tokens
+  blndPrice?: number | null // BLND price in USD
 }
 
 function formatPercentage(value: number): string {
@@ -151,6 +153,7 @@ const DUMMY_DATA = {
   growthPercentage: 12.34,
   rawInterestEarned: 1250.45,
   annualYield: "1093.80",
+  blndApy: 0.91,
 }
 
 const DUMMY_CHART_DATA: WalletChartDataPoint[] = [
@@ -167,7 +170,7 @@ const DUMMY_CHART_DATA: WalletChartDataPoint[] = [
   { date: "2025-11-01", balance: 13040, deposit: 10000, yield: 3040, type: 'historical' },
 ]
 
-const WalletBalanceComponent = ({ data, chartData, publicKey, assetAddress, balanceHistoryData, loading, isDemoMode = false, onToggleDemoMode }: WalletBalanceProps) => {
+const WalletBalanceComponent = ({ data, chartData, publicKey, assetAddress, balanceHistoryData, loading, isDemoMode = false, onToggleDemoMode, pendingEmissions = 0, blndPrice }: WalletBalanceProps) => {
   // Use dummy data when in demo mode
   const activeData = isDemoMode ? DUMMY_DATA : data
   const activeChartData = isDemoMode ? DUMMY_CHART_DATA : chartData
@@ -328,33 +331,34 @@ const WalletBalanceComponent = ({ data, chartData, publicKey, assetAddress, bala
               </span>
             )}
           </p>
-          {!isDemoMode && balanceHistoryData?.earningsStats?.currentAPY && (
+          {/* Current APY from SDK (primary) */}
+          {!isDemoMode && hasNonZeroPercentage(activeData.apyPercentage) && (
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger>
                   <Badge variant="outline" className="text-xs py-0.5 px-2 whitespace-nowrap">
-                    <TrendingUp className="mr-1 h-3 w-3" />
-                    {formatPercentage(balanceHistoryData.earningsStats.currentAPY)}% APY
-                  </Badge>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Realized APY over {balanceHistoryData.earningsStats.dayCount} days</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )}
-          {/* Show current weighted APY from pool positions (when different from realized APY) */}
-          {!isDemoMode && balanceHistoryData?.earningsStats?.currentAPY && balanceHistoryData.earningsStats.currentAPY > 0 && hasNonZeroPercentage(activeData.apyPercentage) && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger>
-                  <Badge variant="secondary" className="text-xs py-0.5 px-2 whitespace-nowrap">
                     <TrendingUp className="mr-1 h-3 w-3" />
                     {formatPercentage(activeData.apyPercentage)}% APY
                   </Badge>
                 </TooltipTrigger>
                 <TooltipContent>
                   <p>Current weighted average APY from pool positions</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+          {/* Realized APY from historical data (secondary, shown in tooltip when available) */}
+          {!isDemoMode && balanceHistoryData?.earningsStats?.currentAPY && balanceHistoryData.earningsStats.currentAPY > 0 && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger>
+                  <Badge variant="secondary" className="text-xs py-0.5 px-2 whitespace-nowrap">
+                    <TrendingUp className="mr-1 h-3 w-3" />
+                    {formatPercentage(balanceHistoryData.earningsStats.currentAPY)}% realized
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Realized APY over {balanceHistoryData.earningsStats.dayCount} days</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
@@ -374,13 +378,13 @@ const WalletBalanceComponent = ({ data, chartData, publicKey, assetAddress, bala
               </Tooltip>
             </TooltipProvider>
           )}
-          {hasNonZeroPercentage(activeData.growthPercentage) && (
+          {hasNonZeroPercentage(activeData.blndApy) && (
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger>
                   <Badge variant="outline" className="text-xs py-0.5 px-2 whitespace-nowrap">
                     <PiggyBank className="mr-1 h-3 w-3" />
-                    {formatSignedPercentage(activeData.growthPercentage)}% BLND APY
+                    {formatSignedPercentage(activeData.blndApy)}% BLND APY
                   </Badge>
                 </TooltipTrigger>
                 <TooltipContent>
@@ -389,6 +393,33 @@ const WalletBalanceComponent = ({ data, chartData, publicKey, assetAddress, bala
               </Tooltip>
             </TooltipProvider>
           )}
+          {/* Pending BLND emissions claimable */}
+          {(pendingEmissions > 0 || (isDemoMode && DUMMY_DATA.apyPercentage > 0)) && (() => {
+            const emissions = isDemoMode ? 125.45 : pendingEmissions;
+            const price = isDemoMode ? 0.10 : blndPrice;
+            const usdValue = price && emissions ? emissions * price : null;
+            return (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <Badge variant="secondary" className="text-xs py-0.5 px-2 whitespace-nowrap bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800">
+                      <Gift className="mr-1 h-3 w-3" />
+                      {emissions.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} BLND
+                      {usdValue !== null && (
+                        <span className="ml-1 opacity-75">
+                          (~${usdValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
+                        </span>
+                      )}
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Pending BLND emissions available to claim</p>
+                    {price && <p className="text-xs opacity-75">BLND price: ${price.toFixed(4)}</p>}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            );
+          })()}
         </div>
       </CardHeader>
 
@@ -545,8 +576,14 @@ export const WalletBalance = React.memo(WalletBalanceComponent, (prevProps, next
     prevProps.data.rawBalance === nextProps.data.rawBalance &&
     prevProps.data.apyPercentage === nextProps.data.apyPercentage &&
     prevProps.data.growthPercentage === nextProps.data.growthPercentage &&
+    prevProps.data.blndApy === nextProps.data.blndApy &&
+    prevProps.data.rawInterestEarned === nextProps.data.rawInterestEarned &&
     prevProps.publicKey === nextProps.publicKey &&
     prevProps.assetAddress === nextProps.assetAddress &&
-    prevProps.isDemoMode === nextProps.isDemoMode
+    prevProps.balanceHistoryData === nextProps.balanceHistoryData &&
+    prevProps.loading === nextProps.loading &&
+    prevProps.isDemoMode === nextProps.isDemoMode &&
+    prevProps.pendingEmissions === nextProps.pendingEmissions &&
+    prevProps.blndPrice === nextProps.blndPrice
   )
 })

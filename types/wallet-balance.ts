@@ -10,7 +10,8 @@ export interface BalanceData {
   interestEarned: string;
   rawInterestEarned: number; // Numeric yield value for calculations
   annualYield: string;
-  growthPercentage: number;
+  growthPercentage: number; // Yield percentage (profit / cost basis)
+  blndApy: number; // BLND emissions APY
 }
 
 export interface ChartDataPoint {

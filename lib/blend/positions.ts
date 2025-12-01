@@ -47,7 +47,8 @@ export interface BlendWalletSnapshot {
   weightedBorrowApy: number | null;
   netApy: number | null;
   weightedBlndApy: number | null;
-  totalEmissions: number; // Total claimable BLND emissions in tokens (7 decimals)
+  totalEmissions: number; // Total claimable BLND emissions in tokens
+  blndPrice: number | null; // BLND price in USDC from backstop
 }
 
 interface LoadContext {
@@ -446,6 +447,7 @@ function aggregateSnapshot(
     netApy,
     weightedBlndApy,
     totalEmissions: 0, // Will be set by fetchWalletBlendSnapshot
+    blndPrice: null, // Will be set by fetchWalletBlendSnapshot
   };
 }
 
@@ -506,6 +508,7 @@ export async function fetchWalletBlendSnapshot(
       netApy: null,
       weightedBlndApy: null,
       totalEmissions: 0,
+      blndPrice: null,
     };
   }
 
@@ -531,31 +534,20 @@ export async function fetchWalletBlendSnapshot(
       continue;
     }
     try {
-      // Use estimateEmissions if available (V1) or getEmissionEstimateV2 (V2)
-      let emissions = 0;
-      if (typeof snapshot.user.estimateEmissions === 'function') {
-        const result = snapshot.user.estimateEmissions(
-          Array.from(snapshot.pool.reserves.values())
-        );
-        emissions = typeof result === 'object' && result !== null && 'emissions' in result
-          ? Number(result.emissions) / 1e7 // Convert from stroops to tokens
-          : 0;
-      } else if (typeof (snapshot.user as any).getEmissionEstimateV2 === 'function') {
-        const estimates = (snapshot.user as any).getEmissionEstimateV2();
-        if (estimates instanceof Map) {
-          for (const [, emissionData] of estimates.entries()) {
-            if (emissionData && typeof emissionData === 'object' && 'accrued' in emissionData) {
-              const accrued = emissionData.accrued;
-              emissions += typeof accrued === 'bigint' ? Number(accrued) / 1e7 : Number(accrued) / 1e7;
-            }
-          }
-        }
+      // estimateEmissions returns { emissions: number, claimedTokens: number[] }
+      // The emissions value is already a float (converted via FixedMath.toFloat in the SDK)
+      const result = snapshot.user.estimateEmissions(
+        Array.from(snapshot.pool.reserves.values())
+      );
+      if (result && typeof result.emissions === 'number' && result.emissions > 0) {
+        console.log(`[blend] Pool ${snapshot.tracked.id} emissions:`, result.emissions);
+        totalEmissions += result.emissions;
       }
-      totalEmissions += emissions;
     } catch (error) {
       console.warn(`[blend] Failed to calculate emissions for pool ${snapshot.tracked.id}:`, error);
     }
   }
+  console.log(`[blend] Total emissions across all pools:`, totalEmissions);
 
   const positionResults: (BlendReservePosition | null)[] = [];
 
@@ -597,10 +589,31 @@ export async function fetchWalletBlendSnapshot(
 
   const netApyEstimate = computeNetApyFromEstimates(snapshotsWithUsers);
   const snapshot = aggregateSnapshot(flattenedPositions, netApyEstimate);
-  
-  // Add total emissions to snapshot
+
+  // Calculate BLND price from first available backstop
+  let blndPrice: number | null = null;
+  for (const poolSnapshot of snapshotsWithUsers) {
+    if (poolSnapshot.backstop?.backstopToken) {
+      try {
+        const backstopToken = poolSnapshot.backstop.backstopToken;
+        const usdcAmount = FixedMath.toFloat(backstopToken.usdc, 7);
+        const blndAmount = FixedMath.toFloat(backstopToken.blnd, 7);
+        // Backstop is 80% BLND / 20% USDC
+        if (blndAmount > 0) {
+          blndPrice = (usdcAmount / 0.2) / (blndAmount / 0.8);
+          console.log(`[blend] BLND price from backstop: $${blndPrice.toFixed(4)}`);
+          break;
+        }
+      } catch (error) {
+        console.warn('[blend] Failed to calculate BLND price:', error);
+      }
+    }
+  }
+
+  // Add total emissions and BLND price to snapshot
   return {
     ...snapshot,
     totalEmissions,
+    blndPrice,
   };
 }
