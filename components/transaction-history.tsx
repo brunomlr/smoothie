@@ -303,8 +303,8 @@ export function TransactionHistory({
               </div>
 
               {/* Desktop Table View */}
-              <div className="hidden md:block relative w-full overflow-auto">
-                <div className="max-h-[500px] overflow-y-auto">
+              <div className="hidden md:block rounded-md border">
+                <div className="max-h-[500px] overflow-auto">
                   <Table>
                     <TableHeader className="sticky top-0 bg-background z-10">
                       <TableRow>

@@ -379,6 +379,7 @@ export function BalanceBarChart({
   isLoading = false,
 }: BalanceBarChartProps) {
   const [selectedPeriod, setSelectedPeriod] = useState<TimePeriod>("1M")
+  const [error, setError] = useState<Error | null>(null)
 
   // Calculate current borrow from history data
   const currentBorrow = useMemo(() => {
@@ -387,22 +388,32 @@ export function BalanceBarChart({
     return latestData.borrow || 0
   }, [historyData])
 
-  // Aggregate data based on selected period
+  // Aggregate data based on selected period with error handling
   const chartData = useMemo(() => {
-    return aggregateDataByPeriod(
-      historyData,
-      userActions,
-      selectedPeriod,
-      currentBalance,
-      apy,
-      firstEventDate,
-      currentBorrow
-    )
+    try {
+      return aggregateDataByPeriod(
+        historyData,
+        userActions,
+        selectedPeriod,
+        currentBalance,
+        apy,
+        firstEventDate,
+        currentBorrow
+      )
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error('Failed to aggregate chart data'))
+      return []
+    }
   }, [historyData, userActions, selectedPeriod, currentBalance, apy, firstEventDate, currentBorrow])
 
   // Calculate max value for Y axis (include balance + borrow for proper scaling)
   const maxBalance = useMemo(() => {
-    return Math.max(...chartData.map((d) => d.balance + d.borrow), 1)
+    try {
+      return Math.max(...chartData.map((d) => d.balance + d.borrow), 1)
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error('Failed to calculate max balance'))
+      return 1
+    }
   }, [chartData])
 
   if (isLoading) {
@@ -410,6 +421,17 @@ export function BalanceBarChart({
       <div className="space-y-3">
         <Skeleton className="h-8 w-64" />
         <Skeleton className="aspect-[2/1] sm:aspect-[3/1] w-full" />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-3">
+        <div className="aspect-[2/1] sm:aspect-[3/1] flex flex-col items-center justify-center text-destructive gap-2">
+          <p className="font-medium">Failed to load chart</p>
+          <p className="text-sm text-muted-foreground">{error.message}</p>
+        </div>
       </div>
     )
   }
@@ -432,20 +454,20 @@ export function BalanceBarChart({
             >
               <defs>
                 <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#22c55e" stopOpacity={1} />
-                  <stop offset="100%" stopColor="#22c55e" stopOpacity={0.6} />
+                  <stop offset="0%" stopColor="hsl(142.1 76.2% 36.3%)" stopOpacity={1} />
+                  <stop offset="100%" stopColor="hsl(142.1 76.2% 36.3%)" stopOpacity={0.6} />
                 </linearGradient>
                 <linearGradient id="projectedGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#22c55e" stopOpacity={0.5} />
-                  <stop offset="100%" stopColor="#22c55e" stopOpacity={0.25} />
+                  <stop offset="0%" stopColor="hsl(142.1 76.2% 36.3%)" stopOpacity={0.5} />
+                  <stop offset="100%" stopColor="hsl(142.1 76.2% 36.3%)" stopOpacity={0.25} />
                 </linearGradient>
                 <linearGradient id="borrowGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#f97316" stopOpacity={1} />
-                  <stop offset="100%" stopColor="#f97316" stopOpacity={0.6} />
+                  <stop offset="0%" stopColor="hsl(24.6 95% 53.1%)" stopOpacity={1} />
+                  <stop offset="100%" stopColor="hsl(24.6 95% 53.1%)" stopOpacity={0.6} />
                 </linearGradient>
                 <linearGradient id="borrowProjectedGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#f97316" stopOpacity={0.5} />
-                  <stop offset="100%" stopColor="#f97316" stopOpacity={0.25} />
+                  <stop offset="0%" stopColor="hsl(24.6 95% 53.1%)" stopOpacity={0.5} />
+                  <stop offset="100%" stopColor="hsl(24.6 95% 53.1%)" stopOpacity={0.25} />
                 </linearGradient>
               </defs>
 

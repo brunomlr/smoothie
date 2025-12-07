@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { useMemo } from "react"
+import dynamic from "next/dynamic"
 import { TrendingUp, TrendingDown, PiggyBank, Eye, EyeOff, Gift } from "lucide-react"
 import {
   Card,
@@ -26,7 +27,14 @@ import type { ChartDataPoint, EarningsStats, PositionChange } from "@/types/bala
 import { useLiveBalance } from "@/hooks/use-live-balance"
 import { useUserActions } from "@/hooks/use-user-actions"
 import { FormattedBalance } from "@/components/formatted-balance"
-import { BalanceBarChart } from "@/components/balance-bar-chart"
+
+const BalanceBarChart = dynamic(
+  () => import("@/components/balance-bar-chart").then(mod => ({ default: mod.BalanceBarChart })),
+  {
+    loading: () => <Skeleton className="aspect-[3/1] w-full" />,
+    ssr: false
+  }
+)
 
 interface WalletBalanceProps {
   data: BalanceData

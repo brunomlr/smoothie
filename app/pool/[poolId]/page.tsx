@@ -276,6 +276,74 @@ function PositionDetailRow({ position }: { position: BlendReservePosition }) {
   )
 }
 
+// Mobile-friendly position card
+function MobilePositionCard({ position }: { position: BlendReservePosition }) {
+  const hasCollateral = position.collateralAmount > 0
+  const hasNonCollateral = position.nonCollateralAmount > 0
+  const hasBorrow = position.borrowAmount > 0
+
+  return (
+    <div className="border rounded-lg p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <span className="font-medium text-lg">{position.symbol}</span>
+        <div className="flex gap-1 flex-wrap justify-end">
+          <Badge variant="secondary" className="text-xs">
+            <TrendingUp className="mr-1 h-3 w-3" />
+            {formatPercent(position.supplyApy)}
+          </Badge>
+          {position.blndApy > 0 && (
+            <Badge variant="outline" className="text-xs">
+              <PiggyBank className="mr-1 h-3 w-3" />
+              +{formatPercent(position.blndApy)}
+            </Badge>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 text-sm">
+        <div>
+          <p className="text-muted-foreground text-xs">Total Supply</p>
+          <p className="font-medium">{formatNumber(position.supplyAmount)}</p>
+          <p className="text-xs text-muted-foreground">{formatUsd(position.supplyUsdValue)}</p>
+        </div>
+
+        {hasCollateral && (
+          <div>
+            <p className="text-muted-foreground text-xs flex items-center gap-1">
+              <Lock className="h-3 w-3 text-amber-500" />
+              Collateral
+            </p>
+            <p className="font-medium">{formatNumber(position.collateralAmount)}</p>
+            <p className="text-xs text-muted-foreground">{formatUsd(position.collateralUsdValue)}</p>
+          </div>
+        )}
+
+        {hasNonCollateral && (
+          <div>
+            <p className="text-muted-foreground text-xs flex items-center gap-1">
+              <Unlock className="h-3 w-3 text-green-500" />
+              Non-Collateral
+            </p>
+            <p className="font-medium">{formatNumber(position.nonCollateralAmount)}</p>
+            <p className="text-xs text-muted-foreground">{formatUsd(position.nonCollateralUsdValue)}</p>
+          </div>
+        )}
+
+        {hasBorrow && (
+          <div>
+            <p className="text-muted-foreground text-xs">Borrowed</p>
+            <p className="font-medium text-red-600">{formatNumber(position.borrowAmount)}</p>
+            <p className="text-xs text-red-600">{formatUsd(position.borrowUsdValue)}</p>
+            <Badge variant="destructive" className="text-xs mt-1">
+              {formatPercent(position.borrowApy)} APY
+            </Badge>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function PositionBreakdownCard({ poolName, poolId, positions }: { poolName: string; poolId: string; positions: BlendReservePosition[] }) {
   return (
     <Card>
@@ -286,24 +354,34 @@ function PositionBreakdownCard({ poolName, poolId, positions }: { poolName: stri
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Asset</TableHead>
-              <TableHead className="text-right">Total Supply</TableHead>
-              <TableHead className="text-right">Collateral</TableHead>
-              <TableHead className="text-right">Non-Collateral</TableHead>
-              <TableHead className="text-right">Borrowed</TableHead>
-              <TableHead className="text-right">Supply APY</TableHead>
-              <TableHead className="text-right">Borrow APY</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {positions.map((position) => (
-              <PositionDetailRow key={position.id} position={position} />
-            ))}
-          </TableBody>
-        </Table>
+        {/* Mobile card view */}
+        <div className="md:hidden space-y-3">
+          {positions.map((position) => (
+            <MobilePositionCard key={position.id} position={position} />
+          ))}
+        </div>
+
+        {/* Desktop table view */}
+        <div className="hidden md:block overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Asset</TableHead>
+                <TableHead className="text-right">Total Supply</TableHead>
+                <TableHead className="text-right">Collateral</TableHead>
+                <TableHead className="text-right">Non-Collateral</TableHead>
+                <TableHead className="text-right">Borrowed</TableHead>
+                <TableHead className="text-right">Supply APY</TableHead>
+                <TableHead className="text-right">Borrow APY</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {positions.map((position) => (
+                <PositionDetailRow key={position.id} position={position} />
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       </CardContent>
     </Card>
   )

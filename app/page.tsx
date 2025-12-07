@@ -516,18 +516,21 @@ export default function Home() {
                 />
 
                 <Tabs defaultValue="positions" className="w-full">
-                  <TabsList className="grid w-full grid-cols-3">
-                    <TabsTrigger value="positions" className="gap-2">
-                      <WalletIcon className="h-4 w-4" />
-                      Positions
+                  <TabsList className="grid w-full grid-cols-3 h-10 sm:h-11">
+                    <TabsTrigger value="positions" className="gap-1 sm:gap-2 text-xs sm:text-sm">
+                      <WalletIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                      <span className="hidden sm:inline">Positions</span>
+                      <span className="sm:hidden">Pos</span>
                     </TabsTrigger>
-                    <TabsTrigger value="borrows" className="gap-2">
-                      <ArrowDownFromLine className="h-4 w-4" />
-                      Borrows
+                    <TabsTrigger value="borrows" className="gap-1 sm:gap-2 text-xs sm:text-sm">
+                      <ArrowDownFromLine className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                      <span className="hidden sm:inline">Borrows</span>
+                      <span className="sm:hidden">Borrow</span>
                     </TabsTrigger>
-                    <TabsTrigger value="history" className="gap-2">
-                      <History className="h-4 w-4" />
-                      History
+                    <TabsTrigger value="history" className="gap-1 sm:gap-2 text-xs sm:text-sm">
+                      <History className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                      <span className="hidden sm:inline">History</span>
+                      <span className="sm:hidden">Hist</span>
                     </TabsTrigger>
                   </TabsList>
 
@@ -614,19 +617,20 @@ export default function Home() {
                                     const isUSDC = symbol === 'USDC'
 
                                     return (
-                                      <div key={asset.id} className="flex items-center justify-between py-3 border-b last:border-b-0">
+                                      <div key={asset.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between py-3 border-b last:border-b-0 gap-2 sm:gap-0">
                                         <div className="flex items-center gap-3">
                                           <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full bg-muted">
                                             <Image
                                               src={asset.logoUrl}
                                               alt={`${asset.assetName} logo`}
                                               fill
+                                              sizes="40px"
                                               className="object-cover"
                                             />
                                           </div>
-                                          <div>
-                                            <p className="font-medium">{asset.assetName}</p>
-                                            <p className="text-sm text-muted-foreground">
+                                          <div className="min-w-0 flex-1">
+                                            <p className="font-medium truncate">{asset.assetName}</p>
+                                            <p className="text-sm text-muted-foreground truncate">
                                               {isUSDC ? (
                                                 // USDC: show only USD value
                                                 `$${asset.rawBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -647,7 +651,7 @@ export default function Home() {
                                             )}
                                           </div>
                                         </div>
-                                        <div className="flex gap-2">
+                                        <div className="flex gap-2 flex-wrap ml-[52px] sm:ml-0">
                                           <Badge variant="secondary" className="text-xs">
                                             <TrendingUp className="mr-1 h-3 w-3" />
                                             {asset.apyPercentage.toFixed(2)}% APY
@@ -744,19 +748,20 @@ export default function Home() {
                                     const formattedInterestPercentage = interestPercentage !== 0 ? ` (${interestPercentage >= 0 ? '+' : ''}${interestPercentage.toFixed(2)}%)` : ''
 
                                     return (
-                                      <div key={position.id} className="flex items-center justify-between py-3 border-b last:border-b-0">
+                                      <div key={position.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between py-3 border-b last:border-b-0 gap-2 sm:gap-0">
                                         <div className="flex items-center gap-3">
                                           <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full bg-muted">
                                             <Image
                                               src={logoUrl}
                                               alt={`${position.symbol} logo`}
                                               fill
+                                              sizes="40px"
                                               className="object-cover"
                                             />
                                           </div>
-                                          <div>
-                                            <p className="font-medium">{position.symbol}</p>
-                                            <p className="text-sm text-muted-foreground">
+                                          <div className="min-w-0 flex-1">
+                                            <p className="font-medium truncate">{position.symbol}</p>
+                                            <p className="text-sm text-muted-foreground truncate">
                                               {isUSDC ? (
                                                 // USDC: show only USD value
                                                 `$${position.borrowUsdValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -777,7 +782,7 @@ export default function Home() {
                                             )}
                                           </div>
                                         </div>
-                                        <div className="flex gap-2">
+                                        <div className="flex gap-2 flex-wrap ml-[52px] sm:ml-0">
                                           <Badge variant="secondary" className="text-xs">
                                             <TrendingDown className="mr-1 h-3 w-3" />
                                             {position.borrowApy.toFixed(2)}% APY

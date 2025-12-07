@@ -120,6 +120,7 @@ const AssetCardComponent = ({ data, onAction, isDemoMode = false }: AssetCardPro
             src={activeData.logoUrl}
             alt={`${activeData.assetName} logo`}
             fill
+            sizes="48px"
             className="object-cover"
           />
         </div>
