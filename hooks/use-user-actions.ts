@@ -20,6 +20,8 @@ export interface UseUserActionsOptions {
   poolId?: string
   assetAddress?: string
   enabled?: boolean
+  /** Only subscribe to actions array changes, ignoring count/offset changes */
+  selectActionsOnly?: boolean
 }
 
 export interface UseUserActionsResult {
@@ -45,6 +47,7 @@ export function useUserActions({
   poolId,
   assetAddress,
   enabled = true,
+  selectActionsOnly = false,
 }: UseUserActionsOptions): UseUserActionsResult {
   const query = useQuery({
     queryKey: [
@@ -84,6 +87,8 @@ export function useUserActions({
 
       return response.json() as Promise<UserActionsResponse>
     },
+    // Use select to only re-render when actions change (not count/offset metadata)
+    select: selectActionsOnly ? (data) => ({ ...data, actions: data.actions }) : undefined,
     enabled: enabled && !!publicKey,
     staleTime: 30 * 1000, // 30 seconds - actions update more frequently
     refetchOnWindowFocus: true,

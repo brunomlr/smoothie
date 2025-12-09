@@ -21,10 +21,13 @@ function getPool(): Pool | null {
     ssl: {
       rejectUnauthorized: false, // Required for Neon
     },
-    // Serverless-optimized settings
-    max: 5, // Allow multiple concurrent connections
-    idleTimeoutMillis: 30000, // Keep connections alive longer
-    connectionTimeoutMillis: 30000, // Increase timeout for slow connections
+    // Serverless-optimized settings for Neon
+    max: 10, // Increased for better concurrency (Neon handles pooling server-side)
+    min: 0, // Don't maintain idle connections in serverless
+    idleTimeoutMillis: 10000, // Release idle connections faster (10s)
+    connectionTimeoutMillis: 10000, // Fail fast on connection issues (10s)
+    // Query timeout to prevent long-running queries
+    statement_timeout: 30000, // 30s max query time
     // Allow graceful termination
     allowExitOnIdle: true,
   })

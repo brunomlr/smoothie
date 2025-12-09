@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { fetchWalletBlendSnapshot, type BlendReservePosition, type BlendPoolEstimate } from "@/lib/blend/positions"
 import { toTrackedPools } from "@/lib/blend/pools"
-import { useMetadata } from "@/hooks/use-metadata"
+import { usePoolsOnly } from "@/hooks/use-metadata"
 import { TokenLogo } from "@/components/token-logo"
 
 const WALLETS_STORAGE_KEY = "stellar-wallet-tracked-addresses"
@@ -351,7 +351,7 @@ export default function PoolDetailsPage() {
   const poolId = decodeURIComponent(params.poolId as string)
   const [activeWallet, setActiveWallet] = useState<Wallet | null>(null)
 
-  const { pools: dbPools } = useMetadata()
+  const { pools: dbPools } = usePoolsOnly()
   const trackedPools = useMemo(() => toTrackedPools(dbPools), [dbPools])
 
   useEffect(() => {

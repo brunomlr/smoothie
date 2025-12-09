@@ -9,6 +9,24 @@ export interface MetadataResponse {
   tokens?: Token[]
 }
 
+// Shared query options for metadata
+const metadataQueryOptions = {
+  queryKey: ["metadata"] as const,
+  queryFn: async ({ signal }: { signal?: AbortSignal }) => {
+    const response = await fetchWithTimeout("/api/metadata", { signal })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.message || "Failed to fetch metadata")
+    }
+
+    return response.json() as Promise<MetadataResponse>
+  },
+  staleTime: 60 * 60 * 1000, // 1 hour - metadata rarely changes
+  refetchOnWindowFocus: false,
+  retry: 2,
+}
+
 /**
  * Hook to fetch pool and token metadata from the database
  *
@@ -17,21 +35,8 @@ export interface MetadataResponse {
  */
 export function useMetadata(enabled = true) {
   const query = useQuery({
-    queryKey: ["metadata"],
-    queryFn: async ({ signal }) => {
-      const response = await fetchWithTimeout("/api/metadata", { signal })
-
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.message || "Failed to fetch metadata")
-      }
-
-      return response.json() as Promise<MetadataResponse>
-    },
+    ...metadataQueryOptions,
     enabled,
-    staleTime: 60 * 60 * 1000, // 1 hour - metadata rarely changes
-    refetchOnWindowFocus: false,
-    retry: 2,
   })
 
   return {
@@ -39,6 +44,42 @@ export function useMetadata(enabled = true) {
     error: query.error as Error | null,
     pools: query.data?.pools || [],
     tokens: query.data?.tokens || [],
+    refetch: query.refetch,
+  }
+}
+
+/**
+ * Hook to fetch only pools - uses select to avoid re-renders when tokens change
+ */
+export function usePoolsOnly(enabled = true) {
+  const query = useQuery({
+    ...metadataQueryOptions,
+    enabled,
+    select: (data) => data.pools || [],
+  })
+
+  return {
+    isLoading: query.isLoading,
+    error: query.error as Error | null,
+    pools: query.data || [],
+    refetch: query.refetch,
+  }
+}
+
+/**
+ * Hook to fetch only tokens - uses select to avoid re-renders when pools change
+ */
+export function useTokensOnly(enabled = true) {
+  const query = useQuery({
+    ...metadataQueryOptions,
+    enabled,
+    select: (data) => data.tokens || [],
+  })
+
+  return {
+    isLoading: query.isLoading,
+    error: query.error as Error | null,
+    tokens: query.data || [],
     refetch: query.refetch,
   }
 }

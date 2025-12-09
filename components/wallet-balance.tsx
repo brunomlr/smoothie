@@ -230,6 +230,7 @@ const WalletBalanceComponent = ({ data, chartData, publicKey, balanceHistoryData
     publicKey: publicKey || '',
     limit: 100,
     enabled: !!publicKey && !isDemoMode,
+    selectActionsOnly: true, // Only re-render when actions change
   })
 
   // Use yield calculated from: SDK Balance - Dune Cost Basis

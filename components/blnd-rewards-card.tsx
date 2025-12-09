@@ -50,6 +50,7 @@ export function BlndRewardsCard({
     actionTypes: ["claim"],
     limit: 1000,
     enabled: !!publicKey,
+    selectActionsOnly: true, // Only re-render when actions change
   })
 
   // Calculate total claimed BLND from all claim actions
