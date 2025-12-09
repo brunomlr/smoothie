@@ -566,7 +566,7 @@ function HomeContent() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b">
+      <header className="border-b sticky top-0 z-50 bg-background">
         <div className="container max-w-4xl mx-auto px-4 py-1.5 sm:py-2 flex items-center justify-between gap-2">
           <div className="relative h-12">
             <Image
