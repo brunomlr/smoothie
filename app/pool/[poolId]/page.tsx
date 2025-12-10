@@ -4,7 +4,8 @@ import { useState, useEffect, useMemo } from "react"
 import { useParams } from "next/navigation"
 import Link from "next/link"
 import { useQuery } from "@tanstack/react-query"
-import { ArrowLeft, TrendingUp, TrendingDown, AlertTriangle, ExternalLink, Lock, Unlock, PiggyBank } from "lucide-react"
+import { ArrowLeft, TrendingUp, TrendingDown, AlertTriangle, ExternalLink, Lock, Unlock, Coins } from "lucide-react"
+import { ApySparkline } from "@/components/apy-sparkline"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -26,6 +27,15 @@ interface Wallet {
 
 function formatUsd(value: number, decimals = 2): string {
   if (!Number.isFinite(value)) return "$0.00"
+  // Show more decimals for dust amounts
+  if (value > 0 && value < 0.01) {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+      minimumFractionDigits: 6,
+      maximumFractionDigits: 6,
+    }).format(value)
+  }
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
@@ -41,6 +51,13 @@ function formatNumber(value: number, decimals = 2): string {
   }
   if (value >= 1000) {
     return (value / 1000).toLocaleString("en-US", { maximumFractionDigits: 2 }) + "K"
+  }
+  // Show more decimals for dust amounts
+  if (value > 0 && value < 0.01) {
+    return value.toLocaleString("en-US", {
+      minimumFractionDigits: 6,
+      maximumFractionDigits: 6,
+    })
   }
   return value.toLocaleString("en-US", {
     minimumFractionDigits: decimals,
@@ -153,16 +170,33 @@ function AssetRow({ position }: { position: BlendReservePosition }) {
           </Badge>
           {position.blndApy > 0 && (
             <Badge variant="outline" className="text-xs">
-              <PiggyBank className="mr-1 h-3 w-3" />
+              <Coins className="mr-1 h-3 w-3" />
               +{formatPercent(position.blndApy)}
             </Badge>
           )}
           {hasBorrow && (
-            <Badge variant="destructive" className="text-xs">
-              {formatPercent(position.borrowApy)} borrow
+            <Badge variant="secondary" className="text-xs">
+              <TrendingDown className="mr-1 h-3 w-3 text-red-500" />
+              {formatPercent(position.borrowApy)}
+            </Badge>
+          )}
+          {hasBorrow && position.borrowBlndApy > 0 && (
+            <Badge variant="outline" className="text-xs">
+              <Coins className="mr-1 h-3 w-3" />
+              +{formatPercent(position.borrowBlndApy)}
             </Badge>
           )}
         </div>
+      </div>
+
+      {/* APY Sparkline - 6 month history - full width */}
+      <div className="mb-3">
+        <ApySparkline
+          poolId={position.poolId}
+          assetAddress={position.assetId}
+          currentApy={position.supplyApy}
+          className="w-full h-12"
+        />
       </div>
 
       {/* Position details grid */}
@@ -258,11 +292,33 @@ function MobileAssetCard({ position }: { position: BlendReservePosition }) {
           </Badge>
           {position.blndApy > 0 && (
             <Badge variant="outline" className="text-xs">
-              <PiggyBank className="mr-1 h-3 w-3" />
+              <Coins className="mr-1 h-3 w-3" />
               +{formatPercent(position.blndApy)}
             </Badge>
           )}
+          {hasBorrow && (
+            <Badge variant="secondary" className="text-xs">
+              <TrendingDown className="mr-1 h-3 w-3 text-red-500" />
+              {formatPercent(position.borrowApy)}
+            </Badge>
+          )}
+          {hasBorrow && position.borrowBlndApy > 0 && (
+            <Badge variant="outline" className="text-xs">
+              <Coins className="mr-1 h-3 w-3" />
+              +{formatPercent(position.borrowBlndApy)}
+            </Badge>
+          )}
         </div>
+      </div>
+
+      {/* APY Sparkline - 6 month history - full width */}
+      <div className="mb-3">
+        <ApySparkline
+          poolId={position.poolId}
+          assetAddress={position.assetId}
+          currentApy={position.supplyApy}
+          className="w-full h-10"
+        />
       </div>
 
       {/* Position details */}
@@ -294,9 +350,6 @@ function MobileAssetCard({ position }: { position: BlendReservePosition }) {
             <p className="text-xs text-muted-foreground mb-1">Borrowed</p>
             <p className="font-mono text-red-400">{formatNumber(position.borrowAmount)}</p>
             <p className="text-xs text-red-400">{formatUsd(position.borrowUsdValue)}</p>
-            <Badge variant="destructive" className="text-xs mt-1">
-              {formatPercent(position.borrowApy)} APY
-            </Badge>
           </div>
         )}
       </div>
@@ -324,7 +377,7 @@ function MobileAssetCard({ position }: { position: BlendReservePosition }) {
 }
 
 // Page header component to reduce duplication
-function PageHeader({ title, subtitle }: { title: string; subtitle?: string }) {
+function PageHeader({ title, subtitle, explorerUrl }: { title: string; subtitle?: string; explorerUrl?: string }) {
   return (
     <header className="border-b">
       <div className="container mx-auto px-4 py-4">
@@ -340,6 +393,17 @@ function PageHeader({ title, subtitle }: { title: string; subtitle?: string }) {
               <p className="text-xs text-muted-foreground font-mono truncate">{subtitle}</p>
             )}
           </div>
+          {explorerUrl && (
+            <a
+              href={explorerUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 shrink-0"
+            >
+              <span className="hidden sm:inline">View on Explorer</span>
+              <ExternalLink className="h-4 w-4" />
+            </a>
+          )}
         </div>
       </div>
     </header>
@@ -471,7 +535,10 @@ export default function PoolDetailsPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <PageHeader title={`${poolData.poolName} Pool`} />
+      <PageHeader
+        title={`${poolData.poolName} Pool`}
+        explorerUrl={`https://stellar.expert/explorer/public/contract/${poolId}`}
+      />
 
       <main className="container mx-auto px-4 py-6">
         <div className="space-y-6">
@@ -481,18 +548,7 @@ export default function PoolDetailsPage() {
           {/* Positions */}
           <Card>
             <CardHeader className="pb-2">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-lg">Your Positions</CardTitle>
-                <a
-                  href={`https://stellar.expert/explorer/public/contract/${poolId}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
-                >
-                  View on Explorer
-                  <ExternalLink className="h-3 w-3" />
-                </a>
-              </div>
+              <CardTitle className="text-lg">Your Positions</CardTitle>
             </CardHeader>
             <CardContent>
               {/* Desktop */}

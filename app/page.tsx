@@ -18,7 +18,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Skeleton } from "@/components/ui/skeleton"
-import { ArrowDownFromLine, History, TrendingUp, TrendingDown, PiggyBank, ChevronRight } from "lucide-react"
+import { ArrowDownFromLine, History, TrendingUp, TrendingDown, PiggyBank, ChevronRight, Coins } from "lucide-react"
 import { BlndRewardsCard } from "@/components/blnd-rewards-card"
 import type { Wallet } from "@/types/wallet"
 import type { ChartDataPoint } from "@/types/wallet-balance"
@@ -26,6 +26,26 @@ import type { AssetCardData } from "@/types/asset-card"
 
 const WALLETS_STORAGE_KEY = "stellar-wallet-tracked-addresses"
 const ACTIVE_WALLET_STORAGE_KEY = "stellar-wallet-active-id"
+
+// Format number with full decimals for dust amounts
+function formatAmount(value: number, decimals = 2): string {
+  if (!Number.isFinite(value)) return "0"
+  // Show more decimals for dust amounts
+  if (value > 0 && value < 0.01) {
+    return value.toLocaleString('en-US', { minimumFractionDigits: 6, maximumFractionDigits: 6 })
+  }
+  return value.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
+}
+
+// Format USD with full decimals for dust amounts
+function formatUsdAmount(value: number): string {
+  if (!Number.isFinite(value)) return "$0.00"
+  // Show more decimals for dust amounts
+  if (value > 0 && value < 0.01) {
+    return `$${value.toLocaleString('en-US', { minimumFractionDigits: 6, maximumFractionDigits: 6 })}`
+  }
+  return `$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
 
 function generateChartData(balance: number): ChartDataPoint[] {
   // Generate simple chart data with current balance
@@ -744,12 +764,12 @@ function HomeContent() {
                                             <p className="font-medium truncate">{asset.assetName}</p>
                                             <p className="text-sm text-muted-foreground truncate">
                                               {isUSDC ? (
-                                                `$${asset.rawBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                                formatUsdAmount(asset.rawBalance)
                                               ) : (
                                                 <>
-                                                  {tokenAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {symbol}
+                                                  {formatAmount(tokenAmount)} {symbol}
                                                   <span className="text-xs ml-1">
-                                                    (${asset.rawBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
+                                                    ({formatUsdAmount(asset.rawBalance)})
                                                   </span>
                                                 </>
                                               )}
@@ -869,12 +889,12 @@ function HomeContent() {
                                             <p className="font-medium truncate">{position.symbol}</p>
                                             <p className="text-sm text-muted-foreground truncate">
                                               {isUSDC ? (
-                                                `$${position.borrowUsdValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                                formatUsdAmount(position.borrowUsdValue)
                                               ) : (
                                                 <>
-                                                  {position.borrowAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {position.symbol}
+                                                  {formatAmount(position.borrowAmount)} {position.symbol}
                                                   <span className="text-xs ml-1">
-                                                    (${position.borrowUsdValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
+                                                    ({formatUsdAmount(position.borrowUsdValue)})
                                                   </span>
                                                 </>
                                               )}
@@ -891,6 +911,12 @@ function HomeContent() {
                                             <TrendingDown className="mr-1 h-3 w-3" />
                                             {position.borrowApy.toFixed(2)}% APY
                                           </Badge>
+                                          {position.borrowBlndApy > 0 && (
+                                            <Badge variant="outline" className="text-xs">
+                                              <Coins className="mr-1 h-3 w-3" />
+                                              +{position.borrowBlndApy.toFixed(2)}% BLND
+                                            </Badge>
+                                          )}
                                         </div>
                                       </div>
                                     )

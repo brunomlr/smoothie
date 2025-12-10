@@ -40,7 +40,8 @@ export interface BlendReservePosition {
   // APYs
   supplyApy: number;
   borrowApy: number;
-  blndApy: number;
+  blndApy: number; // BLND APY from supply emissions
+  borrowBlndApy: number; // BLND APY from borrow emissions
   // Token conversion rates
   bRate: number; // Current b_rate from SDK
   dRate: number; // Current d_rate from SDK
@@ -366,6 +367,55 @@ function computeBlndEmissionApy(
   }
 }
 
+function computeBorrowBlndEmissionApy(
+  snapshot: PoolSnapshot,
+  reserve: Reserve,
+  price: PriceQuote | null
+): number {
+  const backstop = snapshot.backstop;
+  const emissions = reserve.borrowEmissions;
+
+  if (!backstop || !emissions || !price || price.usdPrice <= 0) {
+    return 0;
+  }
+
+  try {
+    const totalBorrow = reserve.totalLiabilities();
+    const decimals = reserve.config?.decimals ?? 7;
+    const emissionsPerAsset =
+      emissions.emissionsPerYearPerToken(totalBorrow, decimals);
+
+    if (!Number.isFinite(emissionsPerAsset) || emissionsPerAsset <= 0) {
+      return 0;
+    }
+
+    const backstopToken = backstop.backstopToken;
+    const usdcPerBlnd =
+      FixedMath.toFloat(backstopToken.usdc, 7) /
+      0.2 /
+      (FixedMath.toFloat(backstopToken.blnd, 7) / 0.8);
+
+    if (!Number.isFinite(usdcPerBlnd) || usdcPerBlnd <= 0) {
+      return 0;
+    }
+
+    const emissionAprDecimal =
+      (emissionsPerAsset * usdcPerBlnd) / price.usdPrice;
+
+    if (!Number.isFinite(emissionAprDecimal) || emissionAprDecimal <= 0) {
+      return 0;
+    }
+
+    return emissionAprDecimal * 100;
+  } catch (error) {
+    console.warn(
+      `[blend] Failed to compute borrow BLND APY for ${reserve.assetId}:`,
+      (error as Error)?.message ?? error
+    );
+    return 0;
+  }
+}
+
 function buildPosition(
   snapshot: PoolSnapshot,
   reserve: Reserve,
@@ -394,6 +444,7 @@ function buildPosition(
   const nonCollateralUsd = nonCollateralSupply * usdMultiplier;
 
   const blndApy = computeBlndEmissionApy(snapshot, reserve, price);
+  const borrowBlndApy = computeBorrowBlndEmissionApy(snapshot, reserve, price);
 
   // Extract current b_rate from SDK (normalized from raw value)
   const bRate = reserve.data?.bRate
@@ -440,6 +491,7 @@ function buildPosition(
     supplyApy: reserve.estSupplyApy * 100,
     borrowApy: reserve.estBorrowApy * 100,
     blndApy,
+    borrowBlndApy,
     // Token conversion rates
     bRate,
     dRate,
