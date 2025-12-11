@@ -551,12 +551,6 @@ interface BackstopSectionProps {
 }
 
 function BackstopSection({ position, claimedLp = 0, blndPerLpToken = 0, blndPrice }: BackstopSectionProps) {
-  // DEBUG: Log backstop data
-  console.log('[BackstopSection] claimedLp:', claimedLp)
-  console.log('[BackstopSection] blndPerLpToken:', blndPerLpToken)
-  console.log('[BackstopSection] position.claimableBlnd:', position.claimableBlnd)
-  console.log('[BackstopSection] claimedBlndApprox:', claimedLp * blndPerLpToken)
-
   const hasQ4w = position.q4wShares > BigInt(0)
   const q4wExpDate = position.q4wExpiration
     ? new Date(position.q4wExpiration * 1000)
@@ -910,13 +904,6 @@ export default function PoolDetailsPage() {
 
     // Pool-level claimed BLND (from database) - need this before position calculation
     const poolTotalClaimedBlnd = poolClaimData?.total_claimed_blnd || 0
-
-    // DEBUG: Log emissions data
-    console.log('[pool-details] poolId:', poolId)
-    console.log('[pool-details] perPoolEmissions:', snapshot?.perPoolEmissions)
-    console.log('[pool-details] poolTotalClaimableBlnd:', poolTotalClaimableBlnd)
-    console.log('[pool-details] poolTotalClaimedBlnd:', poolTotalClaimedBlnd)
-    console.log('[pool-details] totalEmissions from snapshot:', snapshot?.totalEmissions)
 
     // Calculate total supply USD value for proportional distribution
     const totalSupplyUsd = poolPositions.reduce((sum, pos) => sum + (pos.supplyUsdValue || 0), 0)

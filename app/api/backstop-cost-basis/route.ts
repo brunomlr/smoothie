@@ -40,10 +40,6 @@ export async function GET(request: NextRequest) {
 
     const costBases = await eventsRepository.getAllBackstopCostBases(user)
 
-    console.log('[Backstop Cost Basis API] User:', user)
-    console.log('[Backstop Cost Basis API] Cost bases found:', costBases.length)
-    console.log('[Backstop Cost Basis API] Data:', JSON.stringify(costBases, null, 2))
-
     return NextResponse.json({
       user_address: user,
       cost_bases: costBases,

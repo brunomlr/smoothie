@@ -123,37 +123,10 @@ function enrichBackstopPositionsWithYield(
   positions: BlendBackstopPosition[],
   costBases: BackstopCostBasis[]
 ): BlendBackstopPosition[] {
-  console.log('[backstop-yield] ========== DEBUG START ==========')
-  console.log('[backstop-yield] Positions count:', positions.length)
-  console.log('[backstop-yield] Cost bases count:', costBases.length)
-  console.log('[backstop-yield] Cost bases raw:', JSON.stringify(costBases, null, 2))
-  console.log('[backstop-yield] Positions raw:', positions.map(p => ({
-    poolId: p.poolId,
-    poolName: p.poolName,
-    lpTokens: p.lpTokens,
-    q4wLpTokens: p.q4wLpTokens,
-    totalLp: p.lpTokens + p.q4wLpTokens
-  })))
-
   return positions.map(position => {
-    // Try to find matching cost basis - log all pool addresses for comparison
-    console.log('[backstop-yield] Searching for poolId:', position.poolId)
-    console.log('[backstop-yield] Available pool_addresses:', costBases.map(cb => cb.pool_address))
-
     const costBasis = costBases.find(cb => cb.pool_address === position.poolId)
-    console.log('[backstop-yield] Match found:', !!costBasis)
 
     if (!costBasis) {
-      // No cost basis data - return position with zero yield
-      console.log('[backstop-yield] NO COST BASIS - checking if pool addresses differ in format')
-      // Check for partial matches
-      const partialMatch = costBases.find(cb =>
-        cb.pool_address?.includes(position.poolId) ||
-        position.poolId?.includes(cb.pool_address)
-      )
-      if (partialMatch) {
-        console.log('[backstop-yield] PARTIAL MATCH FOUND:', partialMatch.pool_address)
-      }
       return {
         ...position,
         costBasisLp: 0,
@@ -177,17 +150,6 @@ function enrichBackstopPositionsWithYield(
     const yieldPercent = costBasis.cost_basis_lp > 0
       ? (yieldLp / costBasis.cost_basis_lp) * 100
       : 0
-
-    console.log('[backstop-yield] YIELD CALCULATED:', {
-      poolId: position.poolId,
-      currentLpTokens: position.lpTokens,
-      q4wLpTokens: position.q4wLpTokens,
-      totalLpTokens,
-      costBasisLp: costBasis.cost_basis_lp,
-      yieldLp,
-      yieldPercent: yieldPercent.toFixed(4) + '%'
-    })
-    console.log('[backstop-yield] ========== DEBUG END ==========')
 
     return {
       ...position,
@@ -251,12 +213,7 @@ export function useBlendPositions(walletPublicKey: string | undefined, totalCost
 
   const assetCards = useMemo(() => buildAssetCards(query.data), [query.data])
 
-  const totalEmissions = useMemo(() => {
-    const emissions = query.data?.totalEmissions ?? 0;
-    console.log('[useBlendPositions] totalEmissions:', emissions);
-    console.log('[useBlendPositions] perPoolEmissions:', query.data?.perPoolEmissions);
-    return emissions;
-  }, [query.data]);
+  const totalEmissions = useMemo(() => query.data?.totalEmissions ?? 0, [query.data]);
 
   const blndPrice = useMemo(
     () => query.data?.blndPrice ?? null,

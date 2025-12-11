@@ -775,7 +775,6 @@ export async function fetchWalletBlendSnapshot(
 
   for (const snapshot of snapshotsWithUsers) {
     if (!snapshot.user || !snapshot.pool) {
-      console.log('[blend] Skipping pool - no user or pool data:', snapshot.tracked?.id);
       continue;
     }
     try {
@@ -785,13 +784,10 @@ export async function fetchWalletBlendSnapshot(
       const reserves = Array.from(snapshot.pool.reserves.values());
       const result = snapshot.user.estimateEmissions(reserves);
 
-      console.log('[blend] estimateEmissions for pool:', snapshot.tracked.id, '- result:', JSON.stringify(result));
-
       if (result && typeof result.emissions === 'number' && result.emissions > 0) {
         totalEmissions += result.emissions;
         // Store per-pool total emissions
         perPoolEmissionsMap.set(snapshot.tracked.id, result.emissions);
-        console.log('[blend] Set perPoolEmissions for', snapshot.tracked.id, '=', result.emissions);
 
         // Store per-reserve claimable amounts
         const poolEmissions = new Map<string, number>();
@@ -804,11 +800,9 @@ export async function fetchWalletBlendSnapshot(
           });
         }
         perReserveEmissions.set(snapshot.tracked.id, poolEmissions);
-      } else {
-        console.log('[blend] No emissions for pool:', snapshot.tracked.id, '- emissions:', result?.emissions);
       }
     } catch (e) {
-      console.warn('[blend] Failed to estimate emissions for pool:', snapshot.tracked.id, e);
+      // Failed to estimate emissions for pool
     }
   }
 
@@ -983,21 +977,6 @@ export async function fetchWalletBlendSnapshot(
       // This ensures we get the exact same calculation
       let backstopClaimableBlnd = 0;
       try {
-        // DETAILED DEBUG: Log all raw values from SDK
-        console.log('[blend] ========== BACKSTOP EMISSIONS DEBUG ==========');
-        console.log('[blend] Pool ID:', poolId);
-        console.log('[blend] User shares (balance.shares):', backstopUser.balance.shares.toString());
-        console.log('[blend] Q4W shares (balance.totalQ4W):', backstopUser.balance.totalQ4W.toString());
-        console.log('[blend] User emissions exists:', backstopUser.emissions ? 'YES' : 'NO');
-        if (backstopUser.emissions) {
-          console.log('[blend]   User emissions.index:', backstopUser.emissions.index.toString());
-          console.log('[blend]   User emissions.accrued:', backstopUser.emissions.accrued.toString());
-        }
-        console.log('[blend] Pool emissions exists:', backstopPool.emissions ? 'YES' : 'NO');
-        if (backstopPool.emissions) {
-          console.log('[blend]   Pool emissions.index:', backstopPool.emissions.index.toString());
-        }
-
         // Use BackstopPoolUserEst.build() - exactly like the Blend UI does
         // This handles all the edge cases (undefined emissions, index calculations, etc.)
         const backstopUserEst = BackstopPoolUserEst.build(
@@ -1007,12 +986,8 @@ export async function fetchWalletBlendSnapshot(
         );
 
         backstopClaimableBlnd = backstopUserEst.emissions;
-        console.log('[blend] BackstopPoolUserEst result:');
-        console.log('[blend]   emissions (claimable BLND):', backstopClaimableBlnd);
-        console.log('[blend]   tokens (LP tokens):', backstopUserEst.tokens);
-        console.log('[blend] ========== END DEBUG ==========');
-      } catch (e) {
-        console.warn('[blend] Failed to get backstop emissions for pool:', poolId, e);
+      } catch {
+        // Failed to get backstop emissions for pool
       }
 
       backstopPositions.push({
@@ -1062,9 +1037,6 @@ export async function fetchWalletBlendSnapshot(
   perPoolEmissionsMap.forEach((value, key) => {
     perPoolEmissions[key] = value;
   });
-
-  console.log('[blend] Final perPoolEmissions object:', JSON.stringify(perPoolEmissions));
-  console.log('[blend] totalEmissions:', totalEmissions);
 
   // Add total emissions, per-pool emissions, BLND price, and LP token price to snapshot
   return {

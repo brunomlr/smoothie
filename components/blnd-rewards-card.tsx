@@ -98,12 +98,7 @@ export function BlndRewardsCard({
 
   // Calculate total claimed BLND from backstop emissions (LP tokens → BLND)
   const backstopClaimedBlnd = useMemo(() => {
-    // DEBUG
-    console.log('[BlndRewardsCard] backstopClaimsData:', backstopClaimsData)
-    console.log('[BlndRewardsCard] blndPerLpToken:', blndPerLpToken)
-
     if (!backstopClaimsData?.backstop_claims || !blndPerLpToken) {
-      console.log('[BlndRewardsCard] Returning 0 - no data or no blndPerLpToken')
       return 0
     }
     // Sum all backstop LP tokens claimed and convert to BLND
@@ -111,8 +106,6 @@ export function BlndRewardsCard({
       (total: number, claim: { total_claimed_lp: number }) => total + (claim.total_claimed_lp || 0),
       0
     )
-    console.log('[BlndRewardsCard] totalLpClaimed:', totalLpClaimed)
-    console.log('[BlndRewardsCard] backstopClaimedBlnd:', totalLpClaimed * blndPerLpToken)
     return totalLpClaimed * blndPerLpToken
   }, [backstopClaimsData, blndPerLpToken])
 
@@ -147,10 +140,13 @@ export function BlndRewardsCard({
       }
     }
 
-    if (backstopClaimsData?.backstop_claims && blndPerLpToken > 0) {
+    if (backstopClaimsData?.backstop_claims) {
       for (const claim of backstopClaimsData.backstop_claims) {
-        const claimedBlnd = (claim.total_claimed_lp || 0) * blndPerLpToken
-        backstopClaimsMap.set(claim.pool_address, claimedBlnd)
+        // Convert LP to BLND if we have the ratio, otherwise store LP directly
+        const claimedValue = blndPerLpToken > 0
+          ? (claim.total_claimed_lp || 0) * blndPerLpToken
+          : (claim.total_claimed_lp || 0) // Show LP if can't convert
+        backstopClaimsMap.set(claim.pool_address, claimedValue)
       }
     }
 
@@ -297,7 +293,7 @@ export function BlndRewardsCard({
                     {row.claimable > 0 ? formatNumber(row.claimable, 2) : '-'}
                   </div>
                   <div className="w-20 text-right tabular-nums text-muted-foreground">
-                    {row.claimed > 0 ? formatNumber(row.claimed, 2) : '-'}
+                    {row.claimed > 0 ? `${row.isBackstop ? '~' : ''}${formatNumber(row.claimed, 2)}` : '-'}
                   </div>
                 </div>
               ))

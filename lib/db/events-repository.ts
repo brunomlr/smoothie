@@ -1042,16 +1042,6 @@ export class EventsRepository {
       throw new Error('Database pool not initialized')
     }
 
-    // First, check if there are any backstop events for this user
-    const countResult = await pool.query(
-      `SELECT COUNT(*) as count, array_agg(DISTINCT pool_address) as pools
-       FROM backstop_events WHERE user_address = $1`,
-      [userAddress]
-    )
-    console.log('[DB getAllBackstopCostBases] User:', userAddress)
-    console.log('[DB getAllBackstopCostBases] Events count:', countResult.rows[0]?.count)
-    console.log('[DB getAllBackstopCostBases] Pools with events:', countResult.rows[0]?.pools)
-
     const result = await pool.query(
       `
       SELECT
@@ -1067,9 +1057,6 @@ export class EventsRepository {
       `,
       [userAddress]
     )
-
-    console.log('[DB getAllBackstopCostBases] Query result rows:', result.rows.length)
-    console.log('[DB getAllBackstopCostBases] Raw rows:', JSON.stringify(result.rows, null, 2))
 
     return result.rows.map((row) => {
       const totalDeposited = parseFloat(row.total_deposited_lp) || 0
@@ -1088,7 +1075,11 @@ export class EventsRepository {
   }
   /**
    * Get total claimed emissions (LP tokens) per pool for a user.
-   * These are from 'gulp_emissions' events which represent BLND emissions claimed and auto-compounded to LP.
+   * These are from 'claim' events (most common) and 'gulp_emissions' events.
+   * Both represent BLND emissions claimed and auto-compounded to LP tokens.
+   *
+   * For 'claim' events, the pool_address may be empty - we get it from the sibling 'deposit' event
+   * in the same transaction (the deposit is the auto-compound of the claimed LP).
    */
   async getClaimedEmissionsPerPool(userAddress: string): Promise<Array<{
     pool_address: string;
@@ -1102,14 +1093,31 @@ export class EventsRepository {
 
     const result = await pool.query(
       `
+      WITH claim_events AS (
+        -- Get claim events with pool_address from sibling deposit if needed
+        SELECT
+          COALESCE(
+            NULLIF(b.pool_address, ''),
+            (SELECT pool_address FROM backstop_events
+             WHERE transaction_hash = b.transaction_hash
+               AND action_type = 'deposit'
+               AND pool_address IS NOT NULL
+               AND pool_address != ''
+             LIMIT 1)
+          ) AS pool_address,
+          COALESCE(b.emissions_shares, b.lp_tokens)::numeric AS claimed_lp,
+          b.ledger_closed_at
+        FROM backstop_events b
+        WHERE b.user_address = $1
+          AND b.action_type IN ('claim', 'gulp_emissions')
+      )
       SELECT
         pool_address,
-        COALESCE(SUM(COALESCE(emissions_shares, lp_tokens)::numeric), 0) / 1e7 AS total_claimed_lp,
+        COALESCE(SUM(claimed_lp), 0) / 1e7 AS total_claimed_lp,
         COUNT(*) AS claim_count,
         MAX(ledger_closed_at)::text AS last_claim_date
-      FROM backstop_events
-      WHERE user_address = $1
-        AND action_type = 'gulp_emissions'
+      FROM claim_events
+      WHERE pool_address IS NOT NULL
       GROUP BY pool_address
       `,
       [userAddress]
