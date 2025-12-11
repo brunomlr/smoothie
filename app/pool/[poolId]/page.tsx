@@ -1085,14 +1085,14 @@ export default function PoolDetailsPage() {
                 {/* Desktop */}
                 <div className="hidden md:block">
                   {poolData.positions.map((position) => (
-                    <AssetRow key={position.id} position={position} />
+                    <AssetRow key={position.id} position={position} blndPrice={poolData.blndPrice} />
                   ))}
                 </div>
 
                 {/* Mobile */}
                 <div className="md:hidden">
                   {poolData.positions.map((position) => (
-                    <MobileAssetCard key={position.id} position={position} />
+                    <MobileAssetCard key={position.id} position={position} blndPrice={poolData.blndPrice} />
                   ))}
                 </div>
               </CardContent>
