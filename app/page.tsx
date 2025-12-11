@@ -756,6 +756,18 @@ function HomeContent() {
                           : 0}
                         blndApy={balanceData.blndApy}
                         isLoading={isLoading}
+                        perPoolEmissions={blendSnapshot?.perPoolEmissions}
+                        backstopPositions={backstopPositions.map(bp => ({
+                          poolId: bp.poolId,
+                          poolName: bp.poolName,
+                          claimableBlnd: bp.claimableBlnd,
+                        }))}
+                        poolNames={blendSnapshot?.positions?.reduce((acc, pos) => {
+                          if (pos.poolId && pos.poolName) {
+                            acc[pos.poolId] = pos.poolName
+                          }
+                          return acc
+                        }, {} as Record<string, string>) || {}}
                       />
                     )}
 

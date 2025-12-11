@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
-import { Gift, Coins, ChevronDown } from "lucide-react"
+import { Coins, ChevronDown } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
@@ -15,14 +15,24 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import { useUserActions } from "@/hooks/use-user-actions"
 
+interface BackstopPositionData {
+  poolId: string
+  poolName: string
+  claimableBlnd?: number
+}
+
 interface BlndRewardsCardProps {
   publicKey: string
-  pendingEmissions: number // Supply/borrow claimable BLND
+  pendingEmissions: number // Supply/borrow claimable BLND (total)
   backstopClaimableBlnd?: number // Backstop claimable BLND from SDK (usually 0 - SDK doesn't estimate)
   blndPrice: number | null
   blndPerLpToken?: number // For converting backstop LP to BLND
   blndApy?: number
   isLoading?: boolean
+  // Per-pool data for table display
+  perPoolEmissions?: Record<string, number> // poolId -> claimable BLND
+  backstopPositions?: BackstopPositionData[] // Backstop positions with pool info
+  poolNames?: Record<string, string> // poolId -> pool name (for supply/borrow positions)
 }
 
 function formatNumber(value: number, decimals = 2): string {
@@ -46,6 +56,9 @@ export function BlndRewardsCard({
   blndPerLpToken = 0,
   blndApy = 0,
   isLoading = false,
+  perPoolEmissions = {},
+  backstopPositions = [],
+  poolNames = {},
 }: BlndRewardsCardProps) {
   const [isExpanded, setIsExpanded] = useState(false)
 
@@ -113,12 +126,91 @@ export function BlndRewardsCard({
   const totalClaimedBlnd = poolClaimedBlnd + backstopClaimedBlnd
   const totalPendingBlnd = pendingEmissions + effectiveBackstopPending
 
-  // Calculate USD values
-  const pendingUsdValue = blndPrice && totalPendingBlnd ? totalPendingBlnd * blndPrice : null
-  const claimedUsdValue = blndPrice && totalClaimedBlnd ? totalClaimedBlnd * blndPrice : null
+  // Build table rows for per-pool breakdown
+  interface TableRow {
+    name: string
+    claimable: number
+    claimed: number
+    isBackstop: boolean
+  }
+
+  const tableRows = useMemo(() => {
+    const rows: TableRow[] = []
+
+    // Get claimed data maps from API
+    const poolClaimsMap = new Map<string, number>()
+    const backstopClaimsMap = new Map<string, number>()
+
+    if (backstopClaimsData?.pool_claims) {
+      for (const claim of backstopClaimsData.pool_claims) {
+        poolClaimsMap.set(claim.pool_id, claim.total_claimed_blnd || 0)
+      }
+    }
+
+    if (backstopClaimsData?.backstop_claims && blndPerLpToken > 0) {
+      for (const claim of backstopClaimsData.backstop_claims) {
+        const claimedBlnd = (claim.total_claimed_lp || 0) * blndPerLpToken
+        backstopClaimsMap.set(claim.pool_address, claimedBlnd)
+      }
+    }
+
+    // Collect all unique pool IDs
+    const poolIds = new Set<string>()
+    Object.keys(perPoolEmissions).forEach(id => poolIds.add(id))
+    backstopPositions.forEach(bp => poolIds.add(bp.poolId))
+    poolClaimsMap.forEach((_, id) => poolIds.add(id))
+    backstopClaimsMap.forEach((_, id) => poolIds.add(id))
+
+    // Build pool name map from backstop positions and poolNames prop
+    const poolNameMap = new Map<string, string>()
+    // Add names from poolNames prop (supply/borrow positions)
+    Object.entries(poolNames).forEach(([id, name]) => {
+      poolNameMap.set(id, name)
+    })
+    // Add names from backstop positions (may override if same pool)
+    backstopPositions.forEach(bp => {
+      poolNameMap.set(bp.poolId, bp.poolName)
+    })
+
+    // Create rows for each pool
+    for (const poolId of poolIds) {
+      const poolName = poolNameMap.get(poolId) || 'Pool'
+      const shortName = poolName.length > 12 ? poolName.substring(0, 12) + '...' : poolName
+
+      // Supply/borrow row
+      const supplyClaimable = perPoolEmissions[poolId] || 0
+      const supplyClaimed = poolClaimsMap.get(poolId) || 0
+
+      if (supplyClaimable > 0 || supplyClaimed > 0) {
+        rows.push({
+          name: shortName,
+          claimable: supplyClaimable,
+          claimed: supplyClaimed,
+          isBackstop: false,
+        })
+      }
+
+      // Backstop row
+      const backstopPos = backstopPositions.find(bp => bp.poolId === poolId)
+      const backstopClaimable = backstopPos?.claimableBlnd || 0
+      const backstopClaimed = backstopClaimsMap.get(poolId) || 0
+
+      if (backstopClaimable > 0 || backstopClaimed > 0) {
+        rows.push({
+          name: `${shortName} Bkst`,
+          claimable: backstopClaimable,
+          claimed: backstopClaimed,
+          isBackstop: true,
+        })
+      }
+    }
+
+    return rows
+  }, [perPoolEmissions, backstopPositions, backstopClaimsData, blndPerLpToken, poolNames])
 
   const hasPendingEmissions = totalPendingBlnd > 0
   const hasClaimedBlnd = totalClaimedBlnd > 0
+  const hasTableRows = tableRows.length > 0
   const loading = isLoading || actionsLoading || backstopClaimsLoading
 
   if (loading) {
@@ -181,76 +273,103 @@ export function BlndRewardsCard({
       <div
         className={`overflow-hidden transition-[max-height,opacity] duration-300 ease-out ${isExpanded ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}`}
       >
-        <div>
-          <div className="px-4 pt-2 pb-4">
-            <div className="grid grid-cols-2 gap-3">
-              {/* Pending Emissions */}
-              <div className="space-y-0.5">
-                <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <Coins className="h-3 w-3" />
-                  <span>To Be Claimed</span>
-                </div>
-                <div className="text-lg font-bold tabular-nums">
-                  {formatNumber(totalPendingBlnd, 2)}
-                  <span className="text-sm font-medium ml-0.5">BLND</span>
-                </div>
-                {pendingUsdValue !== null && (
-                  <div className="text-xs text-muted-foreground">
-                    {formatUsd(pendingUsdValue)}
+        <div className="px-4 pt-2 pb-4">
+          {/* Table-like structure */}
+          <div className="space-y-1">
+            {/* Header row */}
+            <div className="grid grid-cols-[1fr_auto_auto] gap-2 text-xs text-muted-foreground pb-1 border-b border-border/50">
+              <div></div>
+              <div className="w-20 text-right">Claimable</div>
+              <div className="w-20 text-right">Claimed</div>
+            </div>
+
+            {/* Data rows */}
+            {hasTableRows ? (
+              tableRows.map((row, index) => (
+                <div
+                  key={index}
+                  className="grid grid-cols-[1fr_auto_auto] gap-2 text-sm py-1"
+                >
+                  <div className="text-muted-foreground truncate" title={row.name}>
+                    {row.name}
                   </div>
-                )}
-                {/* Show breakdown if both supply and backstop have emissions */}
-                {pendingEmissions > 0 && effectiveBackstopPending > 0 && (
-                  <div className="text-xs text-muted-foreground mt-1">
-                    {formatNumber(pendingEmissions, 2)} supply + {formatNumber(effectiveBackstopPending, 2)} backstop
+                  <div className="w-20 text-right tabular-nums font-medium">
+                    {row.claimable > 0 ? formatNumber(row.claimable, 2) : '-'}
+                  </div>
+                  <div className="w-20 text-right tabular-nums text-muted-foreground">
+                    {row.claimed > 0 ? formatNumber(row.claimed, 2) : '-'}
+                  </div>
+                </div>
+              ))
+            ) : (
+              /* Fallback: show simple supply/backstop breakdown when no per-pool data */
+              <>
+                {pendingEmissions > 0 || poolClaimedBlnd > 0 ? (
+                  <div className="grid grid-cols-[1fr_auto_auto] gap-2 text-sm py-1">
+                    <div className="text-muted-foreground">Supply</div>
+                    <div className="w-20 text-right tabular-nums font-medium">
+                      {pendingEmissions > 0 ? formatNumber(pendingEmissions, 2) : '-'}
+                    </div>
+                    <div className="w-20 text-right tabular-nums text-muted-foreground">
+                      {poolClaimedBlnd > 0 ? formatNumber(poolClaimedBlnd, 2) : '-'}
+                    </div>
+                  </div>
+                ) : null}
+                {effectiveBackstopPending > 0 || backstopClaimedBlnd > 0 ? (
+                  <div className="grid grid-cols-[1fr_auto_auto] gap-2 text-sm py-1">
+                    <div className="text-muted-foreground">Backstop</div>
+                    <div className="w-20 text-right tabular-nums font-medium">
+                      {effectiveBackstopPending > 0 ? formatNumber(effectiveBackstopPending, 2) : '-'}
+                    </div>
+                    <div className="w-20 text-right tabular-nums text-muted-foreground">
+                      {backstopClaimedBlnd > 0 ? `~${formatNumber(backstopClaimedBlnd, 2)}` : '-'}
+                    </div>
+                  </div>
+                ) : null}
+              </>
+            )}
+
+            {/* Total row */}
+            <div className="grid grid-cols-[1fr_auto_auto] gap-2 text-sm pt-2 border-t border-border/50 font-medium">
+              <div>Total</div>
+              <div className="w-20 text-right">
+                <div className="tabular-nums">{formatNumber(totalPendingBlnd, 2)}</div>
+                {blndPrice && totalPendingBlnd > 0 && (
+                  <div className="text-xs text-muted-foreground font-normal">
+                    {formatUsd(totalPendingBlnd * blndPrice)}
                   </div>
                 )}
               </div>
-
-              {/* Total Claimed */}
-              <div className="space-y-0.5">
-                <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <Gift className="h-3 w-3" />
-                  <span>Total Claimed</span>
-                </div>
-                <div className="text-lg font-bold tabular-nums">
-                  {formatNumber(totalClaimedBlnd, 2)}
-                  <span className="text-sm font-medium ml-0.5">BLND</span>
-                </div>
-                {claimedUsdValue !== null && (
-                  <div className="text-xs text-muted-foreground">
-                    {formatUsd(claimedUsdValue)}
-                  </div>
-                )}
-                {/* Show breakdown if both pool and backstop have claims */}
-                {poolClaimedBlnd > 0 && backstopClaimedBlnd > 0 && (
-                  <div className="text-xs text-muted-foreground mt-1">
-                    {formatNumber(poolClaimedBlnd, 2)} supply + ~{formatNumber(backstopClaimedBlnd, 2)} backstop
+              <div className="w-20 text-right text-muted-foreground">
+                <div className="tabular-nums">{formatNumber(totalClaimedBlnd, 2)}</div>
+                {blndPrice && totalClaimedBlnd > 0 && (
+                  <div className="text-xs font-normal">
+                    {formatUsd(totalClaimedBlnd * blndPrice)}
                   </div>
                 )}
               </div>
             </div>
-
-            {/* Total Summary */}
-            {(hasPendingEmissions || hasClaimedBlnd) && (
-              <>
-                <Separator className="my-4" />
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Total BLND Earned</span>
-                  <div className="text-right">
-                    <span className="font-semibold tabular-nums">
-                      {formatNumber(totalPendingBlnd + totalClaimedBlnd, 2)} BLND
-                    </span>
-                    {blndPrice && (
-                      <span className="text-muted-foreground ml-2">
-                        ({formatUsd((totalPendingBlnd + totalClaimedBlnd) * blndPrice)})
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </>
-            )}
           </div>
+
+          {/* Total BLND Earned summary */}
+          {(hasPendingEmissions || hasClaimedBlnd) && (
+            <>
+              <Separator className="my-3" />
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Total BLND Earned</span>
+                <div className="text-right">
+                  <span className="font-semibold tabular-nums">
+                    {formatNumber(totalPendingBlnd + totalClaimedBlnd, 2)} BLND
+                  </span>
+                  {blndPrice && (
+                    <span className="text-muted-foreground ml-2">
+                      ({formatUsd((totalPendingBlnd + totalClaimedBlnd) * blndPrice)})
+                    </span>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </Card>
