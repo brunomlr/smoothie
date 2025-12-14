@@ -25,7 +25,7 @@ export function DashboardLayout({
 }: DashboardLayoutProps) {
   return (
     <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-50 bg-background shadow-[0_8px_20px_-2px_rgba(0,0,0,0.75)] dark:shadow-[0_8px_20px_-2px_rgba(0,0,0,0.85)]">
+      <header className="sticky top-0 z-50 bg-background shadow-[0_4px_6px_0px_oklch(0.145_0_0),0_8px_20px_-2px_oklch(0.145_0_0)] dark:shadow-[0_4px_6px_0px_oklch(0.145_0_0),0_8px_20px_-2px_oklch(0.145_0_0)]">
         <div className="container max-w-4xl mx-auto px-4 py-1.5 sm:py-2 flex items-center justify-between gap-2">
           <div className="relative h-10 sm:h-12">
             <Image

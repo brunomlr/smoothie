@@ -16,6 +16,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Smoothie",
   description: "Your Blend positions, smoothly tracked",
+  themeColor: "#212121",
   keywords: ["Stellar", "Blend", "DeFi", "yield", "lending", "borrowing", "crypto", "wallet", "BLND"],
   authors: [{ name: "Smoothie" }],
   openGraph: {
