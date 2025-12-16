@@ -3,6 +3,7 @@
 import Image from "next/image"
 import { WalletSelector } from "@/components/wallet-selector"
 import { PullToRefresh } from "@/components/pull-to-refresh"
+import { Footer } from "@/components/footer"
 import type { Wallet } from "@/types/wallet"
 
 interface DashboardLayoutProps {
@@ -86,6 +87,8 @@ export function DashboardLayout({
       ) : (
         mainContent
       )}
+
+      <Footer />
     </div>
   )
 }

@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic"
 import Image from "next/image"
 import { WalletSelector } from "@/components/wallet-selector"
+import { Footer } from "@/components/footer"
 import type { Wallet } from "@/types/wallet"
 
 // Dynamically import Dither to avoid SSR issues with three.js
@@ -88,6 +89,8 @@ export function LandingPage({
           </div>
         </main>
 
+        {/* Footer */}
+        <Footer variant="landing" />
       </div>
     </div>
   )
