@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect, Suspense, useCallback } from "react"
 import { useQueryClient } from "@tanstack/react-query"
-import { usePostHog } from "@/hooks/use-posthog"
+import { useAnalytics } from "@/hooks/use-analytics"
 import { generateChartData, type PoolProjectionInput } from "@/lib/chart-utils"
 import { useWalletState } from "@/hooks/use-wallet-state"
 import { useBalanceHistoryData } from "@/hooks/use-balance-history-data"
@@ -28,7 +28,7 @@ function HomeContent() {
     handleDisconnect,
   } = useWalletState()
   const [isDemoMode, setIsDemoMode] = useState(false)
-  const { capture } = usePostHog()
+  const { capture } = useAnalytics()
 
   // Handle pull-to-refresh
   const handleRefresh = useCallback(async () => {

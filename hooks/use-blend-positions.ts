@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query"
 import { fetchWalletBlendSnapshot, type BlendWalletSnapshot, type BlendBackstopPosition } from "@/lib/blend/positions"
 import { toTrackedPools } from "@/lib/blend/pools"
 import { useMetadata } from "@/hooks/use-metadata"
+import { fetchWithTimeout } from "@/lib/fetch-utils"
 import type { BalanceData } from "@/types/wallet-balance"
 import type { AssetCardData } from "@/types/asset-card"
 import type { BackstopCostBasis } from "@/lib/db/types"
@@ -110,7 +111,7 @@ function buildAssetCards(snapshot: BlendWalletSnapshot | undefined): AssetCardDa
 
 // Fetch backstop cost basis from API
 async function fetchBackstopCostBases(userAddress: string): Promise<BackstopCostBasis[]> {
-  const response = await fetch(`/api/backstop-cost-basis?user=${encodeURIComponent(userAddress)}`)
+  const response = await fetchWithTimeout(`/api/backstop-cost-basis?user=${encodeURIComponent(userAddress)}`)
   if (!response.ok) {
     throw new Error('Failed to fetch backstop cost basis')
   }

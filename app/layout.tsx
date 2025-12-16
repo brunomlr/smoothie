@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
@@ -13,10 +13,14 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+export const viewport: Viewport = {
+  themeColor: "#212121",
+};
+
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_BASE_URL || "https://smoothie.app"),
   title: "Smoothie",
   description: "Your Blend positions, smoothly tracked",
-  themeColor: "#212121",
   keywords: ["Stellar", "Blend", "DeFi", "yield", "lending", "borrowing", "crypto", "wallet", "BLND"],
   authors: [{ name: "Smoothie" }],
   openGraph: {

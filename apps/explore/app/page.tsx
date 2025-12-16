@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { DollarSign, Flame } from "lucide-react"
-import { usePostHog } from "@/hooks/use-posthog"
+import { useAnalytics } from "@/hooks/use-analytics"
 import { useMetadata } from "@/hooks/use-metadata"
 import { useExplore } from "@/hooks/use-explore"
 import { ExploreFilters, FilterState } from "@/components/explore/explore-filters"
@@ -16,7 +16,7 @@ export default function ExplorePage() {
   const [showUsdPrimary, setShowUsdPrimary] = useState(false)
   const [offset, setOffset] = useState(0)
   const limit = 50
-  const { capture } = usePostHog()
+  const { capture } = useAnalytics()
 
   // Track page view
   useEffect(() => {

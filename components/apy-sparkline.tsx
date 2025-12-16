@@ -4,6 +4,7 @@ import { useMemo } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { LineChart, Line, Tooltip, ResponsiveContainer } from "recharts"
 import { format } from "date-fns"
+import { fetchWithTimeout } from "@/lib/fetch-utils"
 
 interface ApyDataPoint {
   date: string
@@ -27,7 +28,7 @@ async function fetchApyHistory(
     days: "180", // 6 months
   })
 
-  const response = await fetch(`/api/apy-history?${params}`)
+  const response = await fetchWithTimeout(`/api/apy-history?${params}`)
   if (!response.ok) {
     throw new Error("Failed to fetch APY history")
   }

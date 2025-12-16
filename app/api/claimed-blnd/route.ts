@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { eventsRepository } from '@/lib/db/events-repository'
+import { getAnalyticsUserIdFromRequest, captureServerEvent } from '@/lib/analytics-server'
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
   const userAddress = searchParams.get('user')
+  const analyticsUserId = getAnalyticsUserIdFromRequest(request)
 
   if (!userAddress) {
     return NextResponse.json(
@@ -18,6 +20,19 @@ export async function GET(request: NextRequest) {
       eventsRepository.getClaimedBlndFromPools(userAddress),
       eventsRepository.getClaimedEmissionsPerPool(userAddress),
     ])
+
+    // Capture server-side event
+    captureServerEvent(analyticsUserId, {
+      event: 'claimed_blnd_fetched',
+      properties: {
+        wallet_address: userAddress,
+        pool_claims_count: poolClaims.length,
+        backstop_claims_count: backstopClaims.length,
+      },
+      $set: {
+        last_wallet_address: userAddress,
+      },
+    })
 
     return NextResponse.json({
       // BLND claimed from supply/borrow positions (actual BLND tokens)

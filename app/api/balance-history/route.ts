@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { eventsRepository } from '@/lib/db/events-repository'
+import { getAnalyticsUserIdFromRequest, captureServerEvent } from '@/lib/analytics-server'
 
 // Track when daily_rates was last refreshed (in-memory cache)
 let lastRatesRefresh: number = 0
@@ -32,6 +33,9 @@ export async function GET(request: NextRequest) {
     // Get timezone from query param, default to UTC
     // Frontend should pass IANA timezone name (e.g., 'America/New_York')
     const timezone = searchParams.get('timezone') || 'UTC'
+
+    // Get analytics user ID from request header
+    const analyticsUserId = getAnalyticsUserIdFromRequest(request)
 
     // Validate required parameters
     if (!user || !asset) {
@@ -64,6 +68,20 @@ export async function GET(request: NextRequest) {
       days,
       timezone,
     )
+
+    // Capture server-side event
+    captureServerEvent(analyticsUserId, {
+      event: 'balance_history_fetched',
+      properties: {
+        wallet_address: user,
+        asset_address: asset,
+        days,
+        data_points: history.length,
+      },
+      $set: {
+        last_wallet_address: user,
+      },
+    })
 
     const response = {
       user_address: user,

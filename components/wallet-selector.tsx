@@ -15,7 +15,7 @@ import { WalletConnectionModal } from "@/components/wallet-connection-modal"
 import { FollowAddressModal } from "@/components/follow-address-modal"
 import { WalletAvatar } from "@/components/wallet-avatar"
 import { useStellarWalletKit, type SupportedWallet } from "@/hooks/use-stellar-wallet-kit"
-import { usePostHog } from "@/hooks/use-posthog"
+import { useAnalytics } from "@/hooks/use-analytics"
 import type { Wallet as WalletType } from "@/types/wallet"
 import { cn } from "@/lib/utils"
 import { shortenAddress } from "@/lib/wallet-utils"
@@ -46,7 +46,7 @@ export function WalletSelector({
   const [supportedWallets, setSupportedWallets] = React.useState<SupportedWallet[]>([])
   const [isLoadingWallets, setIsLoadingWallets] = React.useState(false)
   const { disconnect: disconnectWallet, getSupportedWallets, connectWallet } = useStellarWalletKit()
-  const { capture } = usePostHog()
+  const { capture } = useAnalytics()
 
   // Fetch wallets when modal opens
   React.useEffect(() => {

@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { eventsRepository } from '@/lib/db/events-repository'
+import { getAnalyticsUserIdFromRequest, captureServerEvent } from '@/lib/analytics-server'
 
 export async function GET(request: NextRequest) {
   try {
@@ -18,6 +19,9 @@ export async function GET(request: NextRequest) {
     const actionTypes = actionTypesParam ? actionTypesParam.split(',') : undefined
     const startDate = searchParams.get('startDate') || undefined
     const endDate = searchParams.get('endDate') || undefined
+
+    // Get analytics user ID from request header
+    const analyticsUserId = getAnalyticsUserIdFromRequest(request)
 
     // Validate required parameters
     if (!user) {
@@ -49,6 +53,20 @@ export async function GET(request: NextRequest) {
       assetAddress,
       startDate,
       endDate,
+    })
+
+    // Capture server-side event with user properties
+    captureServerEvent(analyticsUserId, {
+      event: 'user_actions_fetched',
+      properties: {
+        wallet_address: user,
+        action_count: actions.length,
+        has_filters: !!(poolId || assetAddress || actionTypes || startDate || endDate),
+      },
+      $set: {
+        last_wallet_address: user,
+        last_action_count: actions.length,
+      },
     })
 
     const response = {

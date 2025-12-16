@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { eventsRepository } from '@/lib/db/events-repository'
+import { getAnalyticsUserIdFromRequest, captureServerEvent } from '@/lib/analytics-server'
 
 export async function GET(request: NextRequest) {
   try {
@@ -15,6 +16,7 @@ export async function GET(request: NextRequest) {
     // Get timezone from query param, default to UTC
     // Frontend should pass IANA timezone name (e.g., 'America/New_York')
     const timezone = searchParams.get('timezone') || 'UTC'
+    const analyticsUserId = getAnalyticsUserIdFromRequest(request)
 
     // Validate required parameters
     if (!user) {
@@ -94,6 +96,17 @@ export async function GET(request: NextRequest) {
       if (!earliest) return cb.first_deposit_date
       return cb.first_deposit_date < earliest ? cb.first_deposit_date : earliest
     }, null as string | null)
+
+    captureServerEvent(analyticsUserId, {
+      event: 'backstop_balance_history_fetched',
+      properties: {
+        wallet_address: user,
+        days,
+        pool_count: costBases.length,
+        data_points: history.length,
+      },
+      $set: { last_wallet_address: user },
+    })
 
     return NextResponse.json({
       user_address: user,

@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { fetchWalletBlendSnapshot, type BlendReservePosition, type BlendPoolEstimate, type BlendBackstopPosition } from "@/lib/blend/positions"
+import { fetchWithTimeout } from "@/lib/fetch-utils"
 import type { BackstopCostBasis } from "@/lib/db/types"
 import { toTrackedPools } from "@/lib/blend/pools"
 import { usePoolsOnly } from "@/hooks/use-metadata"
@@ -783,7 +784,7 @@ export default function PoolDetailsPage() {
     queryKey: ["backstop-cost-basis", activeWallet?.publicKey],
     enabled: !!activeWallet?.publicKey,
     queryFn: async () => {
-      const response = await fetch(`/api/backstop-cost-basis?user=${encodeURIComponent(activeWallet!.publicKey)}`)
+      const response = await fetchWithTimeout(`/api/backstop-cost-basis?user=${encodeURIComponent(activeWallet!.publicKey)}`)
       if (!response.ok) throw new Error('Failed to fetch backstop cost basis')
       const data = await response.json()
       return (data.cost_bases || []) as BackstopCostBasis[]
@@ -805,7 +806,7 @@ export default function PoolDetailsPage() {
     queryFn: async () => {
       const results = await Promise.all(
         poolAssetAddresses.map(async (assetAddress) => {
-          const response = await fetch(
+          const response = await fetchWithTimeout(
             `/api/balance-history?user=${encodeURIComponent(activeWallet!.publicKey)}&asset=${encodeURIComponent(assetAddress)}`
           )
           if (!response.ok) return null
@@ -823,7 +824,7 @@ export default function PoolDetailsPage() {
     queryKey: ["claimed-blnd", activeWallet?.publicKey],
     enabled: !!activeWallet?.publicKey,
     queryFn: async () => {
-      const response = await fetch(`/api/claimed-blnd?user=${encodeURIComponent(activeWallet!.publicKey)}`)
+      const response = await fetchWithTimeout(`/api/claimed-blnd?user=${encodeURIComponent(activeWallet!.publicKey)}`)
       if (!response.ok) throw new Error('Failed to fetch claimed BLND')
       const data = await response.json()
       return {

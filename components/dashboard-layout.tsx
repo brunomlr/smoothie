@@ -47,26 +47,15 @@ export function DashboardLayout({
     <div className="min-h-screen bg-background">
       <header className="fixed top-0 left-0 right-0 z-50 bg-background shadow-[0_4px_6px_0px_oklch(0.145_0_0),0_8px_20px_-2px_oklch(0.145_0_0)] dark:shadow-[0_4px_6px_0px_oklch(0.145_0_0),0_8px_20px_-2px_oklch(0.145_0_0)]">
         <div className="container max-w-4xl mx-auto px-4 py-1.5 sm:py-2 flex items-center justify-between gap-2">
-          <div className="relative h-10 sm:h-12">
-            <Image
-              src="/logo/logo-light.png"
-              alt="Smoothie"
-              width={0}
-              height={0}
-              sizes="100vw"
-              className="h-10 sm:h-12 w-auto dark:hidden"
-              priority
-            />
-            <Image
-              src="/logo/logo.png"
-              alt="Smoothie"
-              width={0}
-              height={0}
-              sizes="100vw"
-              className="h-10 sm:h-12 w-auto hidden dark:block"
-              priority
-            />
-          </div>
+          <Image
+            src="/logo/logo.png"
+            alt="Smoothie"
+            width={0}
+            height={0}
+            sizes="100vw"
+            className="h-10 sm:h-12 w-auto"
+            priority
+          />
           <div className="flex items-center gap-2">
             <WalletSelector
               wallets={wallets}

@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/tooltip"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useUserActions } from "@/hooks/use-user-actions"
+import { fetchWithTimeout } from "@/lib/fetch-utils"
 
 interface BackstopPositionData {
   poolId: string
@@ -76,7 +77,7 @@ export function BlndRewardsCard({
     queryKey: ["claimed-blnd-backstop", publicKey],
     enabled: !!publicKey,
     queryFn: async () => {
-      const response = await fetch(`/api/claimed-blnd?user=${encodeURIComponent(publicKey)}`)
+      const response = await fetchWithTimeout(`/api/claimed-blnd?user=${encodeURIComponent(publicKey)}`)
       if (!response.ok) return { backstop_claims: [], pool_claims: [] }
       const data = await response.json()
       return data

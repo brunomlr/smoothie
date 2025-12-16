@@ -51,12 +51,6 @@ export default function PrivacyPolicyPage() {
               <li>Device and browser information</li>
             </ul>
 
-            <h3 className="text-lg font-medium mt-4 mb-2">Local Storage</h3>
-            <p className="text-muted-foreground leading-relaxed">
-              We store your wallet connection preferences and followed addresses in your browser&apos;s
-              local storage. This data stays on your device.
-            </p>
-
             <h3 className="text-lg font-medium mt-4 mb-2">What We Do NOT Collect</h3>
             <ul className="list-disc list-inside text-muted-foreground space-y-1 ml-4">
               <li>Private keys or seed phrases</li>
