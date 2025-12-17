@@ -5,6 +5,7 @@ import { Buffer } from "buffer"
 import { StellarWalletsKit } from "@creit-tech/stellar-wallets-kit/sdk"
 import { Networks } from "@creit-tech/stellar-wallets-kit/types"
 import { defaultModules } from "@creit-tech/stellar-wallets-kit/modules/utils"
+import { WalletConnectModule, WalletConnectTargetChain } from "@creit-tech/stellar-wallets-kit/modules/wallet-connect"
 // import { LedgerModule } from "@creit-tech/stellar-wallets-kit/modules/ledger"
 // import { HotWalletModule } from "@creit-tech/stellar-wallets-kit/modules/hotwallet"
 
@@ -21,6 +22,15 @@ export interface SupportedWallet {
   isAvailable: boolean
   icon: string
   url: string
+}
+
+// Get network from environment variable
+function getDefaultNetwork(): Networks {
+  const networkEnv = process.env.NEXT_PUBLIC_STELLAR_NETWORK
+  if (networkEnv === "public" || networkEnv === "mainnet") {
+    return Networks.PUBLIC
+  }
+  return Networks.TESTNET
 }
 
 // Global initialization state
@@ -47,6 +57,25 @@ async function ensureInitialized(network: Networks): Promise<void> {
   initializationPromise = (async () => {
     try {
       const modules = defaultModules()
+
+      // Add WalletConnect module if project ID is available
+      const wcProjectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID
+      if (wcProjectId) {
+        const walletConnectModule = new WalletConnectModule({
+          projectId: wcProjectId,
+          metadata: {
+            name: "Smoothie",
+            description: "Stellar Portfolio Manager",
+            url: typeof window !== "undefined" ? window.location.origin : "https://smoothie.app",
+            icons: [typeof window !== "undefined" ? `${window.location.origin}/icon.png` : "https://smoothie.app/icon.png"],
+          },
+          allowedChains: network === Networks.PUBLIC
+            ? [WalletConnectTargetChain.PUBLIC]
+            : [WalletConnectTargetChain.TESTNET],
+        })
+        modules.push(walletConnectModule)
+      }
+
       StellarWalletsKit.init({
         network,
         modules,
@@ -63,7 +92,7 @@ async function ensureInitialized(network: Networks): Promise<void> {
   return initializationPromise
 }
 
-export function useStellarWalletKit(network: Networks = Networks.TESTNET) {
+export function useStellarWalletKit(network: Networks = getDefaultNetwork()) {
   const [isInitialized, setIsInitialized] = useState(false)
 
   useEffect(() => {
