@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { eventsRepository } from '@/lib/db/events-repository'
-import { getAnalyticsUserIdFromRequest, captureServerEvent } from '@/lib/analytics-server'
+import { getAnalyticsUserIdFromRequest, captureServerEvent, hashWalletAddress } from '@/lib/analytics-server'
 
 export async function GET(request: NextRequest) {
   try {
@@ -30,14 +30,15 @@ export async function GET(request: NextRequest) {
     if (poolId) {
       const costBasis = await eventsRepository.getBackstopCostBasis(user, poolId)
 
+      const hashedAddress = hashWalletAddress(user)
       captureServerEvent(analyticsUserId, {
         event: 'backstop_cost_basis_fetched',
         properties: {
-          wallet_address: user,
+          wallet_address_hash: hashedAddress,
           pool_id: poolId,
           has_position: !!costBasis,
         },
-        $set: { last_wallet_address: user },
+        $set: { last_wallet_address_hash: hashedAddress },
       })
 
       return NextResponse.json({
@@ -52,13 +53,14 @@ export async function GET(request: NextRequest) {
 
     const costBases = await eventsRepository.getAllBackstopCostBases(user)
 
+    const hashedAddressAll = hashWalletAddress(user)
     captureServerEvent(analyticsUserId, {
       event: 'backstop_cost_basis_fetched',
       properties: {
-        wallet_address: user,
+        wallet_address_hash: hashedAddressAll,
         pool_count: costBases.length,
       },
-      $set: { last_wallet_address: user },
+      $set: { last_wallet_address_hash: hashedAddressAll },
     })
 
     return NextResponse.json({

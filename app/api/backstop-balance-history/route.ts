@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { eventsRepository } from '@/lib/db/events-repository'
-import { getAnalyticsUserIdFromRequest, captureServerEvent } from '@/lib/analytics-server'
+import { getAnalyticsUserIdFromRequest, captureServerEvent, hashWalletAddress } from '@/lib/analytics-server'
 
 export async function GET(request: NextRequest) {
   try {
@@ -97,15 +97,16 @@ export async function GET(request: NextRequest) {
       return cb.first_deposit_date < earliest ? cb.first_deposit_date : earliest
     }, null as string | null)
 
+    const hashedAddress = hashWalletAddress(user)
     captureServerEvent(analyticsUserId, {
       event: 'backstop_balance_history_fetched',
       properties: {
-        wallet_address: user,
+        wallet_address_hash: hashedAddress,
         days,
         pool_count: costBases.length,
         data_points: history.length,
       },
-      $set: { last_wallet_address: user },
+      $set: { last_wallet_address_hash: hashedAddress },
     })
 
     return NextResponse.json({

@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { eventsRepository } from '@/lib/db/events-repository'
-import { getAnalyticsUserIdFromRequest, captureServerEvent } from '@/lib/analytics-server'
+import { getAnalyticsUserIdFromRequest, captureServerEvent, hashWalletAddress } from '@/lib/analytics-server'
 
 export async function GET(request: NextRequest) {
   try {
@@ -55,16 +55,17 @@ export async function GET(request: NextRequest) {
       endDate,
     })
 
-    // Capture server-side event with user properties
+    // Capture server-side event with hashed wallet address for privacy
+    const hashedAddress = hashWalletAddress(user)
     captureServerEvent(analyticsUserId, {
       event: 'user_actions_fetched',
       properties: {
-        wallet_address: user,
+        wallet_address_hash: hashedAddress,
         action_count: actions.length,
         has_filters: !!(poolId || assetAddress || actionTypes || startDate || endDate),
       },
       $set: {
-        last_wallet_address: user,
+        last_wallet_address_hash: hashedAddress,
         last_action_count: actions.length,
       },
     })

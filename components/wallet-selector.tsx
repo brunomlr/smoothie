@@ -15,7 +15,7 @@ import { WalletConnectionModal } from "@/components/wallet-connection-modal"
 import { FollowAddressModal } from "@/components/follow-address-modal"
 import { WalletAvatar } from "@/components/wallet-avatar"
 import { useStellarWalletKit, type SupportedWallet } from "@/hooks/use-stellar-wallet-kit"
-import { useAnalytics } from "@/hooks/use-analytics"
+import { useAnalytics, hashWalletAddress } from "@/hooks/use-analytics"
 import type { Wallet as WalletType } from "@/types/wallet"
 import { cn } from "@/lib/utils"
 import { shortenAddress } from "@/lib/wallet-utils"
@@ -74,10 +74,12 @@ export function WalletSelector({
         return
       }
 
-      capture('wallet_connected', {
-        wallet_type: wallet.id,
-        method: 'extension',
-        address
+      hashWalletAddress(address).then(hash => {
+        capture('wallet_connected', {
+          wallet_type: wallet.id,
+          method: 'extension',
+          address_hash: hash
+        })
       })
 
       onConnectWallet(address, wallet.name)
@@ -99,9 +101,11 @@ export function WalletSelector({
     }
 
     const addressType = address.startsWith('C') ? 'contract' : 'public_key'
-    capture('address_followed', {
-      address,
-      address_type: addressType
+    hashWalletAddress(address).then(hash => {
+      capture('address_followed', {
+        address_hash: hash,
+        address_type: addressType
+      })
     })
 
     if (onFollowAddress) {
@@ -117,7 +121,9 @@ export function WalletSelector({
     e.stopPropagation()
     try {
       await navigator.clipboard.writeText(address)
-      capture('address_copied', { address })
+      hashWalletAddress(address).then(hash => {
+        capture('address_copied', { address_hash: hash })
+      })
       setCopiedAddress(address)
       setTimeout(() => setCopiedAddress(null), 2000)
     } catch (error) {
@@ -129,7 +135,9 @@ export function WalletSelector({
     e.stopPropagation()
     try {
       await disconnectWallet()
-      capture('wallet_disconnected', { address: wallet.publicKey })
+      hashWalletAddress(wallet.publicKey).then(hash => {
+        capture('wallet_disconnected', { address_hash: hash })
+      })
       if (onDisconnect) {
         onDisconnect(wallet.id)
       }
@@ -243,9 +251,14 @@ export function WalletSelector({
                       <DropdownMenuItem
                         onClick={() => {
                           if (!isActive && activeWallet) {
-                            capture('wallet_switched', {
-                              from_address: activeWallet.publicKey,
-                              to_address: wallet.publicKey
+                            Promise.all([
+                              hashWalletAddress(activeWallet.publicKey),
+                              hashWalletAddress(wallet.publicKey)
+                            ]).then(([fromHash, toHash]) => {
+                              capture('wallet_switched', {
+                                from_address_hash: fromHash,
+                                to_address_hash: toHash
+                              })
                             })
                           }
                           onSelectWallet(wallet.id)

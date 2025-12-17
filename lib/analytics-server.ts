@@ -5,6 +5,23 @@
 
 import { PostHog } from 'posthog-node'
 import { NextRequest } from 'next/server'
+import { createHash } from 'crypto'
+
+// Salt for hashing wallet addresses - provides additional privacy
+const WALLET_HASH_SALT = process.env.ANALYTICS_WALLET_SALT || 'smoothie-analytics-v1'
+
+/**
+ * Hash a wallet address for privacy-preserving analytics.
+ * Uses SHA256 with a salt to prevent direct correlation with on-chain data.
+ */
+export function hashWalletAddress(address: string): string {
+  if (!address) return ''
+  const normalized = address.toLowerCase().trim()
+  return createHash('sha256')
+    .update(`${WALLET_HASH_SALT}:${normalized}`)
+    .digest('hex')
+    .slice(0, 16) // First 16 chars is enough for uniqueness while being shorter
+}
 
 export const ANALYTICS_USER_ID_HEADER = 'x-analytics-user-id'
 
@@ -53,7 +70,7 @@ export function captureServerEvent(
   const { event, properties, $set, $set_once } = options
 
   // Capture the event with event properties only
-  // Wallet addresses are tracked via the wallet_address event property
+  // Wallet addresses are hashed for privacy before being tracked
   client.capture({
     distinctId: userId,
     event,

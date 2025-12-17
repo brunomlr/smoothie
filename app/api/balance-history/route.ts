@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { eventsRepository } from '@/lib/db/events-repository'
-import { getAnalyticsUserIdFromRequest, captureServerEvent } from '@/lib/analytics-server'
+import { getAnalyticsUserIdFromRequest, captureServerEvent, hashWalletAddress } from '@/lib/analytics-server'
 
 // Track when daily_rates was last refreshed (in-memory cache)
 let lastRatesRefresh: number = 0
@@ -69,17 +69,17 @@ export async function GET(request: NextRequest) {
       timezone,
     )
 
-    // Capture server-side event
+    // Capture server-side event with hashed wallet address for privacy
+    const hashedAddress = hashWalletAddress(user)
     captureServerEvent(analyticsUserId, {
       event: 'balance_history_fetched',
       properties: {
-        wallet_address: user,
-        asset_address: asset,
+        wallet_address_hash: hashedAddress,
         days,
         data_points: history.length,
       },
       $set: {
-        last_wallet_address: user,
+        last_wallet_address_hash: hashedAddress,
       },
     })
 

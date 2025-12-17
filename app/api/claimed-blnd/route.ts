@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { eventsRepository } from '@/lib/db/events-repository'
-import { getAnalyticsUserIdFromRequest, captureServerEvent } from '@/lib/analytics-server'
+import { getAnalyticsUserIdFromRequest, captureServerEvent, hashWalletAddress } from '@/lib/analytics-server'
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
@@ -21,16 +21,17 @@ export async function GET(request: NextRequest) {
       eventsRepository.getClaimedEmissionsPerPool(userAddress),
     ])
 
-    // Capture server-side event
+    // Capture server-side event with hashed wallet address for privacy
+    const hashedAddress = hashWalletAddress(userAddress)
     captureServerEvent(analyticsUserId, {
       event: 'claimed_blnd_fetched',
       properties: {
-        wallet_address: userAddress,
+        wallet_address_hash: hashedAddress,
         pool_claims_count: poolClaims.length,
         backstop_claims_count: backstopClaims.length,
       },
       $set: {
-        last_wallet_address: userAddress,
+        last_wallet_address_hash: hashedAddress,
       },
     })
 
