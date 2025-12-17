@@ -175,7 +175,7 @@ export function SupplyPositions({
 
                 {/* Demo Backstop Position */}
                 {pool.backstop && (
-                  <div className="flex items-center justify-between py-2 gap-3 border-t border-border/50 mt-2 pt-3">
+                  <div className={`flex items-center justify-between py-2 gap-3 ${pool.assets.length > 0 ? 'border-t border-border/50 mt-2 pt-3' : ''}`}>
                     <div className="flex items-center gap-3 min-w-0">
                       <div className="h-10 w-10 rounded-full bg-purple-500/10 flex items-center justify-center">
                         <Shield className="h-5 w-5 text-purple-500" />
@@ -355,7 +355,7 @@ export function SupplyPositions({
                     })()
 
                     return (
-                      <div key={`backstop-${poolId}`} className="flex items-center justify-between py-2 gap-3 border-t border-border/50 mt-2 pt-3">
+                      <div key={`backstop-${poolId}`} className={`flex items-center justify-between py-2 gap-3 ${assets.length > 0 ? 'border-t border-border/50 mt-2 pt-3' : ''}`}>
                         <div className="flex items-center gap-3 min-w-0">
                           <div className="h-10 w-10 rounded-full bg-purple-500/10 flex items-center justify-center">
                             <Shield className="h-5 w-5 text-purple-500" />

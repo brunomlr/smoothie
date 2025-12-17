@@ -254,29 +254,6 @@ export function PortfolioAllocationBar({
           })}
         </div>
 
-        {/* Pool separator line (gray) */}
-        <div className="relative h-0.5 bg-muted rounded-sm mb-1">
-          {poolBoundaries.map((pool, index) => (
-            <div
-              key={pool.poolId}
-              className="absolute h-full"
-              style={{
-                left: `${pool.start}%`,
-                width: `${pool.percentage}%`,
-                borderLeft: index > 0 ? "2px solid var(--background)" : undefined,
-              }}
-            />
-          ))}
-          {/* Pool boundary markers */}
-          {poolBoundaries.slice(1).map((pool) => (
-            <div
-              key={`marker-${pool.poolId}`}
-              className="absolute h-2 w-px bg-muted-foreground/50 -top-0.5"
-              style={{ left: `${pool.start}%` }}
-            />
-          ))}
-        </div>
-
         {/* Token allocation bar */}
         <div className="relative h-2 flex rounded-sm overflow-hidden">
           {tokenSegments.map((segment, index) => {
