@@ -6,7 +6,7 @@ import { StellarWalletsKit } from "@creit-tech/stellar-wallets-kit/sdk"
 import { Networks } from "@creit-tech/stellar-wallets-kit/types"
 import { defaultModules } from "@creit-tech/stellar-wallets-kit/modules/utils"
 // WalletConnect is imported dynamically to avoid SSR issues with Node.js-only dependencies
-// import { LedgerModule } from "@creit-tech/stellar-wallets-kit/modules/ledger"
+import { LedgerModule } from "@creit-tech/stellar-wallets-kit/modules/ledger"
 // import { HotWalletModule } from "@creit-tech/stellar-wallets-kit/modules/hotwallet"
 
 // Polyfill Buffer for browser (required by Ledger and HotWallet modules)
@@ -57,6 +57,9 @@ async function ensureInitialized(network: Networks): Promise<void> {
   initializationPromise = (async () => {
     try {
       const modules = defaultModules()
+
+      // Add Ledger module
+      modules.push(new LedgerModule())
 
       // Add WalletConnect module if project ID is available
       // Dynamic import to avoid SSR issues with Node.js-only dependencies
@@ -125,8 +128,13 @@ export function useStellarWalletKit(network: Networks = getDefaultNetwork()) {
       if (!module) {
         throw new Error("Wallet module not found")
       }
-      // Call getAddress with skipRequestAccess: false to trigger the wallet popup
-      const { address } = await module.getAddress({ skipRequestAccess: false })
+      // For Ledger wallets, we need to provide a BIP44 path
+      // Standard Stellar path is 44'/148'/0' (first account)
+      const isLedger = walletId === "LEDGER"
+      const { address } = await module.getAddress({
+        skipRequestAccess: false,
+        ...(isLedger && { path: "44'/148'/0'" }),
+      })
       return address
     } catch (error: unknown) {
       // Extract error details - wallet errors often don't serialize well
