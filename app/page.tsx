@@ -15,6 +15,7 @@ import { useBlendPositions } from "@/hooks/use-blend-positions"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { ArrowDownFromLine, History, PiggyBank } from "lucide-react"
 import { BlndRewardsCard } from "@/components/blnd-rewards-card"
+import { PortfolioAllocationBar } from "@/components/portfolio-allocation-bar"
 import { SupplyPositions } from "@/components/supply-positions"
 import { BorrowPositions } from "@/components/borrow-positions"
 
@@ -48,8 +49,10 @@ function HomeContent() {
 
   // Track page view
   useEffect(() => {
-    capture('page_viewed', { page: 'home' })
-  }, [capture])
+    capture('page_viewed', {
+      page: activeWallet ? 'dashboard' : 'landing'
+    })
+  }, [capture, activeWallet])
 
   const { balanceData: initialBalanceData, assetCards, isLoading, error, data: blendSnapshot, totalEmissions, blndPrice, lpTokenPrice, backstopPositions } = useBlendPositions(
     activeWallet?.publicKey,
@@ -222,6 +225,12 @@ function HomeContent() {
                   }, {} as Record<string, string>) || {})}
                 />
               )}
+
+              <PortfolioAllocationBar
+                positions={blendSnapshot?.positions || []}
+                backstopPositions={backstopPositions}
+                isLoading={isLoading}
+              />
 
               <SupplyPositions
                 isLoading={isLoading}

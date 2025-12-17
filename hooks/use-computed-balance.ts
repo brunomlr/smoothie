@@ -203,8 +203,32 @@ export function useComputedBalance(
   // Aggregate historical data from ALL assets + backstop, converting each to USD
   // This provides the combined total history for the top chart
   const aggregatedHistoryData = useMemo(() => {
-    // Return empty but valid result when there's no data (not loading anymore)
-    // This prevents infinite loading state for accounts with no positions
+    // Check if data is still loading
+    const isLoading = balanceHistoryQueries.some(q => q.isLoading) || backstopBalanceHistoryQuery.isLoading
+
+    // Return loading state if asset history hasn't loaded yet
+    // IMPORTANT: Don't proceed with aggregation if we only have backstop data but no asset data
+    // This prevents showing incorrect totals (backstop only) while asset history is loading
+    if (isLoading || (balanceHistoryDataMap.size === 0 && uniqueAssetAddresses.length > 0)) {
+      return {
+        chartData: [],
+        positionChanges: [],
+        earningsStats: {
+          totalInterest: 0,
+          currentAPY: 0,
+          avgDailyInterest: 0,
+          projectedAnnual: 0,
+          dayCount: 0,
+          avgPosition: 0,
+          perPool: {},
+        },
+        rawData: [],
+        isLoading: true, // Keep showing loading until ALL data is ready
+        error: null,
+      } as AggregatedHistoryData
+    }
+
+    // Return empty result for accounts with no positions (not loading, just empty)
     if (balanceHistoryDataMap.size === 0 && !backstopBalanceHistoryQuery.data?.history?.length) {
       return {
         chartData: [],
@@ -219,7 +243,7 @@ export function useComputedBalance(
           perPool: {},
         },
         rawData: [],
-        isLoading: balanceHistoryQueries.some(q => q.isLoading) || backstopBalanceHistoryQuery.isLoading,
+        isLoading: false,
         error: null,
       } as AggregatedHistoryData
     }
