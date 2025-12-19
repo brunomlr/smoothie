@@ -228,21 +228,16 @@ export function BlndRewardsCard({
     return (
       <Card className="p-0 gap-0">
         <div className="flex items-center justify-between px-4 py-3">
-          <Skeleton className="h-5 w-28 sm:w-32" />
-          <Skeleton className="h-6 w-16 sm:w-20" />
-        </div>
-        <div className="px-4 pt-2 pb-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Skeleton className="h-4 w-16 sm:w-24" />
-              <Skeleton className="h-8 w-full max-w-[120px]" />
-              <Skeleton className="h-4 w-14 sm:w-20" />
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-5 w-5 rounded" />
+            <div className="space-y-1">
+              <Skeleton className="h-5 w-24" />
+              <Skeleton className="h-4 w-16" />
             </div>
-            <div className="space-y-2">
-              <Skeleton className="h-4 w-16 sm:w-24" />
-              <Skeleton className="h-8 w-full max-w-[120px]" />
-              <Skeleton className="h-4 w-14 sm:w-20" />
-            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-5 w-20" />
+            <Skeleton className="h-4 w-4" />
           </div>
         </div>
       </Card>
