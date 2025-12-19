@@ -349,7 +349,7 @@ export function SupplyPositions({
                                     </p>
                                   </TooltipTrigger>
                                   <TooltipContent className="p-2.5">
-                                    <p className="font-medium text-zinc-400 mb-1.5">Yield Breakdown</p>
+                                    <p className="font-medium text-zinc-400 mb-1.5">Breakdown</p>
                                     <div className="space-y-1">
                                       <div className="flex justify-between gap-6">
                                         <span className="text-zinc-400">Cost Basis</span>
@@ -358,7 +358,7 @@ export function SupplyPositions({
                                         </span>
                                       </div>
                                       <div className="flex justify-between gap-6">
-                                        <span className="text-zinc-400">Protocol Yield</span>
+                                        <span className="text-zinc-400">Yield</span>
                                         <span className={asset.yieldBreakdown.protocolYieldUsd >= 0 ? 'text-emerald-400' : 'text-red-400'}>
                                           {formatYieldValue(asset.yieldBreakdown.protocolYieldUsd)}
                                         </span>
@@ -370,7 +370,7 @@ export function SupplyPositions({
                                         </span>
                                       </div>
                                       <div className="flex justify-between gap-6 border-t border-zinc-700 pt-1 mt-1">
-                                        <span className="text-zinc-300 font-medium">Total Earned</span>
+                                        <span className="text-zinc-300 font-medium">Total</span>
                                         <span className={asset.yieldBreakdown.totalEarnedUsd >= 0 ? 'text-emerald-400' : 'text-red-400'}>
                                           {formatYieldValue(asset.yieldBreakdown.totalEarnedUsd)}
                                         </span>
@@ -467,7 +467,7 @@ export function SupplyPositions({
                                       </p>
                                     </TooltipTrigger>
                                     <TooltipContent className="p-2.5">
-                                      <p className="font-medium text-zinc-400 mb-1.5">Yield Breakdown</p>
+                                      <p className="font-medium text-zinc-400 mb-1.5">Breakdown</p>
                                       <div className="space-y-1">
                                         <div className="flex justify-between gap-6">
                                           <span className="text-zinc-400">Cost Basis</span>
@@ -476,7 +476,7 @@ export function SupplyPositions({
                                           </span>
                                         </div>
                                         <div className="flex justify-between gap-6">
-                                          <span className="text-zinc-400">Protocol Yield</span>
+                                          <span className="text-zinc-400">Yield</span>
                                           <span className={backstopPosition.yieldBreakdown.protocolYieldUsd >= 0 ? 'text-emerald-400' : 'text-red-400'}>
                                             {formatYieldValue(backstopPosition.yieldBreakdown.protocolYieldUsd)}
                                           </span>
@@ -490,7 +490,7 @@ export function SupplyPositions({
                                           </div>
                                         )}
                                         <div className="flex justify-between gap-6 border-t border-zinc-700 pt-1 mt-1">
-                                          <span className="text-zinc-300 font-medium">Total Earned</span>
+                                          <span className="text-zinc-300 font-medium">Total</span>
                                           <span className={backstopPosition.yieldBreakdown.totalEarnedUsd >= 0 ? 'text-emerald-400' : 'text-red-400'}>
                                             {formatYieldValue(backstopPosition.yieldBreakdown.totalEarnedUsd)}
                                           </span>

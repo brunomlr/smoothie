@@ -144,9 +144,9 @@ const AssetCardComponent = ({ data, onAction, isDemoMode = false }: AssetCardPro
                       </TooltipTrigger>
                       <TooltipContent side="bottom" className="max-w-xs p-2.5">
                         <div className="space-y-1.5 text-[11px]">
-                          <div className="font-medium text-zinc-400 border-b border-zinc-700 pb-1">Yield Breakdown</div>
+                          <div className="font-medium text-zinc-400 border-b border-zinc-700 pb-1">Breakdown</div>
                           <div className="flex justify-between gap-4">
-                            <span className="text-zinc-400">Protocol Yield:</span>
+                            <span className="text-zinc-400">Yield:</span>
                             <span className={breakdown.protocolYieldUsd >= 0 ? "text-emerald-400" : "text-red-400"}>
                               {formatInCurrency(breakdown.protocolYieldUsd, { showSign: true })}
                             </span>
@@ -162,7 +162,7 @@ const AssetCardComponent = ({ data, onAction, isDemoMode = false }: AssetCardPro
                             </span>
                           </div>
                           <div className="border-t border-zinc-700 pt-1 flex justify-between gap-4 font-medium">
-                            <span className="text-zinc-300">Total Earned:</span>
+                            <span className="text-zinc-300">Total:</span>
                             <span className={breakdown.totalEarnedUsd >= 0 ? "text-emerald-400" : "text-red-400"}>
                               {formatInCurrency(breakdown.totalEarnedUsd, { showSign: true })}
                             </span>

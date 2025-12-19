@@ -1311,12 +1311,17 @@ export class EventsRepository {
    * Get deposit and withdrawal events with historical prices for yield calculation.
    * Returns events with prices from daily_token_prices table.
    * Uses forward-fill for missing prices, falls back to provided SDK price.
+   *
+   * @param startDate - Optional: filter events on or after this date (YYYY-MM-DD)
+   * @param endDate - Optional: filter events strictly before this date (YYYY-MM-DD)
    */
   async getDepositEventsWithPrices(
     userAddress: string,
     assetAddress: string,
     poolId?: string,
-    sdkPrice: number = 0
+    sdkPrice: number = 0,
+    startDate?: string,
+    endDate?: string
   ): Promise<{
     deposits: Array<{
       date: string
@@ -1343,10 +1348,24 @@ export class EventsRepository {
     // Uses LEFT JOIN LATERAL to get the price at or before the event date (forward-fill)
     let whereClause = 'WHERE pe.user_address = $1 AND pe.asset_address = $2'
     const params: (string | number)[] = [userAddress, assetAddress]
+    let paramIndex = 3
 
     if (poolId) {
-      whereClause += ' AND pe.pool_id = $3'
+      whereClause += ` AND pe.pool_id = $${paramIndex}`
       params.push(poolId)
+      paramIndex++
+    }
+
+    if (startDate) {
+      whereClause += ` AND (pe.ledger_closed_at AT TIME ZONE 'UTC')::date >= $${paramIndex}::date`
+      params.push(startDate)
+      paramIndex++
+    }
+
+    if (endDate) {
+      whereClause += ` AND (pe.ledger_closed_at AT TIME ZONE 'UTC')::date < $${paramIndex}::date`
+      params.push(endDate)
+      paramIndex++
     }
 
     const result = await pool.query(
@@ -1727,6 +1746,42 @@ export class EventsRepository {
         priceSource,
       }
     })
+  }
+
+  /**
+   * Get historical price for a token at a specific date.
+   * Uses forward-fill (most recent price on or before the date).
+   */
+  async getHistoricalPriceAtDate(
+    tokenAddress: string,
+    targetDate: string,
+    sdkPrice: number = 0
+  ): Promise<{ price: number; source: 'daily_token_prices' | 'forward_fill' | 'sdk_fallback' }> {
+    if (!pool) {
+      throw new Error('Database pool not initialized')
+    }
+
+    const result = await pool.query(
+      `
+      SELECT usd_price, price_date::text
+      FROM daily_token_prices
+      WHERE token_address = $1
+        AND price_date <= $2::date
+      ORDER BY price_date DESC
+      LIMIT 1
+      `,
+      [tokenAddress, targetDate]
+    )
+
+    if (result.rows.length === 0) {
+      return { price: sdkPrice, source: 'sdk_fallback' }
+    }
+
+    const row = result.rows[0]
+    const price = parseFloat(row.usd_price)
+    const source = row.price_date === targetDate ? 'daily_token_prices' : 'forward_fill'
+
+    return { price, source }
   }
 }
 
