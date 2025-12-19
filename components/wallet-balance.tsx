@@ -366,7 +366,6 @@ const WalletBalanceComponent = ({ data, chartData, publicKey, balanceHistoryData
         protocolYield: totalYield,
         priceChange: 0,
         totalEarned: totalYield,
-        netPeriodDeposits: 0,
         periodStartDate: '',
         isLoading: true,
       }
@@ -420,28 +419,57 @@ const WalletBalanceComponent = ({ data, chartData, publicKey, balanceHistoryData
     // Values from chart data
     const valueAtStart = chartPointAtStart?.total || 0
     const yieldAtStart = chartPointAtStart?.yield || 0
-    const depositAtStart = chartPointAtStart?.deposit || 0
     const valueNow = initialBalance
 
-    // Get current cumulative deposit from latest chart point
-    const latestChartPoint = sortedHistory[sortedHistory.length - 1]
-    const depositNow = latestChartPoint?.deposit || 0
-
     // Protocol Yield = current total yield - yield at period start
+    // This is the actual interest earned during the period (from chart's yield tracking)
     const protocolYield = totalYield - yieldAtStart
 
-    // Net Deposits during period = deposits made minus withdrawals
-    // (deposit field tracks cumulative net deposits)
-    const netPeriodDeposits = depositNow - depositAtStart
+    // Price Change = sum of (tokensAtStart × (priceNow - priceAtStart)) for each asset
+    // This only considers tokens held at the START of the period
+    let priceChange = 0
+    if (blendPositions && historicalPrices && balanceHistoryDataMap) {
+      for (const position of blendPositions) {
+        const assetId = position.assetId
+        if (!assetId) continue
 
-    // Total Change = Value Now - Value at Start (includes everything)
-    const totalChange = valueNow - valueAtStart
+        const currentPrice = position.price?.usdPrice || 0
+        if (currentPrice <= 0) continue
 
-    // Total Earned = Total Change minus net deposits (actual gains only)
-    const totalEarned = totalChange - netPeriodDeposits
+        // Get balance at period start for this asset
+        const historyEntry = balanceHistoryDataMap.get(assetId)
+        if (!historyEntry?.rawData || historyEntry.rawData.length === 0) continue
 
-    // Price Change = Total Earned - Protocol Yield
-    const priceChange = totalEarned - protocolYield
+        // Find balance at period start
+        const typedData = historyEntry.rawData as Array<{ snapshot_date: string; supply_balance: number; collateral_balance: number; pool_id: string }>
+        const [poolId] = position.id.split('-')
+
+        // Sort and filter by pool
+        const sorted = [...typedData]
+          .filter(r => r.pool_id === poolId)
+          .sort((a, b) => b.snapshot_date.localeCompare(a.snapshot_date))
+
+        let tokensAtStart = 0
+        for (const record of sorted) {
+          if (record.snapshot_date <= periodStartStr) {
+            tokensAtStart = record.supply_balance + record.collateral_balance
+            break
+          }
+        }
+
+        if (tokensAtStart <= 0) continue
+
+        // Get price at period start
+        const priceAtStart = historicalPrices.getPrice(assetId, periodStartStr)
+
+        // Price change for this asset = tokens at start × price difference
+        const assetPriceChange = tokensAtStart * (currentPrice - priceAtStart)
+        priceChange += assetPriceChange
+      }
+    }
+
+    // Total Earned = Protocol Yield + Price Change
+    const totalEarned = protocolYield + priceChange
 
     console.log('[ChartBasedPeriodBreakdown]', {
       period: selectedPeriod,
@@ -449,15 +477,11 @@ const WalletBalanceComponent = ({ data, chartData, publicKey, balanceHistoryData
       chartPointDate: chartPointAtStart?.date,
       valueAtStart,
       yieldAtStart,
-      depositAtStart,
-      depositNow,
       valueNow,
       totalYield,
       protocolYield,
-      netPeriodDeposits,
-      totalChange,
-      totalEarned,
       priceChange,
+      totalEarned,
     })
 
     return {
@@ -466,11 +490,10 @@ const WalletBalanceComponent = ({ data, chartData, publicKey, balanceHistoryData
       protocolYield,
       priceChange,
       totalEarned,
-      netPeriodDeposits,
       periodStartDate: chartPointAtStart?.date || periodStartStr,
       isLoading: false,
     }
-  }, [displayChartData, selectedPeriod, initialBalance, totalYield])
+  }, [displayChartData, selectedPeriod, initialBalance, totalYield, blendPositions, historicalPrices, balanceHistoryDataMap])
 
   // Display yield based on selected period
   const displayYield = calculatedPeriodYield
