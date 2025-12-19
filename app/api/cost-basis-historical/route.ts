@@ -32,9 +32,6 @@ export async function GET(request: NextRequest) {
   const userAddress = searchParams.get('userAddress')
   const sdkPricesParam = searchParams.get('sdkPrices')
 
-  console.log('[Cost Basis Historical API] Called with userAddress:', userAddress)
-  console.log('[Cost Basis Historical API] sdkPrices:', sdkPricesParam)
-
   if (!userAddress) {
     return NextResponse.json(
       { error: 'Missing required parameter: userAddress' },
@@ -125,9 +122,6 @@ export async function GET(request: NextRequest) {
 
       totalCostBasisHistorical += costBasisHistorical
     }
-
-    console.log('[Cost Basis Historical API] Returning byAsset keys:', Object.keys(byAsset))
-    console.log('[Cost Basis Historical API] totalCostBasisHistorical:', totalCostBasisHistorical)
 
     return NextResponse.json({
       byAsset,
