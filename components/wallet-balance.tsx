@@ -645,7 +645,25 @@ const WalletBalanceComponent = ({ data, chartData, publicKey, balanceHistoryData
                   </p>
                 </TooltipTrigger>
                 <TooltipContent className="max-w-xs p-2.5">
-                  {!periodYieldBreakdownAPI.isLoading && periodYieldBreakdownAPI.totals.valueNow > 0 ? (
+                  {periodYieldBreakdownAPI.isFetching ? (
+                    <div className="space-y-2 w-40">
+                      <Skeleton className="h-3 w-24" />
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between gap-4">
+                          <Skeleton className="h-2.5 w-12" />
+                          <Skeleton className="h-2.5 w-14" />
+                        </div>
+                        <div className="flex justify-between gap-4">
+                          <Skeleton className="h-2.5 w-16" />
+                          <Skeleton className="h-2.5 w-14" />
+                        </div>
+                        <div className="border-t border-zinc-700 pt-1 flex justify-between gap-4">
+                          <Skeleton className="h-2.5 w-10" />
+                          <Skeleton className="h-2.5 w-14" />
+                        </div>
+                      </div>
+                    </div>
+                  ) : !periodYieldBreakdownAPI.isLoading && periodYieldBreakdownAPI.totals.valueNow > 0 ? (
                     <div className="space-y-1.5 text-[11px]">
                       <div className="font-semibold text-xs text-zinc-200 mb-2">
                         Breakdown ({selectedPeriod === "All" ? "All Time" : selectedPeriod})
@@ -673,19 +691,32 @@ const WalletBalanceComponent = ({ data, chartData, publicKey, balanceHistoryData
                           <span className="text-zinc-400">Yield APY:</span>
                           <span className="text-zinc-300">
                             {(() => {
-                              // 1. Use supply APY if available and > 0
+                              // 1. Use supply APY if available and > 0 (for "All" or "Projection")
                               if ((selectedPeriod === "All" || selectedPeriod === "Projection") &&
                                   balanceHistoryData?.earningsStats?.currentAPY &&
                                   balanceHistoryData.earningsStats.currentAPY > 0) {
                                 return formatPercentage(balanceHistoryData.earningsStats.currentAPY)
                               }
-                              // 2. Calculate from API data using derived cost basis
+                              // 2. For other periods: if periodDays covers all user data, use pre-calculated APY for consistency
+                              const totalDays = balanceHistoryData?.earningsStats?.dayCount || 0
+                              if (totalDays > 0 && periodYieldBreakdownAPI.periodDays >= totalDays &&
+                                  balanceHistoryData?.earningsStats?.currentAPY &&
+                                  balanceHistoryData.earningsStats.currentAPY > 0) {
+                                return formatPercentage(balanceHistoryData.earningsStats.currentAPY)
+                              }
+                              // 3. Calculate from API data using valueAtStart (balance at period start)
+                              const valueAtStart = periodYieldBreakdownAPI.totals.valueAtStart
+                              if (valueAtStart > 0 && periodYieldBreakdownAPI.totals.protocolYieldUsd !== 0) {
+                                const apy = (periodYieldBreakdownAPI.totals.protocolYieldUsd / valueAtStart) * (365 / periodYieldBreakdownAPI.periodDays) * 100
+                                return formatPercentage(apy)
+                              }
+                              // 4. Fallback: derive cost basis from current value
                               const costBasis = periodYieldBreakdownAPI.totals.valueNow - periodYieldBreakdownAPI.totals.totalEarnedUsd
                               if (costBasis > 0 && periodYieldBreakdownAPI.totals.protocolYieldUsd !== 0) {
                                 const apy = (periodYieldBreakdownAPI.totals.protocolYieldUsd / costBasis) * (365 / periodYieldBreakdownAPI.periodDays) * 100
                                 return formatPercentage(apy)
                               }
-                              // 3. Use yieldBreakdown cost basis if available
+                              // 5. Use yieldBreakdown cost basis if available
                               if (yieldBreakdown?.totalCostBasisHistorical && yieldBreakdown.totalCostBasisHistorical > 0) {
                                 const apy = (periodYieldBreakdownAPI.totals.protocolYieldUsd / yieldBreakdown.totalCostBasisHistorical) * (365 / periodYieldBreakdownAPI.periodDays) * 100
                                 return apy.toFixed(2)

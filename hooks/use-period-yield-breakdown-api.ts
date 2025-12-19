@@ -28,6 +28,7 @@ interface UsePeriodYieldBreakdownAPIParams {
 export interface PeriodYieldBreakdownAPIResult {
   data: PeriodYieldBreakdownResponse | null
   isLoading: boolean
+  isFetching: boolean // True whenever fetching, even with cached data
   error: Error | null
   // Convenience accessors
   totals: {
@@ -180,6 +181,7 @@ export function usePeriodYieldBreakdownAPI({
   return {
     data: query.data || null,
     isLoading: query.isLoading,
+    isFetching: query.isFetching,
     error: query.error as Error | null,
     totals: combinedTotals,
     periodStartDate: query.data?.periodStartDate || '',
