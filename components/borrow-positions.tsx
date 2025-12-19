@@ -1,10 +1,12 @@
 "use client"
 
+import { useMemo } from "react"
 import Link from "next/link"
 import { TokenLogo } from "@/components/token-logo"
 import { formatAmount } from "@/lib/format-utils"
 import { DEMO_BORROW_POSITIONS } from "@/lib/demo-data"
 import { useCurrencyPreference } from "@/hooks/use-currency-preference"
+import { useTokensOnly } from "@/hooks/use-metadata"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { TrendingDown, ChevronRight, Flame } from "lucide-react"
@@ -37,7 +39,25 @@ export function BorrowPositions({
   poolAssetBorrowCostBasisMap,
   onPoolClick,
 }: BorrowPositionsProps) {
-  const { format: formatInCurrency } = useCurrencyPreference()
+  const { format: formatInCurrency, currency } = useCurrencyPreference()
+
+  // Get token metadata for pegged currency lookup
+  const { tokens } = useTokensOnly()
+
+  // Build a map from symbol to pegged currency
+  const symbolToPeggedCurrency = useMemo(() => {
+    const map = new Map<string, string | null>()
+    tokens.forEach(token => {
+      map.set(token.symbol, token.pegged_currency)
+    })
+    return map
+  }, [tokens])
+
+  // Check if a token's pegged currency matches the user's selected currency
+  const isPeggedToSelectedCurrency = (symbol: string): boolean => {
+    const peggedCurrency = symbolToPeggedCurrency.get(symbol)
+    return peggedCurrency === currency
+  }
 
   const formatUsdAmount = (value: number) => {
     return formatInCurrency(value, {
@@ -72,7 +92,7 @@ export function BorrowPositions({
             <CardContent className="px-4 pt-0 pb-1">
               <div className="space-y-1">
                 {pool.positions.map((position) => {
-                  const isUSDC = position.symbol === 'USDC'
+                  const hideTokenAmount = isPeggedToSelectedCurrency(position.symbol)
                   const formattedInterest = formatInterestValue(position.interestAccrued)
                   const hasSignificantInterest = Math.abs(position.interestAccrued) >= 0.01
                   const formattedInterestPercentage = position.interestPercentage !== 0 ? ` (${position.interestPercentage >= 0 ? '+' : ''}${position.interestPercentage.toFixed(2)}%)` : ''
@@ -88,7 +108,7 @@ export function BorrowPositions({
                         <div className="min-w-0 flex-1">
                           <p className="font-medium truncate">{position.symbol}</p>
                           <p className="text-sm text-muted-foreground truncate">
-                            {isUSDC ? (
+                            {hideTokenAmount ? (
                               formatUsdAmount(position.borrowUsdValue)
                             ) : (
                               <>
@@ -168,7 +188,7 @@ export function BorrowPositions({
                     // Find the matching asset card to get the correct logoUrl
                     const matchingAsset = enrichedAssetCards.find(asset => asset.id === position.id)
                     const logoUrl = matchingAsset?.logoUrl || `/tokens/${position.symbol.toLowerCase()}.png`
-                    const isUSDC = position.symbol === 'USDC'
+                    const hideTokenAmount = isPeggedToSelectedCurrency(position.symbol)
 
                     // Calculate interest accrued similar to position yield calculation
                     const compositeKey = position.id // poolId-assetAddress
@@ -197,7 +217,7 @@ export function BorrowPositions({
                           <div className="min-w-0 flex-1">
                             <p className="font-medium truncate">{position.symbol}</p>
                             <p className="text-sm text-muted-foreground truncate">
-                              {isUSDC ? (
+                              {hideTokenAmount ? (
                                 formatUsdAmount(position.borrowUsdValue)
                               ) : (
                                 <>

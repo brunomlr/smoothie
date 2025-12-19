@@ -94,7 +94,7 @@ function buildBalanceData(snapshot: BlendWalletSnapshot | undefined): BalanceDat
 function buildAssetCards(snapshot: BlendWalletSnapshot | undefined): AssetCardData[] {
   if (!snapshot) return []
 
-  return snapshot.positions
+  const cards = snapshot.positions
     .filter((position) => position.supplyAmount > 0)
     .map<AssetCardData>((position) => ({
       id: position.id,
@@ -107,6 +107,9 @@ function buildAssetCards(snapshot: BlendWalletSnapshot | undefined): AssetCardDa
       growthPercentage: position.blndApy,
       earnedYield: 0, // Will be populated from page.tsx using: SDK balance - Dune cost basis
     }))
+
+  console.log('[buildAssetCards] Card IDs:', cards.map(c => c.id))
+  return cards
 }
 
 // Fetch backstop cost basis from API

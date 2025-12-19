@@ -108,6 +108,10 @@ const AssetCardComponent = ({ data, onAction, isDemoMode = false }: AssetCardPro
   const yieldPercentage = activeData.yieldPercentage ?? 0
   const formattedYieldPercentage = yieldPercentage !== 0 ? ` (${yieldPercentage >= 0 ? '+' : ''}${yieldPercentage.toFixed(2)}%)` : ''
 
+  // Yield breakdown for tooltip
+  const breakdown = activeData.yieldBreakdown
+  const hasBreakdown = breakdown && (breakdown.protocolYieldUsd !== 0 || breakdown.priceChangeUsd !== 0)
+
   return (
     <Card className="@container/asset-card">
       <CardContent className="flex items-center gap-4">
@@ -129,9 +133,58 @@ const AssetCardComponent = ({ data, onAction, isDemoMode = false }: AssetCardPro
                 <FormattedBalance value={formattedLiveBalance} />
               </span>
               {hasSignificantYield && (
-                <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400 tabular-nums">
-                  {formattedYield} yield{formattedYieldPercentage}
-                </span>
+                hasBreakdown ? (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400 tabular-nums cursor-help">
+                          {formattedYield} yield{formattedYieldPercentage}
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" className="max-w-xs p-2.5">
+                        <div className="space-y-1.5 text-[11px]">
+                          <div className="font-medium text-zinc-400 border-b border-zinc-700 pb-1">Yield Breakdown</div>
+                          <div className="flex justify-between gap-4">
+                            <span className="text-zinc-400">Protocol Yield:</span>
+                            <span className={breakdown.protocolYieldUsd >= 0 ? "text-emerald-400" : "text-red-400"}>
+                              {formatInCurrency(breakdown.protocolYieldUsd, { showSign: true })}
+                            </span>
+                          </div>
+                          <div className="text-zinc-500 text-[10px]">
+                            ({breakdown.protocolYieldTokens.toFixed(4)} {activeData.assetName} earned)
+                          </div>
+                          <div className="flex justify-between gap-4">
+                            <span className="text-zinc-400">Price Change:</span>
+                            <span className={breakdown.priceChangeUsd >= 0 ? "text-emerald-400" : "text-red-400"}>
+                              {formatInCurrency(breakdown.priceChangeUsd, { showSign: true })}
+                              {breakdown.priceChangePercent !== 0 && ` (${breakdown.priceChangePercent >= 0 ? '+' : ''}${breakdown.priceChangePercent.toFixed(1)}%)`}
+                            </span>
+                          </div>
+                          <div className="border-t border-zinc-700 pt-1 flex justify-between gap-4 font-medium">
+                            <span className="text-zinc-300">Total Earned:</span>
+                            <span className={breakdown.totalEarnedUsd >= 0 ? "text-emerald-400" : "text-red-400"}>
+                              {formatInCurrency(breakdown.totalEarnedUsd, { showSign: true })}
+                            </span>
+                          </div>
+                          <div className="border-t border-zinc-700 pt-1 text-zinc-500">
+                            <div className="flex justify-between gap-4">
+                              <span>Cost Basis:</span>
+                              <span className="text-zinc-300">{formatInCurrency(breakdown.costBasisHistorical)}</span>
+                            </div>
+                            <div className="flex justify-between gap-4">
+                              <span>Avg Price:</span>
+                              <span className="text-zinc-300">${breakdown.weightedAvgDepositPrice.toFixed(4)}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                ) : (
+                  <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400 tabular-nums">
+                    {formattedYield} yield{formattedYieldPercentage}
+                  </span>
+                )
               )}
             </div>
 
@@ -219,6 +272,8 @@ export const AssetCard = React.memo(AssetCardComponent, (prevProps, nextProps) =
     prevProps.data.growthPercentage === nextProps.data.growthPercentage &&
     prevProps.data.earnedYield === nextProps.data.earnedYield &&
     prevProps.data.yieldPercentage === nextProps.data.yieldPercentage &&
+    prevProps.data.yieldBreakdown?.protocolYieldUsd === nextProps.data.yieldBreakdown?.protocolYieldUsd &&
+    prevProps.data.yieldBreakdown?.priceChangeUsd === nextProps.data.yieldBreakdown?.priceChangeUsd &&
     prevProps.onAction === nextProps.onAction &&
     prevProps.isDemoMode === nextProps.isDemoMode
   )

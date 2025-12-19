@@ -30,6 +30,13 @@ const BalanceBarChart = dynamic(
   }
 )
 
+export interface YieldBreakdownTotals {
+  totalProtocolYieldUsd: number
+  totalPriceChangeUsd: number
+  totalCostBasisHistorical: number
+  totalEarnedUsd: number
+}
+
 interface WalletBalanceProps {
   data: BalanceData
   chartData: WalletChartDataPoint[]
@@ -44,6 +51,7 @@ interface WalletBalanceProps {
   onToggleDemoMode?: () => void
   usdcPrice?: number // USDC price from SDK oracle for normalizing historical data
   poolInputs?: PoolProjectionInput[] // Per-pool data for projection breakdown
+  yieldBreakdown?: YieldBreakdownTotals // Historical yield breakdown (protocol yield vs price change)
 }
 
 function formatPercentage(value: number): string {
@@ -159,7 +167,7 @@ const DUMMY_CHART_DATA: WalletChartDataPoint[] = [
   { date: "2025-11-01", balance: 13040, deposit: 10000, yield: 3040, type: 'historical' },
 ]
 
-const WalletBalanceComponent = ({ data, chartData, publicKey, balanceHistoryData, loading, isDemoMode = false, onToggleDemoMode, usdcPrice = 1, poolInputs = [] }: WalletBalanceProps) => {
+const WalletBalanceComponent = ({ data, chartData, publicKey, balanceHistoryData, loading, isDemoMode = false, onToggleDemoMode, usdcPrice = 1, poolInputs = [], yieldBreakdown }: WalletBalanceProps) => {
   // State for time period selection
   const [selectedPeriod, setSelectedPeriod] = useState<TimePeriod>("1M")
 
@@ -473,9 +481,46 @@ const WalletBalanceComponent = ({ data, chartData, publicKey, balanceHistoryData
                     )}
                   </p>
                 </TooltipTrigger>
-                <TooltipContent>
-                  <p>Realized APY: {formatPercentage(balanceHistoryData.earningsStats.currentAPY)}%</p>
-                  <p className="text-xs opacity-75">Over {actualPeriodDays} days</p>
+                <TooltipContent className="max-w-xs p-2.5">
+                  {yieldBreakdown && yieldBreakdown.totalCostBasisHistorical > 0 ? (
+                    <div className="space-y-1.5 text-[11px]">
+                      <div className="font-medium text-zinc-400 border-b border-zinc-700 pb-1">Yield Breakdown</div>
+                      <div className="flex justify-between gap-4">
+                        <span className="text-zinc-400">Protocol Yield:</span>
+                        <span className={yieldBreakdown.totalProtocolYieldUsd >= 0 ? "text-emerald-400" : "text-red-400"}>
+                          {formatInCurrency(yieldBreakdown.totalProtocolYieldUsd, { showSign: true })}
+                        </span>
+                      </div>
+                      <div className="flex justify-between gap-4">
+                        <span className="text-zinc-400">Price Change:</span>
+                        <span className={yieldBreakdown.totalPriceChangeUsd >= 0 ? "text-emerald-400" : "text-red-400"}>
+                          {formatInCurrency(yieldBreakdown.totalPriceChangeUsd, { showSign: true })}
+                        </span>
+                      </div>
+                      <div className="border-t border-zinc-700 pt-1 flex justify-between gap-4 font-medium">
+                        <span className="text-zinc-300">Total Earned:</span>
+                        <span className={yieldBreakdown.totalEarnedUsd >= 0 ? "text-emerald-400" : "text-red-400"}>
+                          {formatInCurrency(yieldBreakdown.totalEarnedUsd, { showSign: true })}
+                        </span>
+                      </div>
+                      <div className="border-t border-zinc-700 pt-1 text-zinc-500">
+                        <div className="flex justify-between gap-4">
+                          <span>Cost Basis:</span>
+                          <span className="text-zinc-300">{formatInCurrency(yieldBreakdown.totalCostBasisHistorical)}</span>
+                        </div>
+                        <div className="flex justify-between gap-4">
+                          <span>Realized APY:</span>
+                          <span className="text-zinc-300">{formatPercentage(balanceHistoryData.earningsStats.currentAPY)}%</span>
+                        </div>
+                      </div>
+                      <p className="text-[10px] text-zinc-500">Over {actualPeriodDays} days</p>
+                    </div>
+                  ) : (
+                    <>
+                      <p>Realized APY: {formatPercentage(balanceHistoryData.earningsStats.currentAPY)}%</p>
+                      <p className="text-[10px] text-zinc-500">Over {actualPeriodDays} days</p>
+                    </>
+                  )}
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>

@@ -113,6 +113,7 @@ export interface Token {
   icon_url: string | null
   coingecko_id: string | null
   is_native: boolean
+  pegged_currency: string | null  // Currency code this token is pegged to (e.g., 'USD' for USDC)
 }
 
 // Daily Rate

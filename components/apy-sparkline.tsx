@@ -56,11 +56,11 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
   const apy = data.value
 
   return (
-    <div className="bg-popover border border-border rounded-md px-2 py-1.5 shadow-md text-xs whitespace-nowrap">
-      <p className="text-muted-foreground">
+    <div className="bg-black text-white border border-zinc-800 rounded-md px-2 py-1.5 shadow-md text-[11px] whitespace-nowrap">
+      <p className="text-zinc-400">
         {format(new Date(date), "MMM d, yyyy")}
       </p>
-      <p className="font-medium text-green-500">{formatPercent(apy)} APY</p>
+      <p className="font-medium text-green-400">{formatPercent(apy)} APY</p>
     </div>
   )
 }

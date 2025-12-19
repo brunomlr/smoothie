@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect, useCallback } from "react"
+import { useState, useRef, useEffect, useCallback, useMemo } from "react"
 import {
   ChevronDown,
   ChevronUp,
@@ -41,9 +41,16 @@ import {
 } from "@/components/ui/tooltip"
 import { Calendar } from "@/components/ui/calendar"
 import { format } from "date-fns"
+import { useQuery } from "@tanstack/react-query"
 import { useInfiniteUserActions } from "@/hooks/use-user-actions"
 import type { UserAction, ActionType } from "@/lib/db/types"
 import { TokenLogo } from "@/components/token-logo"
+import { useCurrencyPreference } from "@/hooks/use-currency-preference"
+import { useTokensOnly } from "@/hooks/use-metadata"
+import type { HistoricalPricesResponse } from "@/app/api/historical-prices/route"
+
+// LP token address for BLND-USDC Comet pool (used for backstop LP price lookup)
+const LP_TOKEN_ADDRESS = 'CAS3FL6TLZKDGGSISDBWGGPXT3NRR4DYTZD7YOD3HMYO6LTJUVGRVEAM'
 
 // Token logo map - matches the one in use-blend-positions.ts
 const ASSET_LOGO_MAP: Record<string, string> = {
@@ -250,7 +257,17 @@ function ActionBadge({ action, currentUserAddress }: { action: UserAction; curre
   )
 }
 
-function TransactionRow({ actions, currentUserAddress }: { actions: UserAction[]; currentUserAddress?: string }) {
+interface TransactionRowProps {
+  actions: UserAction[]
+  currentUserAddress?: string
+  historicalPrices?: HistoricalPricesResponse['prices']
+  currency: string
+  formatCurrency: (amountUsd: number) => string
+  tokensMap: Map<string, { pegged_currency: string | null }>
+  blndTokenAddress?: string
+}
+
+function TransactionRow({ actions, currentUserAddress, historicalPrices, currency, formatCurrency, tokensMap, blndTokenAddress }: TransactionRowProps) {
   const firstAction = actions[0]
   const explorerUrl = `https://stellar.expert/explorer/public/tx/${firstAction.transaction_hash}`
 
@@ -271,7 +288,16 @@ function TransactionRow({ actions, currentUserAddress }: { actions: UserAction[]
       <TableCell>
         <div className="flex flex-col gap-1">
           {actions.map((action) => (
-            <div key={action.id}>{getAmountDisplay(action, currentUserAddress)}</div>
+            <AmountWithCurrency
+              key={action.id}
+              action={action}
+              currentUserAddress={currentUserAddress}
+              historicalPrices={historicalPrices}
+              currency={currency}
+              formatCurrency={formatCurrency}
+              tokensMap={tokensMap}
+              blndTokenAddress={blndTokenAddress}
+            />
           ))}
         </div>
       </TableCell>
@@ -340,9 +366,9 @@ function getAmountDisplay(action: UserAction, currentUserAddress?: string): Reac
     const sign = isPositive ? "" : "-"
     const textColor = isPositive ? "text-white" : "text-red-400"
     return (
-      <div className={`flex items-center gap-0.5 font-mono text-xs font-medium ${textColor}`}>
+      <div className={`flex items-center justify-end gap-1 font-mono text-xs font-medium ${textColor}`}>
         <div
-          className="flex items-center justify-center mx-0.5 rounded-full bg-purple-500/20 shrink-0"
+          className="flex items-center justify-center rounded-full bg-purple-500/20 shrink-0"
           style={{ width: 16, height: 16 }}
         >
           <Shield className="h-3 w-3 text-purple-500" />
@@ -364,12 +390,12 @@ function getAmountDisplay(action: UserAction, currentUserAddress?: string): Reac
     const textColor = isNegative ? "text-red-400" : "text-white"
     const isBlnd = symbol === "BLND"
     return (
-      <div className={`flex items-center gap-0.5 font-mono text-xs font-medium ${textColor}`}>
+      <div className={`flex items-center justify-end gap-1 font-mono text-xs font-medium ${textColor}`}>
         {symbol && (
           isBlnd ? (
-            <TokenLogo src={iconUrl} symbol={symbol} size={16} noPadding className="mx-0.5 !bg-zinc-800" />
+            <TokenLogo src={iconUrl} symbol={symbol} size={16} noPadding className="!bg-zinc-800" />
           ) : (
-            <TokenLogo src={iconUrl} symbol={symbol} size={16} noPadding className="mx-0.5" />
+            <TokenLogo src={iconUrl} symbol={symbol} size={16} noPadding />
           )
         )}
         <span>{sign}{formatAmount(amount, action.asset_decimals || 7)}</span>
@@ -379,7 +405,102 @@ function getAmountDisplay(action: UserAction, currentUserAddress?: string): Reac
   }
 }
 
-function MobileTransactionCard({ actions, currentUserAddress }: { actions: UserAction[]; currentUserAddress?: string }) {
+interface AmountWithCurrencyProps {
+  action: UserAction
+  currentUserAddress?: string
+  historicalPrices?: HistoricalPricesResponse['prices']
+  currency: string
+  formatCurrency: (amountUsd: number) => string
+  tokensMap: Map<string, { pegged_currency: string | null }>
+  blndTokenAddress?: string
+}
+
+function AmountWithCurrency({
+  action,
+  currentUserAddress,
+  historicalPrices,
+  currency,
+  formatCurrency,
+  tokensMap,
+  blndTokenAddress,
+}: AmountWithCurrencyProps) {
+  const amountDisplay = getAmountDisplay(action, currentUserAddress)
+
+  // Skip auction events (complex multi-token buy/sell)
+  const isAuctionEvent = action.action_type === "fill_auction" || action.action_type === "new_auction"
+  if (isAuctionEvent) {
+    return <>{amountDisplay}</>
+  }
+
+  const isBackstopEvent = action.action_type.startsWith("backstop_")
+  const isClaimEvent = action.action_type === "claim"
+
+  // Determine the token address and amount based on event type
+  let tokenAddress: string | null = null
+  let amount: number | null = null
+  let decimals = 7
+
+  if (isBackstopEvent) {
+    // For backstop events, use the LP token address (BLND-USDC Comet LP)
+    tokenAddress = LP_TOKEN_ADDRESS
+    amount = action.lp_tokens
+  } else if (isClaimEvent) {
+    // For BLND claims, use the BLND token address
+    tokenAddress = blndTokenAddress || null
+    amount = action.claim_amount
+  } else {
+    // Regular supply/withdraw/borrow events
+    tokenAddress = action.asset_address
+    amount = action.amount_underlying
+    decimals = action.asset_decimals || 7
+  }
+
+  if (!tokenAddress || !amount) {
+    return <>{amountDisplay}</>
+  }
+
+  // Check if token is pegged to user's currency (only for regular tokens, not LP)
+  if (!isBackstopEvent) {
+    const token = tokensMap.get(tokenAddress)
+    const isPegged = token?.pegged_currency?.toUpperCase() === currency.toUpperCase()
+    if (isPegged) {
+      return <>{amountDisplay}</>
+    }
+  }
+
+  // Get historical price for this token/date
+  const actionDate = action.ledger_closed_at.split('T')[0]
+  const priceData = historicalPrices?.[tokenAddress]?.[actionDate]
+  const price = priceData?.price
+
+  if (!price) {
+    return <>{amountDisplay}</>
+  }
+
+  const tokenAmount = amount / Math.pow(10, decimals)
+  const usdValue = tokenAmount * price
+
+  return (
+    <div className="flex flex-col items-start">
+      {amountDisplay}
+      <span className="text-[10px] text-muted-foreground">
+        {formatCurrency(usdValue)}
+      </span>
+    </div>
+  )
+}
+
+interface MobileTransactionCardProps {
+  actions: UserAction[]
+  currentUserAddress?: string
+  historicalPrices?: HistoricalPricesResponse['prices']
+  currency: string
+  formatCurrency: (amountUsd: number) => string
+  tokensMap: Map<string, { pegged_currency: string | null }>
+  blndTokenAddress?: string
+}
+
+function MobileTransactionCard({ actions, currentUserAddress, historicalPrices, currency, formatCurrency, tokensMap, blndTokenAddress }: MobileTransactionCardProps) {
   const firstAction = actions[0]
   const explorerUrl = `https://stellar.expert/explorer/public/tx/${firstAction.transaction_hash}`
 
@@ -408,7 +529,15 @@ function MobileTransactionCard({ actions, currentUserAddress }: { actions: UserA
         <div key={action.id} className="flex justify-between items-center">
           <ActionBadge action={action} currentUserAddress={currentUserAddress} />
           <div className="text-right">
-            {getAmountDisplay(action, currentUserAddress)}
+            <AmountWithCurrency
+              action={action}
+              currentUserAddress={currentUserAddress}
+              historicalPrices={historicalPrices}
+              currency={currency}
+              formatCurrency={formatCurrency}
+              tokensMap={tokensMap}
+              blndTokenAddress={blndTokenAddress}
+            />
           </div>
         </div>
       ))}
@@ -431,6 +560,20 @@ export function TransactionHistory({
   const [isExporting, setIsExporting] = useState(false)
   const mobileLoadMoreRef = useRef<HTMLDivElement>(null)
   const desktopLoadMoreRef = useRef<HTMLDivElement>(null)
+
+  // Currency preference and token metadata for currency conversion
+  const { currency, format: formatCurrency } = useCurrencyPreference()
+  const { tokens } = useTokensOnly()
+
+  // Build tokens map for pegged currency lookup and find BLND token address
+  const tokensMap = new Map<string, { pegged_currency: string | null }>()
+  let blndTokenAddress: string | undefined
+  tokens.forEach((t) => {
+    tokensMap.set(t.asset_address, { pegged_currency: t.pegged_currency })
+    if (t.symbol === 'BLND') {
+      blndTokenAddress = t.asset_address
+    }
+  })
 
   // Convert filter values to API parameters
   const actionTypes = selectedActionTypes.length === 0 ? undefined : selectedActionTypes
@@ -458,6 +601,71 @@ export function TransactionHistory({
     }
     return acc
   }, [])
+
+  // Extract unique token addresses and dates from actions for historical price fetch
+  const priceQueryParams = useMemo(() => {
+    const tokenSet = new Set<string>()
+    const dateSet = new Set<string>()
+
+    actions.forEach((action) => {
+      // Skip auction events (complex multi-token buy/sell)
+      if (action.action_type === "fill_auction" || action.action_type === "new_auction") {
+        return
+      }
+
+      const date = action.ledger_closed_at.split('T')[0]
+      const isBackstopEvent = action.action_type.startsWith("backstop_")
+      const isClaimEvent = action.action_type === "claim"
+
+      if (isBackstopEvent) {
+        // For backstop events, use the LP token address (BLND-USDC Comet LP)
+        tokenSet.add(LP_TOKEN_ADDRESS)
+        dateSet.add(date)
+      } else if (isClaimEvent) {
+        // For BLND claims, use the BLND token address
+        if (blndTokenAddress) {
+          tokenSet.add(blndTokenAddress)
+          dateSet.add(date)
+        }
+      } else if (action.asset_address) {
+        // Regular supply/withdraw/borrow events
+        // Skip if token is pegged to user's currency
+        const token = tokensMap.get(action.asset_address)
+        if (token?.pegged_currency?.toUpperCase() !== currency.toUpperCase()) {
+          tokenSet.add(action.asset_address)
+          dateSet.add(date)
+        }
+      }
+    })
+
+    return {
+      tokens: Array.from(tokenSet),
+      dates: Array.from(dateSet),
+    }
+  }, [actions, tokensMap, currency, blndTokenAddress])
+
+  // Fetch historical prices for visible actions
+  const { data: historicalPricesData } = useQuery({
+    queryKey: ['historical-prices', priceQueryParams.tokens.join(','), priceQueryParams.dates.join(',')],
+    queryFn: async () => {
+      if (priceQueryParams.tokens.length === 0 || priceQueryParams.dates.length === 0) {
+        return { prices: {} } as HistoricalPricesResponse
+      }
+
+      const params = new URLSearchParams({
+        tokens: priceQueryParams.tokens.join(','),
+        dates: priceQueryParams.dates.join(','),
+      })
+
+      const response = await fetch(`/api/historical-prices?${params}`)
+      if (!response.ok) {
+        throw new Error('Failed to fetch historical prices')
+      }
+      return response.json() as Promise<HistoricalPricesResponse>
+    },
+    enabled: priceQueryParams.tokens.length > 0 && priceQueryParams.dates.length > 0,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  })
 
   // Infinite scroll observer
   const handleObserver = useCallback(
@@ -799,7 +1007,16 @@ export function TransactionHistory({
               <div className="md:hidden">
                 <div className="[&>*:last-child]:border-0">
                   {groupedActions.map((group) => (
-                    <MobileTransactionCard key={group.key} actions={group.actions} currentUserAddress={publicKey} />
+                    <MobileTransactionCard
+                      key={group.key}
+                      actions={group.actions}
+                      currentUserAddress={publicKey}
+                      historicalPrices={historicalPricesData?.prices}
+                      currency={currency}
+                      formatCurrency={formatCurrency}
+                      tokensMap={tokensMap}
+                      blndTokenAddress={blndTokenAddress}
+                    />
                   ))}
                 </div>
                 {/* Load more trigger */}
@@ -817,7 +1034,16 @@ export function TransactionHistory({
                   <Table>
                     <TableBody>
                       {groupedActions.map((group) => (
-                        <TransactionRow key={group.key} actions={group.actions} currentUserAddress={publicKey} />
+                        <TransactionRow
+                          key={group.key}
+                          actions={group.actions}
+                          currentUserAddress={publicKey}
+                          historicalPrices={historicalPricesData?.prices}
+                          currency={currency}
+                          formatCurrency={formatCurrency}
+                          tokensMap={tokensMap}
+                          blndTokenAddress={blndTokenAddress}
+                        />
                       ))}
                     </TableBody>
                   </Table>

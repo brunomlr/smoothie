@@ -81,11 +81,15 @@ export function BlndRewardsCard({
 
   // Fetch backstop claimed LP data (also includes last_claim_date for estimating pending)
   const { data: backstopClaimsData, isLoading: backstopClaimsLoading } = useQuery({
-    queryKey: ["claimed-blnd-backstop", publicKey],
+    queryKey: ["claimed-blnd-backstop", publicKey, blndPrice],
     enabled: !!publicKey,
     queryFn: async () => {
-      const response = await fetchWithTimeout(`/api/claimed-blnd?user=${encodeURIComponent(publicKey)}`)
-      if (!response.ok) return { backstop_claims: [], pool_claims: [] }
+      const params = new URLSearchParams({
+        user: publicKey,
+        ...(blndPrice ? { sdkBlndPrice: blndPrice.toString() } : {}),
+      })
+      const response = await fetchWithTimeout(`/api/claimed-blnd?${params}`)
+      if (!response.ok) return { backstop_claims: [], pool_claims: [], pool_claims_with_prices: [], total_claimed_blnd_usd_historical: 0 }
       const data = await response.json()
       return data
     },
@@ -103,6 +107,9 @@ export function BlndRewardsCard({
       return total + claimAmount / 1e7
     }, 0)
   }, [claimActions])
+
+  // Get historical USD value for pool claims from API
+  const poolClaimedUsdHistorical = backstopClaimsData?.total_claimed_blnd_usd_historical || 0
 
   // Calculate total claimed BLND from backstop emissions (LP tokens → BLND)
   const backstopClaimedBlnd = useMemo(() => {
@@ -371,9 +378,41 @@ export function BlndRewardsCard({
                     {formatNumber(totalPendingBlnd + totalClaimedBlnd, 2)} BLND
                   </span>
                   {blndPrice && (
-                    <span className="text-muted-foreground ml-2">
-                      ({formatUsd((totalPendingBlnd + totalClaimedBlnd) * blndPrice)})
-                    </span>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger>
+                          <span className="text-muted-foreground ml-2 cursor-help border-b border-dotted border-muted-foreground/50">
+                            ({formatUsd(
+                              // Pending uses current price, claimed uses historical prices
+                              (totalPendingBlnd * blndPrice) + poolClaimedUsdHistorical + (backstopClaimedBlnd * blndPrice)
+                            )})
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs p-2.5">
+                          <div className="space-y-1.5 text-[11px]">
+                            <div className="flex justify-between gap-4">
+                              <span className="text-zinc-400">Pending ({formatNumber(totalPendingBlnd, 2)} BLND)</span>
+                              <span className="text-zinc-200">{formatUsd(totalPendingBlnd * blndPrice)}</span>
+                            </div>
+                            {poolClaimedBlnd > 0 && (
+                              <div className="flex justify-between gap-4">
+                                <span className="text-zinc-400">Claimed - Pool ({formatNumber(poolClaimedBlnd, 2)} BLND)</span>
+                                <span className="text-zinc-200">{formatUsd(poolClaimedUsdHistorical)}</span>
+                              </div>
+                            )}
+                            {backstopClaimedBlnd > 0 && (
+                              <div className="flex justify-between gap-4">
+                                <span className="text-zinc-400">Claimed - Backstop (~{formatNumber(backstopClaimedBlnd, 2)} BLND)</span>
+                                <span className="text-zinc-200">{formatUsd(backstopClaimedBlnd * blndPrice)}</span>
+                              </div>
+                            )}
+                            <div className="border-t border-zinc-700 pt-1 mt-1 text-[10px] text-zinc-500">
+                              Pool claims valued at price when claimed
+                            </div>
+                          </div>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   )}
                 </div>
               </div>

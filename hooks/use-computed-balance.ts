@@ -70,6 +70,11 @@ export interface UseComputedBalanceReturn {
   aggregatedHistoryData: AggregatedHistoryData | null
 }
 
+export interface HistoricalPriceGetter {
+  getPrice: (tokenAddress: string, date: string) => number
+  hasHistoricalData: boolean
+}
+
 export function useComputedBalance(
   initialBalanceData: BalanceData,
   assetCards: AssetCardData[],
@@ -80,7 +85,8 @@ export function useComputedBalance(
   balanceHistoryDataMap: Map<string, BalanceHistoryDataEntry>,
   balanceHistoryQueries: BalanceHistoryQueryResult[],
   backstopBalanceHistoryQuery: BackstopBalanceHistoryQuery,
-  uniqueAssetAddresses: string[]
+  uniqueAssetAddresses: string[],
+  historicalPrices?: HistoricalPriceGetter  // Optional: historical prices for chart
 ): UseComputedBalanceReturn {
   // Build a map of asset address -> USD price from SDK positions
   const assetPriceMap = useMemo(() => {
@@ -286,7 +292,10 @@ export function useComputedBalance(
         if (!point) return
 
         // Get USD price for this asset
-        const usdPrice = assetPriceMap.get(assetAddress) || 1
+        // Use historical price if available, otherwise fall back to current SDK price
+        const usdPrice = historicalPrices?.hasHistoricalData
+          ? historicalPrices.getPrice(assetAddress, date)
+          : (assetPriceMap.get(assetAddress) || 1)
 
         // Convert token amounts to USD and add to totals
         totalBalance += (point.total || 0) * usdPrice
@@ -306,10 +315,14 @@ export function useComputedBalance(
         })
       })
 
-      // Add backstop balance (LP tokens * current LP price)
-      // Note: Using current LP price for historical values (same approach as regular assets)
+      // Add backstop balance (LP tokens * LP price)
+      // Use historical LP price if available, otherwise current LP price
       const backstopLpTokens = backstopByDate.get(date) || 0
-      const backstopUsdValue = backstopLpTokens * (lpTokenPrice || 0)
+      const LP_TOKEN_ADDRESS = 'CAS3FL6TLZKDGGSISDBWGGPXT3NRR4DYTZD7YOD3HMYO6LTJUVGRVEAM'
+      const lpPrice = historicalPrices?.hasHistoricalData
+        ? historicalPrices.getPrice(LP_TOKEN_ADDRESS, date)
+        : (lpTokenPrice || 0)
+      const backstopUsdValue = backstopLpTokens * lpPrice
       totalBalance += backstopUsdValue
 
       // For deposit (cost basis), use the actual cost basis from backstop positions
@@ -323,7 +336,8 @@ export function useComputedBalance(
         ? Math.min(backstopCostBasisLp, backstopLpTokens)  // Use min of cost basis and historical balance
         : backstopLpTokens  // If no cost basis data, use LP tokens as deposit (conservative - 0 yield)
 
-      const backstopCostBasisUsd = effectiveBackstopCostBasisLp * (lpTokenPrice || 0)
+      // Use same LP price for cost basis (historical or current)
+      const backstopCostBasisUsd = effectiveBackstopCostBasisLp * lpPrice
       totalDeposit += backstopCostBasisUsd
 
       // Add backstop yield to total yield
@@ -359,7 +373,7 @@ export function useComputedBalance(
       isLoading: balanceHistoryQueries.some(q => q.isLoading) || backstopBalanceHistoryQuery.isLoading,
       error: balanceHistoryQueries.find(q => q.error)?.error || backstopBalanceHistoryQuery.error || null,
     } as AggregatedHistoryData
-  }, [balanceHistoryDataMap, assetPriceMap, uniqueAssetAddresses, balanceHistoryQueries, backstopBalanceHistoryQuery, lpTokenPrice, backstopPositions])
+  }, [balanceHistoryDataMap, assetPriceMap, uniqueAssetAddresses, balanceHistoryQueries, backstopBalanceHistoryQuery, lpTokenPrice, backstopPositions, historicalPrices])
 
   return {
     assetPriceMap,

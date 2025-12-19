@@ -662,11 +662,11 @@ function BackstopSection({ position, claimedLp = 0, blndPerLpToken = 0, blndPric
                       {formatNumber(position.q4wLpTokens, 2)} LP in {position.q4wChunks.length} unlocks
                     </span>
                   </TooltipTrigger>
-                  <TooltipContent className="bg-black text-white border-zinc-800 p-3" arrowClassName="bg-black fill-black">
-                    <p className="font-medium text-xs text-zinc-400 mb-2">Unlock Schedule</p>
-                    <div className="space-y-1.5">
+                  <TooltipContent className="p-2.5">
+                    <p className="font-medium text-zinc-400 mb-1.5">Unlock Schedule</p>
+                    <div className="space-y-1">
                       {position.q4wChunks.map((chunk, i) => (
-                        <div key={i} className="flex justify-between gap-6 text-sm">
+                        <div key={i} className="flex justify-between gap-6">
                           <span className="font-mono">{formatNumber(chunk.lpTokens, 2)} LP</span>
                           <span className="text-zinc-400">{formatTimeRemaining(new Date(chunk.expiration * 1000))}</span>
                         </div>

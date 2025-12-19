@@ -11,6 +11,147 @@ import {
   POOL_NAMES,
 } from '@/types/balance-history'
 
+// ============================================
+// HISTORICAL YIELD BREAKDOWN TYPES
+// ============================================
+
+export interface DepositEvent {
+  date: string
+  tokens: number
+  priceAtDeposit: number
+  usdValue: number
+  poolId?: string
+  priceSource?: 'daily_token_prices' | 'forward_fill' | 'sdk_fallback'
+}
+
+export interface HistoricalYieldBreakdown {
+  // Cost basis (what you paid)
+  costBasisHistorical: number      // Sum of deposits - withdrawals at historical prices
+  weightedAvgDepositPrice: number  // Weighted average price of deposits
+  netDepositedTokens: number       // Tokens deposited - withdrawn
+
+  // Protocol yield (what you earned from lending/backstop)
+  protocolYieldTokens: number      // Tokens earned = balance - netDeposited
+  protocolYieldUsd: number         // Yield tokens × current price
+
+  // Price change (market performance on deposits)
+  priceChangeUsd: number           // Can be positive or negative
+  priceChangePercent: number       // % change from deposit price to current
+
+  // Combined totals
+  currentValueUsd: number          // balance × current price
+  totalEarnedUsd: number           // currentValue - costBasis = yield + priceChange
+  totalEarnedPercent: number
+}
+
+/**
+ * Calculate yield breakdown separating protocol earnings from price changes.
+ *
+ * Key insight:
+ * - Cost basis = what you deposited, valued at deposit-time prices
+ * - Current value = current balance × current SDK price
+ * - Protocol yield = tokens earned (balance - net deposits) × current price
+ * - Price change = net deposited tokens × (current price - weighted avg deposit price)
+ *
+ * @param currentBalance Current token balance from SDK
+ * @param currentPrice Current token price from SDK (ALWAYS use SDK, not DB)
+ * @param deposits All deposits with historical prices from daily_token_prices
+ * @param withdrawals All withdrawals with historical prices
+ */
+export function calculateHistoricalYieldBreakdown(
+  currentBalance: number,
+  currentPrice: number,
+  deposits: DepositEvent[],
+  withdrawals: DepositEvent[],
+): HistoricalYieldBreakdown {
+  // 1. Calculate cost basis at historical deposit prices
+  const totalDepositedUsd = deposits.reduce((sum, d) => sum + d.usdValue, 0)
+  const totalWithdrawnUsd = withdrawals.reduce((sum, w) => sum + w.usdValue, 0)
+  const costBasisHistorical = totalDepositedUsd - totalWithdrawnUsd
+
+  // 2. Calculate net tokens deposited
+  const totalDepositedTokens = deposits.reduce((sum, d) => sum + d.tokens, 0)
+  const totalWithdrawnTokens = withdrawals.reduce((sum, w) => sum + w.tokens, 0)
+  const netDepositedTokens = totalDepositedTokens - totalWithdrawnTokens
+
+  // 3. Calculate weighted average deposit price
+  const weightedAvgDepositPrice = netDepositedTokens > 0
+    ? costBasisHistorical / netDepositedTokens
+    : currentPrice // Fallback to current if no deposits
+
+  // 4. Calculate protocol yield (tokens earned from APY)
+  const protocolYieldTokens = currentBalance - netDepositedTokens
+  const protocolYieldUsd = protocolYieldTokens * currentPrice
+
+  // 5. Calculate price change on deposited tokens
+  // This is how much the VALUE of your deposits changed due to price movement
+  const depositValueAtCurrentPrice = netDepositedTokens * currentPrice
+  const priceChangeUsd = depositValueAtCurrentPrice - costBasisHistorical
+  const priceChangePercent = costBasisHistorical > 0
+    ? (priceChangeUsd / costBasisHistorical) * 100
+    : 0
+
+  // 6. Calculate totals
+  const currentValueUsd = currentBalance * currentPrice
+  const totalEarnedUsd = currentValueUsd - costBasisHistorical
+  // Note: totalEarnedUsd = protocolYieldUsd + priceChangeUsd (they should sum up)
+
+  return {
+    // Cost basis
+    costBasisHistorical,
+    weightedAvgDepositPrice,
+    netDepositedTokens,
+
+    // Protocol yield (what you earned from lending)
+    protocolYieldTokens,
+    protocolYieldUsd,
+
+    // Price change (market movement, can be negative)
+    priceChangeUsd,
+    priceChangePercent,
+
+    // Totals
+    currentValueUsd,
+    totalEarnedUsd,
+    totalEarnedPercent: costBasisHistorical > 0
+      ? (totalEarnedUsd / costBasisHistorical) * 100
+      : 0,
+  }
+}
+
+/**
+ * Calculate yield breakdown for backstop LP positions.
+ * Same logic as regular assets but for LP tokens.
+ */
+export function calculateBackstopYieldBreakdown(
+  currentLpTokens: number,
+  currentLpPrice: number,  // From SDK
+  deposits: Array<{ lpTokens: number; priceAtDeposit: number; usdValue: number }>,
+  withdrawals: Array<{ lpTokens: number; priceAtWithdrawal: number; usdValue: number }>,
+): HistoricalYieldBreakdown {
+  // Convert to standard DepositEvent format
+  const depositEvents: DepositEvent[] = deposits.map(d => ({
+    date: '',
+    tokens: d.lpTokens,
+    priceAtDeposit: d.priceAtDeposit,
+    usdValue: d.usdValue,
+  }))
+
+  const withdrawalEvents: DepositEvent[] = withdrawals.map(w => ({
+    date: '',
+    tokens: w.lpTokens,
+    priceAtDeposit: w.priceAtWithdrawal,
+    usdValue: w.usdValue,
+  }))
+
+  return calculateHistoricalYieldBreakdown(
+    currentLpTokens,
+    currentLpPrice,
+    depositEvents,
+    withdrawalEvents,
+  )
+}
+
 /**
  * Transform balance history records into chart data
  * Backend now handles forward-fill with rate recalculation

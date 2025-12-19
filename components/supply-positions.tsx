@@ -1,10 +1,12 @@
 "use client"
 
+import { useMemo } from "react"
 import Link from "next/link"
 import { TokenLogo } from "@/components/token-logo"
 import { formatAmount } from "@/lib/format-utils"
 import { DEMO_SUPPLY_POSITIONS } from "@/lib/demo-data"
 import { useCurrencyPreference } from "@/hooks/use-currency-preference"
+import { useTokensOnly } from "@/hooks/use-metadata"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
@@ -15,6 +17,14 @@ import type { AssetCardData } from "@/types/asset-card"
 interface Q4WChunkData {
   lpTokens: number
   expiration: number
+}
+
+interface BackstopYieldBreakdown {
+  costBasisHistorical: number
+  protocolYieldUsd: number
+  priceChangeUsd: number
+  totalEarnedUsd: number
+  totalEarnedPercent: number
 }
 
 interface BackstopPositionData {
@@ -31,6 +41,7 @@ interface BackstopPositionData {
   q4wExpiration: number | null
   q4wChunks: Q4WChunkData[]
   unlockedQ4wShares: bigint
+  yieldBreakdown?: BackstopYieldBreakdown
 }
 
 interface BlendPosition {
@@ -59,7 +70,25 @@ export function SupplyPositions({
   onPoolClick,
 }: SupplyPositionsProps) {
   // Currency preference for multi-currency display
-  const { format: formatInCurrency } = useCurrencyPreference()
+  const { format: formatInCurrency, currency } = useCurrencyPreference()
+
+  // Get token metadata for pegged currency lookup
+  const { tokens } = useTokensOnly()
+
+  // Build a map from symbol to pegged currency
+  const symbolToPeggedCurrency = useMemo(() => {
+    const map = new Map<string, string | null>()
+    tokens.forEach(token => {
+      map.set(token.symbol, token.pegged_currency)
+    })
+    return map
+  }, [tokens])
+
+  // Check if a token's pegged currency matches the user's selected currency
+  const isPeggedToSelectedCurrency = (symbol: string): boolean => {
+    const peggedCurrency = symbolToPeggedCurrency.get(symbol)
+    return peggedCurrency === currency
+  }
 
   const formatUsdAmount = (value: number) => {
     if (!Number.isFinite(value)) return formatInCurrency(0)
@@ -126,7 +155,7 @@ export function SupplyPositions({
                   const formattedYield = formatYieldValue(asset.earnedYield)
                   const hasSignificantYield = Math.abs(asset.earnedYield) >= 0.01
                   const formattedYieldPercentage = asset.yieldPercentage !== 0 ? ` (${asset.yieldPercentage >= 0 ? '+' : ''}${asset.yieldPercentage.toFixed(2)}%)` : ''
-                  const isUSDC = asset.symbol === 'USDC'
+                  const hideTokenAmount = isPeggedToSelectedCurrency(asset.symbol)
 
                   return (
                     <div key={asset.id} className="flex items-center justify-between py-2 gap-3">
@@ -139,7 +168,7 @@ export function SupplyPositions({
                         <div className="min-w-0 flex-1">
                           <p className="font-medium truncate">{asset.assetName}</p>
                           <p className="text-sm text-muted-foreground truncate">
-                            {isUSDC ? (
+                            {hideTokenAmount ? (
                               formatUsdAmount(asset.rawBalance)
                             ) : (
                               <>
@@ -152,7 +181,7 @@ export function SupplyPositions({
                           </p>
                           {hasSignificantYield && (
                             <p className="text-xs text-emerald-600 dark:text-emerald-400">
-                              {formattedYield} yield{formattedYieldPercentage}
+                              {formattedYield}{formattedYieldPercentage}
                             </p>
                           )}
                         </div>
@@ -198,7 +227,7 @@ export function SupplyPositions({
                             : ''
                           return (
                             <p className="text-xs text-emerald-600 dark:text-emerald-400">
-                              {formatYieldValue(yieldUsd)} yield{formattedYieldPercentage}
+                              {formatYieldValue(yieldUsd)}{formattedYieldPercentage}
                             </p>
                           )
                         })()}
@@ -283,7 +312,7 @@ export function SupplyPositions({
                     const position = blendSnapshot?.positions.find(p => p.id === asset.id)
                     const tokenAmount = position?.supplyAmount || 0
                     const symbol = position?.symbol || asset.assetName
-                    const isUSDC = symbol === 'USDC'
+                    const hideTokenAmount = isPeggedToSelectedCurrency(symbol)
 
                     return (
                       <div key={asset.id} className="flex items-center justify-between py-2 gap-3">
@@ -296,7 +325,7 @@ export function SupplyPositions({
                           <div className="min-w-0 flex-1">
                             <p className="font-medium truncate">{asset.assetName}</p>
                             <p className="text-sm text-muted-foreground truncate">
-                              {isUSDC ? (
+                              {hideTokenAmount ? (
                                 formatUsdAmount(asset.rawBalance)
                               ) : (
                                 <>
@@ -308,9 +337,52 @@ export function SupplyPositions({
                               )}
                             </p>
                             {hasSignificantYield && (
-                              <p className="text-xs text-emerald-600 dark:text-emerald-400">
-                                {formattedYield} yield{formattedYieldPercentage}
-                              </p>
+                              asset.yieldBreakdown ? (() => {
+                                const pct = asset.yieldBreakdown.totalEarnedPercent
+                                const formattedPct = pct !== 0 ? ` (${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%)` : ''
+                                return (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <p className="text-xs text-emerald-600 dark:text-emerald-400 cursor-pointer underline decoration-dotted">
+                                      {formatYieldValue(asset.yieldBreakdown.totalEarnedUsd)}{formattedPct}
+                                    </p>
+                                  </TooltipTrigger>
+                                  <TooltipContent className="p-2.5">
+                                    <p className="font-medium text-zinc-400 mb-1.5">Yield Breakdown</p>
+                                    <div className="space-y-1">
+                                      <div className="flex justify-between gap-6">
+                                        <span className="text-zinc-400">Cost Basis</span>
+                                        <span className="text-zinc-300">
+                                          {formatUsdAmount(asset.yieldBreakdown.costBasisHistorical)}
+                                        </span>
+                                      </div>
+                                      <div className="flex justify-between gap-6">
+                                        <span className="text-zinc-400">Protocol Yield</span>
+                                        <span className={asset.yieldBreakdown.protocolYieldUsd >= 0 ? 'text-emerald-400' : 'text-red-400'}>
+                                          {formatYieldValue(asset.yieldBreakdown.protocolYieldUsd)}
+                                        </span>
+                                      </div>
+                                      <div className="flex justify-between gap-6">
+                                        <span className="text-zinc-400">Price Change</span>
+                                        <span className={asset.yieldBreakdown.priceChangeUsd >= 0 ? 'text-emerald-400' : 'text-red-400'}>
+                                          {formatYieldValue(asset.yieldBreakdown.priceChangeUsd)}
+                                        </span>
+                                      </div>
+                                      <div className="flex justify-between gap-6 border-t border-zinc-700 pt-1 mt-1">
+                                        <span className="text-zinc-300 font-medium">Total Earned</span>
+                                        <span className={asset.yieldBreakdown.totalEarnedUsd >= 0 ? 'text-emerald-400' : 'text-red-400'}>
+                                          {formatYieldValue(asset.yieldBreakdown.totalEarnedUsd)}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </TooltipContent>
+                                </Tooltip>
+                                )
+                              })() : (
+                                <p className="text-xs text-emerald-600 dark:text-emerald-400">
+                                  {formattedYield}{formattedYieldPercentage}
+                                </p>
+                              )
                             )}
                           </div>
                         </div>
@@ -377,9 +449,59 @@ export function SupplyPositions({
                               const formattedYieldPercentage = backstopPosition.yieldPercent !== 0
                                 ? ` (${backstopPosition.yieldPercent >= 0 ? '+' : ''}${backstopPosition.yieldPercent.toFixed(2)}%)`
                                 : ''
+                              const hasSignificantYield = Math.abs(yieldUsd) >= 0.01
+
+                              if (!hasSignificantYield) return null
+
+                              // Show tooltip if breakdown is available
+                              if (backstopPosition.yieldBreakdown) {
+                                const pct = backstopPosition.yieldBreakdown.totalEarnedPercent
+                                const formattedPct = pct !== 0 ? ` (${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%)` : ''
+                                return (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <p className="text-xs text-emerald-600 dark:text-emerald-400 cursor-pointer underline decoration-dotted">
+                                        {formatYieldValue(backstopPosition.yieldBreakdown.totalEarnedUsd)}{formattedPct}
+                                      </p>
+                                    </TooltipTrigger>
+                                    <TooltipContent className="p-2.5">
+                                      <p className="font-medium text-zinc-400 mb-1.5">Yield Breakdown</p>
+                                      <div className="space-y-1">
+                                        <div className="flex justify-between gap-6">
+                                          <span className="text-zinc-400">Cost Basis</span>
+                                          <span className="text-zinc-300">
+                                            {formatUsdAmount(backstopPosition.yieldBreakdown.costBasisHistorical)}
+                                          </span>
+                                        </div>
+                                        <div className="flex justify-between gap-6">
+                                          <span className="text-zinc-400">Protocol Yield</span>
+                                          <span className={backstopPosition.yieldBreakdown.protocolYieldUsd >= 0 ? 'text-emerald-400' : 'text-red-400'}>
+                                            {formatYieldValue(backstopPosition.yieldBreakdown.protocolYieldUsd)}
+                                          </span>
+                                        </div>
+                                        {backstopPosition.yieldBreakdown.priceChangeUsd !== 0 && (
+                                          <div className="flex justify-between gap-6">
+                                            <span className="text-zinc-400">Price Change</span>
+                                            <span className={backstopPosition.yieldBreakdown.priceChangeUsd >= 0 ? 'text-emerald-400' : 'text-red-400'}>
+                                              {formatYieldValue(backstopPosition.yieldBreakdown.priceChangeUsd)}
+                                            </span>
+                                          </div>
+                                        )}
+                                        <div className="flex justify-between gap-6 border-t border-zinc-700 pt-1 mt-1">
+                                          <span className="text-zinc-300 font-medium">Total Earned</span>
+                                          <span className={backstopPosition.yieldBreakdown.totalEarnedUsd >= 0 ? 'text-emerald-400' : 'text-red-400'}>
+                                            {formatYieldValue(backstopPosition.yieldBreakdown.totalEarnedUsd)}
+                                          </span>
+                                        </div>
+                                      </div>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                )
+                              }
+
                               return (
                                 <p className="text-xs text-emerald-600 dark:text-emerald-400">
-                                  {formatYieldValue(yieldUsd)} yield{formattedYieldPercentage}
+                                  {formatYieldValue(yieldUsd)}{formattedYieldPercentage}
                                 </p>
                               )
                             })()}
@@ -395,9 +517,9 @@ export function SupplyPositions({
                                         {formatAmount(backstopPosition.q4wLpTokens, 2)} LP in {backstopPosition.q4wChunks.length} unlocks
                                       </span>
                                     </TooltipTrigger>
-                                    <TooltipContent className="bg-black text-white border-zinc-800 p-3" arrowClassName="bg-black fill-black">
-                                      <p className="font-medium text-xs text-zinc-400 mb-2">Unlock Schedule</p>
-                                      <div className="space-y-1.5">
+                                    <TooltipContent className="p-2.5">
+                                      <p className="font-medium text-zinc-400 mb-1.5">Unlock Schedule</p>
+                                      <div className="space-y-1">
                                         {backstopPosition.q4wChunks.map((chunk, i) => {
                                           const chunkExpDate = new Date(chunk.expiration * 1000)
                                           const diff = chunkExpDate.getTime() - Date.now()
@@ -405,7 +527,7 @@ export function SupplyPositions({
                                           const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
                                           const chunkTime = days > 0 ? `${days}d ${hours}h` : `${hours}h`
                                           return (
-                                            <div key={i} className="flex justify-between gap-6 text-sm">
+                                            <div key={i} className="flex justify-between gap-6">
                                               <span className="font-mono">{formatAmount(chunk.lpTokens, 2)} LP</span>
                                               <span className="text-zinc-400">{chunkTime}</span>
                                             </div>

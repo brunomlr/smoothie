@@ -166,25 +166,25 @@ function CustomTooltip({
   const hasPoolBreakdown = data.poolBreakdown && data.poolBreakdown.length > 0
 
   return (
-    <div className="bg-background border rounded-lg shadow-lg p-3 min-w-[220px] max-w-[320px] select-none z-50">
-      <div className="font-medium mb-2">
+    <div className="bg-black text-white border border-zinc-800 rounded-md shadow-lg p-2.5 min-w-[200px] max-w-[280px] select-none z-50">
+      <div className="font-medium text-[11px] mb-1.5">
         {data.period}
         {data.isProjected && (
-          <span className="text-xs text-muted-foreground ml-2">(Projected)</span>
+          <span className="text-zinc-400 ml-2">(Projected)</span>
         )}
       </div>
 
-      <div className="space-y-1 text-sm">
+      <div className="space-y-1 text-[11px]">
         <div className="flex justify-between">
-          <span className="text-muted-foreground">Balance:</span>
+          <span className="text-zinc-400">Balance:</span>
           <span className="font-medium">{formatter(data.balance)}</span>
         </div>
 
         {/* Only show borrowed in non-projection views */}
         {!data.isProjected && data.borrow > 0 && (
           <div className="flex justify-between">
-            <span className="text-muted-foreground">Borrowed:</span>
-            <span className="font-medium text-orange-600 dark:text-orange-400">
+            <span className="text-zinc-400">Borrowed:</span>
+            <span className="font-medium text-orange-400">
               {formatter(data.borrow)}
             </span>
           </div>
@@ -194,25 +194,25 @@ function CustomTooltip({
         {hasPoolBreakdown && data.isProjected ? (
           <>
             {/* Per-pool yield breakdown */}
-            <div className="pt-2 border-t mt-2">
-              <div className="space-y-1.5">
+            <div className="pt-1.5 border-t border-zinc-700 mt-1.5">
+              <div className="space-y-1">
                 {data.poolBreakdown!
                   .filter((pool) => pool.yieldEarned !== 0 || pool.blndYield !== 0)
                   .map((pool) => (
                     <div key={pool.poolId} className="space-y-0.5">
-                      <div className="text-xs font-medium text-muted-foreground">{pool.poolName}</div>
+                      <div className="text-[10px] font-medium text-zinc-400">{pool.poolName}</div>
                       {pool.yieldEarned !== 0 && (
-                        <div className="flex justify-between text-xs">
-                          <span className="text-muted-foreground pl-2">Yield:</span>
-                          <span className="text-emerald-600 dark:text-emerald-400">
+                        <div className="flex justify-between text-[10px]">
+                          <span className="text-zinc-400 pl-2">Yield:</span>
+                          <span className="text-emerald-400">
                             {yieldFormatter(pool.yieldEarned)}
                           </span>
                         </div>
                       )}
                       {pool.blndYield !== 0 && (
-                        <div className="flex justify-between text-xs">
-                          <span className="text-muted-foreground pl-2">BLND:</span>
-                          <span className="text-purple-600 dark:text-purple-400">
+                        <div className="flex justify-between text-[10px]">
+                          <span className="text-zinc-400 pl-2">BLND:</span>
+                          <span className="text-purple-400">
                             {yieldFormatter(pool.blndYield)}
                           </span>
                         </div>
@@ -223,26 +223,26 @@ function CustomTooltip({
             </div>
 
             {/* Totals */}
-            <div className="pt-2 border-t mt-2">
+            <div className="pt-1.5 border-t border-zinc-700 mt-1.5">
               {data.yieldEarned !== 0 && (
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Total Yield:</span>
-                  <span className="font-medium text-emerald-600 dark:text-emerald-400">
+                  <span className="text-zinc-400">Total Yield:</span>
+                  <span className="font-medium text-emerald-400">
                     {yieldFormatter(data.yieldEarned)}
                   </span>
                 </div>
               )}
               {data.blndYield !== undefined && data.blndYield !== 0 && (
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Total BLND:</span>
-                  <span className="font-medium text-purple-600 dark:text-purple-400">
+                  <span className="text-zinc-400">Total BLND:</span>
+                  <span className="font-medium text-purple-400">
                     {yieldFormatter(data.blndYield)}
                   </span>
                 </div>
               )}
-              <div className="flex justify-between mt-1 pt-1 border-t">
-                <span className="text-muted-foreground font-medium">Combined:</span>
-                <span className="font-medium text-emerald-600 dark:text-emerald-400">
+              <div className="flex justify-between mt-1 pt-1 border-t border-zinc-700">
+                <span className="text-zinc-300 font-medium">Combined:</span>
+                <span className="font-medium text-emerald-400">
                   {yieldFormatter(data.yieldEarned + (data.blndYield || 0))}
                 </span>
               </div>
@@ -252,12 +252,12 @@ function CustomTooltip({
           <>
             {/* Standard view without per-pool breakdown */}
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Yield:</span>
+              <span className="text-zinc-400">Yield:</span>
               <span
                 className={
                   data.yieldEarned >= 0
-                    ? "font-medium text-emerald-600 dark:text-emerald-400"
-                    : "font-medium text-red-600 dark:text-red-400"
+                    ? "font-medium text-emerald-400"
+                    : "font-medium text-red-400"
                 }
               >
                 {yieldFormatter(data.yieldEarned)}
@@ -266,8 +266,8 @@ function CustomTooltip({
 
             {data.blndYield !== undefined && data.blndYield > 0 && (
               <div className="flex justify-between">
-                <span className="text-muted-foreground">BLND Yield:</span>
-                <span className="font-medium text-purple-600 dark:text-purple-400">
+                <span className="text-zinc-400">BLND Yield:</span>
+                <span className="font-medium text-purple-400">
                   {yieldFormatter(data.blndYield)}
                 </span>
               </div>
@@ -276,20 +276,20 @@ function CustomTooltip({
         )}
 
         {data.events.length > 0 && (
-          <div className="pt-2 border-t mt-2">
-            <div className="text-xs text-muted-foreground mb-1">Events:</div>
-            <div className="space-y-1">
+          <div className="pt-1.5 border-t border-zinc-700 mt-1.5">
+            <div className="text-[10px] text-zinc-400 mb-1">Events:</div>
+            <div className="space-y-0.5">
               {data.events.slice(0, 5).map((event, idx) => {
                 const IconComponent = EventIcons[event.type] || Circle
                 return (
-                  <div key={idx} className="flex items-center gap-2 text-xs">
+                  <div key={idx} className="flex items-center gap-1.5 text-[10px]">
                     <IconComponent
-                      className="h-3 w-3"
+                      className="h-2.5 w-2.5"
                       color={getActionColor(event.type)}
                     />
                     <span className="capitalize">{event.type.replace("_", " ")}</span>
                     {event.amount !== null && (
-                      <span className="text-muted-foreground">
+                      <span className="text-zinc-400">
                         {formatEventAmount(event.amount, event.assetSymbol, event.assetDecimals)}
                       </span>
                     )}
@@ -297,7 +297,7 @@ function CustomTooltip({
                 )
               })}
               {data.events.length > 5 && (
-                <div className="text-xs text-muted-foreground">
+                <div className="text-[10px] text-zinc-400">
                   +{data.events.length - 5} more
                 </div>
               )}

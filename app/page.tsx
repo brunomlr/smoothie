@@ -7,6 +7,8 @@ import { generateChartData, type PoolProjectionInput } from "@/lib/chart-utils"
 import { useWalletState } from "@/hooks/use-wallet-state"
 import { useBalanceHistoryData } from "@/hooks/use-balance-history-data"
 import { useComputedBalance } from "@/hooks/use-computed-balance"
+import { useChartHistoricalPrices } from "@/hooks/use-chart-historical-prices"
+import { useHistoricalYieldBreakdown } from "@/hooks/use-historical-yield-breakdown"
 import { LandingPage } from "@/components/landing-page"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { WalletBalance } from "@/components/wallet-balance"
@@ -74,6 +76,73 @@ function HomeContent() {
     balanceHistoryDataMap,
   } = useBalanceHistoryData(activeWallet?.publicKey, assetCards, blendSnapshot)
 
+  // Build SDK prices map from blend positions for historical price lookups
+  const sdkPricesMap = useMemo(() => {
+    const map = new Map<string, number>()
+    if (!blendSnapshot?.positions) return map
+
+    blendSnapshot.positions.forEach(pos => {
+      if (pos.assetId && pos.price?.usdPrice && pos.price.usdPrice > 0) {
+        map.set(pos.assetId, pos.price.usdPrice)
+      }
+    })
+
+    // Add LP token price if available
+    if (lpTokenPrice && lpTokenPrice > 0) {
+      const LP_TOKEN_ADDRESS = 'CAS3FL6TLZKDGGSISDBWGGPXT3NRR4DYTZD7YOD3HMYO6LTJUVGRVEAM'
+      map.set(LP_TOKEN_ADDRESS, lpTokenPrice)
+    }
+
+    return map
+  }, [blendSnapshot?.positions, lpTokenPrice])
+
+  // Extract all unique dates from balance history for historical price lookups
+  const chartDates = useMemo(() => {
+    const datesSet = new Set<string>()
+
+    // Collect dates from all asset histories
+    balanceHistoryDataMap.forEach((historyData) => {
+      historyData.chartData.forEach((point) => {
+        datesSet.add(point.date)
+      })
+    })
+
+    // Also add backstop dates
+    backstopBalanceHistoryQuery.data?.history?.forEach((point) => {
+      datesSet.add(point.date)
+    })
+
+    return Array.from(datesSet).sort()
+  }, [balanceHistoryDataMap, backstopBalanceHistoryQuery.data?.history])
+
+  // Build the full list of token addresses for historical prices (assets + LP token)
+  const allTokenAddresses = useMemo(() => {
+    const addresses = [...uniqueAssetAddresses]
+    // Include LP token for backstop historical pricing
+    const LP_TOKEN_ADDRESS = 'CAS3FL6TLZKDGGSISDBWGGPXT3NRR4DYTZD7YOD3HMYO6LTJUVGRVEAM'
+    if (backstopPositions.length > 0 && !addresses.includes(LP_TOKEN_ADDRESS)) {
+      addresses.push(LP_TOKEN_ADDRESS)
+    }
+    return addresses
+  }, [uniqueAssetAddresses, backstopPositions.length])
+
+  // Fetch historical prices for chart data
+  const historicalPrices = useChartHistoricalPrices({
+    tokenAddresses: allTokenAddresses,
+    dates: chartDates,
+    sdkPrices: sdkPricesMap,
+    enabled: chartDates.length > 0 && allTokenAddresses.length > 0,
+  })
+
+  // Debug: log historical prices state
+  console.log('[Page] Historical prices:', {
+    hasHistoricalData: historicalPrices.hasHistoricalData,
+    isLoading: historicalPrices.isLoading,
+    pricesSize: historicalPrices.prices.size,
+    tokenAddresses: allTokenAddresses,
+    chartDatesCount: chartDates.length,
+  })
+
   // Compute derived balance data (enriched cards, aggregated history, etc.)
   const {
     enrichedAssetCards,
@@ -89,8 +158,162 @@ function HomeContent() {
     balanceHistoryDataMap,
     balanceHistoryQueries,
     backstopBalanceHistoryQuery,
-    uniqueAssetAddresses
+    uniqueAssetAddresses,
+    historicalPrices.hasHistoricalData ? historicalPrices : undefined
   )
+
+  // Fetch historical yield breakdown data for tooltips
+  const yieldBreakdown = useHistoricalYieldBreakdown(
+    activeWallet?.publicKey,
+    blendSnapshot?.positions,
+    backstopPositions,
+    lpTokenPrice
+  )
+
+  // Merge yield breakdown data into enriched asset cards
+  // This updates BOTH the earnedYield value AND adds the breakdown tooltip data
+  const enrichedAssetCardsWithBreakdown = useMemo(() => {
+    if (yieldBreakdown.isLoading || yieldBreakdown.byAsset.size === 0) {
+      console.log('[Page] Skipping yield breakdown merge:', {
+        isLoading: yieldBreakdown.isLoading,
+        byAssetSize: yieldBreakdown.byAsset.size,
+      })
+      return enrichedAssetCards
+    }
+
+    console.log('[Page] Merging yield breakdown into cards:', {
+      cardCount: enrichedAssetCards.length,
+      breakdownCount: yieldBreakdown.byAsset.size,
+      cardIds: enrichedAssetCards.map(c => c.id),
+      breakdownKeys: Array.from(yieldBreakdown.byAsset.keys()),
+    })
+
+    return enrichedAssetCards.map(card => {
+      const breakdown = yieldBreakdown.byAsset.get(card.id)
+      if (!breakdown) {
+        console.log(`[Page] No breakdown found for card: ${card.id}`)
+        return card
+      }
+
+      console.log(`[Page] Applying breakdown to card ${card.id}:`, {
+        oldEarnedYield: card.earnedYield,
+        newEarnedYield: breakdown.totalEarnedUsd,
+        protocolYield: breakdown.protocolYieldUsd,
+        priceChange: breakdown.priceChangeUsd,
+      })
+
+      return {
+        ...card,
+        // Update the displayed yield value with historical calculation
+        earnedYield: breakdown.totalEarnedUsd,
+        // Update the yield percentage (not growthPercentage - that's for BLND APY)
+        yieldPercentage: breakdown.totalEarnedPercent,
+        // Add the full breakdown for tooltip
+        yieldBreakdown: {
+          costBasisHistorical: breakdown.costBasisHistorical,
+          weightedAvgDepositPrice: breakdown.weightedAvgDepositPrice,
+          netDepositedTokens: breakdown.netDepositedTokens,
+          protocolYieldTokens: breakdown.protocolYieldTokens,
+          protocolYieldUsd: breakdown.protocolYieldUsd,
+          priceChangeUsd: breakdown.priceChangeUsd,
+          priceChangePercent: breakdown.priceChangePercent,
+          currentValueUsd: breakdown.currentValueUsd,
+          totalEarnedUsd: breakdown.totalEarnedUsd,
+          totalEarnedPercent: breakdown.totalEarnedPercent,
+        },
+      }
+    })
+  }, [enrichedAssetCards, yieldBreakdown.byAsset, yieldBreakdown.isLoading])
+
+  // Enrich backstop positions with per-pool yield breakdown data
+  const backstopPositionsWithBreakdown = useMemo(() => {
+    // If no backstop breakdowns available, return original positions
+    if (yieldBreakdown.byBackstop.size === 0) {
+      return backstopPositions
+    }
+
+    // Add the pool-specific yield breakdown to each backstop position
+    return backstopPositions.map(bp => {
+      const poolBreakdown = yieldBreakdown.byBackstop.get(bp.poolId)
+      if (!poolBreakdown) {
+        return bp
+      }
+      return {
+        ...bp,
+        yieldBreakdown: {
+          costBasisHistorical: poolBreakdown.costBasisHistorical,
+          protocolYieldUsd: poolBreakdown.protocolYieldUsd,
+          priceChangeUsd: poolBreakdown.priceChangeUsd,
+          totalEarnedUsd: poolBreakdown.totalEarnedUsd,
+          totalEarnedPercent: poolBreakdown.totalEarnedPercent,
+        },
+      }
+    })
+  }, [backstopPositions, yieldBreakdown.byBackstop])
+
+  // Override balanceData with historical yield calculations when available
+  const balanceDataWithHistorical = useMemo(() => {
+    // Only use historical data if it's loaded and has meaningful values
+    if (yieldBreakdown.isLoading || yieldBreakdown.totalCostBasisHistorical <= 0) {
+      return balanceData
+    }
+
+    const usdFormatter = new Intl.NumberFormat("en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })
+
+    // Use historical yield calculations
+    const historicalYield = yieldBreakdown.totalEarnedUsd
+    const historicalYieldPercent = yieldBreakdown.totalCostBasisHistorical > 0
+      ? (historicalYield / yieldBreakdown.totalCostBasisHistorical) * 100
+      : 0
+
+    return {
+      ...balanceData,
+      interestEarned: `$${usdFormatter.format(historicalYield)}`,
+      rawInterestEarned: historicalYield,
+      growthPercentage: historicalYieldPercent,
+    }
+  }, [balanceData, yieldBreakdown.isLoading, yieldBreakdown.totalCostBasisHistorical, yieldBreakdown.totalEarnedUsd])
+
+  // Override the latest chart bar's yield with yield breakdown value for consistency
+  // This ensures the chart's latest bar matches the "Total Yield" displayed at top
+  const aggregatedHistoryDataWithCorrectYield = useMemo(() => {
+    if (!aggregatedHistoryData?.chartData || aggregatedHistoryData.chartData.length === 0) {
+      return aggregatedHistoryData
+    }
+
+    // Only override if we have valid yield breakdown data
+    if (yieldBreakdown.isLoading || yieldBreakdown.totalCostBasisHistorical <= 0) {
+      return aggregatedHistoryData
+    }
+
+    // Get today's date string
+    const today = new Date().toISOString().split('T')[0]
+
+    // Find the latest chart point (should be today or most recent)
+    const chartData = [...aggregatedHistoryData.chartData]
+    const latestIndex = chartData.length - 1
+
+    if (latestIndex >= 0) {
+      const latestPoint = chartData[latestIndex]
+
+      // Only override if this is today's data (or very recent)
+      if (latestPoint.date >= today || latestIndex === chartData.length - 1) {
+        // Override the yield with yieldBreakdown.totalEarnedUsd
+        chartData[latestIndex] = {
+          ...latestPoint,
+          yield: yieldBreakdown.totalEarnedUsd,
+        }
+      }
+    }
+
+    return {
+      ...aggregatedHistoryData,
+      chartData,
+    }
+  }, [aggregatedHistoryData, yieldBreakdown.isLoading, yieldBreakdown.totalCostBasisHistorical, yieldBreakdown.totalEarnedUsd])
 
   // Build per-pool data for projection breakdown
   // This must be before conditional returns to follow Rules of Hooks
@@ -172,15 +395,21 @@ function HomeContent() {
       ) : (
         <>
           <WalletBalance
-            data={balanceData}
+            data={balanceDataWithHistorical}
             chartData={chartData}
             publicKey={activeWallet.publicKey}
-            balanceHistoryData={aggregatedHistoryData ?? undefined}
-            loading={isLoading || !aggregatedHistoryData || aggregatedHistoryData.isLoading}
+            balanceHistoryData={aggregatedHistoryDataWithCorrectYield ?? undefined}
+            loading={isLoading || !aggregatedHistoryDataWithCorrectYield || aggregatedHistoryDataWithCorrectYield.isLoading}
             isDemoMode={isDemoMode}
             onToggleDemoMode={() => setIsDemoMode(!isDemoMode)}
             usdcPrice={1}
             poolInputs={poolInputs}
+            yieldBreakdown={!yieldBreakdown.isLoading && yieldBreakdown.totalCostBasisHistorical > 0 ? {
+              totalProtocolYieldUsd: yieldBreakdown.totalProtocolYieldUsd,
+              totalPriceChangeUsd: yieldBreakdown.totalPriceChangeUsd,
+              totalCostBasisHistorical: yieldBreakdown.totalCostBasisHistorical,
+              totalEarnedUsd: yieldBreakdown.totalEarnedUsd,
+            } : undefined}
           />
 
           <Tabs defaultValue="positions" className="w-full" onValueChange={(tab) => capture('tab_changed', { tab })}>
@@ -235,8 +464,8 @@ function HomeContent() {
               <SupplyPositions
                 isLoading={isLoading}
                 isDemoMode={isDemoMode}
-                enrichedAssetCards={enrichedAssetCards}
-                backstopPositions={backstopPositions}
+                enrichedAssetCards={enrichedAssetCardsWithBreakdown}
+                backstopPositions={backstopPositionsWithBreakdown}
                 blendSnapshot={blendSnapshot}
                 onPoolClick={(poolId, poolName) => capture('pool_clicked', { pool_id: poolId, pool_name: poolName })}
               />
@@ -246,7 +475,7 @@ function HomeContent() {
               <BorrowPositions
                 isDemoMode={isDemoMode}
                 blendSnapshot={blendSnapshot}
-                enrichedAssetCards={enrichedAssetCards}
+                enrichedAssetCards={enrichedAssetCardsWithBreakdown}
                 poolAssetBorrowCostBasisMap={poolAssetBorrowCostBasisMap}
                 onPoolClick={(poolId, poolName) => capture('pool_clicked', { pool_id: poolId, pool_name: poolName })}
               />

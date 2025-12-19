@@ -653,7 +653,7 @@ export class EventsRepository {
 
     const result = await pool.query(
       `
-      SELECT asset_address, symbol, name, decimals, icon_url, coingecko_id, is_native
+      SELECT asset_address, symbol, name, decimals, icon_url, coingecko_id, is_native, pegged_currency
       FROM tokens
       ORDER BY symbol
       `
@@ -662,6 +662,7 @@ export class EventsRepository {
     return result.rows.map((row) => ({
       ...row,
       decimals: parseInt(row.decimals),
+      pegged_currency: row.pegged_currency || null,
     }))
   }
 
@@ -675,7 +676,7 @@ export class EventsRepository {
 
     const result = await pool.query(
       `
-      SELECT asset_address, symbol, name, decimals, icon_url, coingecko_id, is_native
+      SELECT asset_address, symbol, name, decimals, icon_url, coingecko_id, is_native, pegged_currency
       FROM tokens
       WHERE asset_address = $1
       `,
@@ -687,6 +688,7 @@ export class EventsRepository {
     return {
       ...result.rows[0],
       decimals: parseInt(result.rows[0].decimals),
+      pegged_currency: result.rows[0].pegged_currency || null,
     }
   }
 
@@ -1299,6 +1301,432 @@ export class EventsRepository {
       claim_count: parseInt(row.claim_count, 10) || 0,
       last_claim_date: row.last_claim_date,
     }))
+  }
+
+  // ============================================
+  // HISTORICAL PRICE FUNCTIONS
+  // ============================================
+
+  /**
+   * Get deposit and withdrawal events with historical prices for yield calculation.
+   * Returns events with prices from daily_token_prices table.
+   * Uses forward-fill for missing prices, falls back to provided SDK price.
+   */
+  async getDepositEventsWithPrices(
+    userAddress: string,
+    assetAddress: string,
+    poolId?: string,
+    sdkPrice: number = 0
+  ): Promise<{
+    deposits: Array<{
+      date: string
+      tokens: number
+      priceAtDeposit: number
+      usdValue: number
+      poolId: string
+      priceSource: 'daily_token_prices' | 'forward_fill' | 'sdk_fallback'
+    }>
+    withdrawals: Array<{
+      date: string
+      tokens: number
+      priceAtWithdrawal: number
+      usdValue: number
+      poolId: string
+      priceSource: 'daily_token_prices' | 'forward_fill' | 'sdk_fallback'
+    }>
+  }> {
+    if (!pool) {
+      throw new Error('Database pool not initialized')
+    }
+
+    // Query all supply/withdraw events with their historical prices
+    // Uses LEFT JOIN LATERAL to get the price at or before the event date (forward-fill)
+    let whereClause = 'WHERE pe.user_address = $1 AND pe.asset_address = $2'
+    const params: (string | number)[] = [userAddress, assetAddress]
+
+    if (poolId) {
+      whereClause += ' AND pe.pool_id = $3'
+      params.push(poolId)
+    }
+
+    const result = await pool.query(
+      `
+      WITH events AS (
+        SELECT
+          pe.pool_id,
+          pe.action_type,
+          (pe.ledger_closed_at AT TIME ZONE 'UTC')::date::text AS event_date,
+          pe.amount_underlying / 1e7 AS tokens
+        FROM parsed_events pe
+        ${whereClause}
+          AND pe.action_type IN ('supply', 'supply_collateral', 'withdraw', 'withdraw_collateral')
+        ORDER BY pe.ledger_closed_at
+      )
+      SELECT
+        e.pool_id,
+        e.action_type,
+        e.event_date,
+        e.tokens,
+        COALESCE(price_data.usd_price, NULL) AS price,
+        price_data.price_date AS price_source_date
+      FROM events e
+      LEFT JOIN LATERAL (
+        SELECT usd_price, price_date::text
+        FROM daily_token_prices
+        WHERE token_address = $2
+          AND price_date <= e.event_date::date
+        ORDER BY price_date DESC
+        LIMIT 1
+      ) price_data ON true
+      ORDER BY e.event_date
+      `,
+      params
+    )
+
+    const deposits: Array<{
+      date: string
+      tokens: number
+      priceAtDeposit: number
+      usdValue: number
+      poolId: string
+      priceSource: 'daily_token_prices' | 'forward_fill' | 'sdk_fallback'
+    }> = []
+
+    const withdrawals: Array<{
+      date: string
+      tokens: number
+      priceAtWithdrawal: number
+      usdValue: number
+      poolId: string
+      priceSource: 'daily_token_prices' | 'forward_fill' | 'sdk_fallback'
+    }> = []
+
+    for (const row of result.rows) {
+      const tokens = parseFloat(row.tokens) || 0
+      let price = row.price ? parseFloat(row.price) : sdkPrice
+      let priceSource: 'daily_token_prices' | 'forward_fill' | 'sdk_fallback'
+
+      if (row.price !== null) {
+        // We have a price from DB
+        if (row.price_source_date === row.event_date) {
+          priceSource = 'daily_token_prices'
+        } else {
+          priceSource = 'forward_fill'
+        }
+      } else {
+        // No DB price, use SDK fallback
+        price = sdkPrice
+        priceSource = 'sdk_fallback'
+      }
+
+      const usdValue = tokens * price
+
+      if (row.action_type === 'supply' || row.action_type === 'supply_collateral') {
+        deposits.push({
+          date: row.event_date,
+          tokens,
+          priceAtDeposit: price,
+          usdValue,
+          poolId: row.pool_id,
+          priceSource,
+        })
+      } else {
+        withdrawals.push({
+          date: row.event_date,
+          tokens,
+          priceAtWithdrawal: price,
+          usdValue,
+          poolId: row.pool_id,
+          priceSource,
+        })
+      }
+    }
+
+    return { deposits, withdrawals }
+  }
+
+  /**
+   * Get historical prices for a date range (for bar chart).
+   * Returns prices for each date in the range.
+   */
+  async getHistoricalPricesForDateRange(
+    tokenAddress: string,
+    startDate: string,
+    endDate: string,
+    sdkPrice: number = 0
+  ): Promise<Map<string, { price: number; source: 'daily_token_prices' | 'forward_fill' | 'sdk_fallback' }>> {
+    if (!pool) {
+      throw new Error('Database pool not initialized')
+    }
+
+    // Get all prices up to endDate for forward-fill capability
+    const result = await pool.query(
+      `
+      SELECT
+        price_date::text,
+        usd_price
+      FROM daily_token_prices
+      WHERE token_address = $1
+        AND price_date <= $2::date
+      ORDER BY price_date DESC
+      `,
+      [tokenAddress, endDate]
+    )
+
+    // Build price lookup map
+    const dbPrices = new Map<string, number>()
+    for (const row of result.rows) {
+      dbPrices.set(row.price_date, parseFloat(row.usd_price))
+    }
+
+    // Generate all dates in range
+    const prices = new Map<string, { price: number; source: 'daily_token_prices' | 'forward_fill' | 'sdk_fallback' }>()
+    const start = new Date(startDate)
+    const end = new Date(endDate)
+
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      const dateStr = d.toISOString().split('T')[0]
+
+      // Check exact match
+      if (dbPrices.has(dateStr)) {
+        prices.set(dateStr, { price: dbPrices.get(dateStr)!, source: 'daily_token_prices' })
+        continue
+      }
+
+      // Forward-fill: find most recent price before this date
+      let forwardFillPrice: number | null = null
+      for (const [priceDate, price] of dbPrices) {
+        if (priceDate <= dateStr) {
+          forwardFillPrice = price
+          break // dbPrices is ordered DESC, so first match is most recent
+        }
+      }
+
+      if (forwardFillPrice !== null) {
+        prices.set(dateStr, { price: forwardFillPrice, source: 'forward_fill' })
+      } else {
+        prices.set(dateStr, { price: sdkPrice, source: 'sdk_fallback' })
+      }
+    }
+
+    return prices
+  }
+
+  /**
+   * Get backstop deposit/withdrawal events with historical LP prices.
+   */
+  async getBackstopEventsWithPrices(
+    userAddress: string,
+    poolAddress?: string,
+    sdkLpPrice: number = 0
+  ): Promise<{
+    deposits: Array<{
+      date: string
+      lpTokens: number
+      priceAtDeposit: number
+      usdValue: number
+      poolAddress: string
+      priceSource: 'daily_token_prices' | 'forward_fill' | 'sdk_fallback'
+    }>
+    withdrawals: Array<{
+      date: string
+      lpTokens: number
+      priceAtWithdrawal: number
+      usdValue: number
+      poolAddress: string
+      priceSource: 'daily_token_prices' | 'forward_fill' | 'sdk_fallback'
+    }>
+  }> {
+    if (!pool) {
+      throw new Error('Database pool not initialized')
+    }
+
+    // LP token address for the BLND-USDC Comet pool
+    const LP_TOKEN_ADDRESS = 'CAS3FL6TLZKDGGSISDBWGGPXT3NRR4DYTZD7YOD3HMYO6LTJUVGRVEAM'
+
+    let whereClause = 'WHERE b.user_address = $1'
+    const params: string[] = [userAddress]
+
+    if (poolAddress) {
+      whereClause += ' AND b.pool_address = $2'
+      params.push(poolAddress)
+    }
+
+    const result = await pool.query(
+      `
+      WITH events AS (
+        SELECT
+          b.pool_address,
+          b.action_type,
+          (b.ledger_closed_at AT TIME ZONE 'UTC')::date::text AS event_date,
+          b.lp_tokens::numeric / 1e7 AS lp_tokens
+        FROM backstop_events b
+        ${whereClause}
+          AND b.action_type IN ('deposit', 'withdraw')
+          AND b.lp_tokens IS NOT NULL
+        ORDER BY b.ledger_closed_at
+      )
+      SELECT
+        e.pool_address,
+        e.action_type,
+        e.event_date,
+        e.lp_tokens,
+        COALESCE(price_data.usd_price, NULL) AS price,
+        price_data.price_date AS price_source_date
+      FROM events e
+      LEFT JOIN LATERAL (
+        SELECT usd_price, price_date::text
+        FROM daily_token_prices
+        WHERE token_address = '${LP_TOKEN_ADDRESS}'
+          AND price_date <= e.event_date::date
+        ORDER BY price_date DESC
+        LIMIT 1
+      ) price_data ON true
+      ORDER BY e.event_date
+      `,
+      params
+    )
+
+    const deposits: Array<{
+      date: string
+      lpTokens: number
+      priceAtDeposit: number
+      usdValue: number
+      poolAddress: string
+      priceSource: 'daily_token_prices' | 'forward_fill' | 'sdk_fallback'
+    }> = []
+
+    const withdrawals: Array<{
+      date: string
+      lpTokens: number
+      priceAtWithdrawal: number
+      usdValue: number
+      poolAddress: string
+      priceSource: 'daily_token_prices' | 'forward_fill' | 'sdk_fallback'
+    }> = []
+
+    for (const row of result.rows) {
+      const lpTokens = parseFloat(row.lp_tokens) || 0
+      let price = row.price ? parseFloat(row.price) : sdkLpPrice
+      let priceSource: 'daily_token_prices' | 'forward_fill' | 'sdk_fallback'
+
+      if (row.price !== null) {
+        if (row.price_source_date === row.event_date) {
+          priceSource = 'daily_token_prices'
+        } else {
+          priceSource = 'forward_fill'
+        }
+      } else {
+        price = sdkLpPrice
+        priceSource = 'sdk_fallback'
+      }
+
+      const usdValue = lpTokens * price
+
+      if (row.action_type === 'deposit') {
+        deposits.push({
+          date: row.event_date,
+          lpTokens,
+          priceAtDeposit: price,
+          usdValue,
+          poolAddress: row.pool_address,
+          priceSource,
+        })
+      } else {
+        withdrawals.push({
+          date: row.event_date,
+          lpTokens,
+          priceAtWithdrawal: price,
+          usdValue,
+          poolAddress: row.pool_address,
+          priceSource,
+        })
+      }
+    }
+
+    return { deposits, withdrawals }
+  }
+
+  /**
+   * Get BLND claim events with historical BLND prices.
+   */
+  async getBlndClaimsWithPrices(
+    userAddress: string,
+    sdkBlndPrice: number = 0
+  ): Promise<Array<{
+    date: string
+    blndAmount: number
+    priceAtClaim: number
+    usdValueAtClaim: number
+    poolId: string
+    priceSource: 'daily_token_prices' | 'forward_fill' | 'sdk_fallback'
+  }>> {
+    if (!pool) {
+      throw new Error('Database pool not initialized')
+    }
+
+    // BLND token address
+    const BLND_TOKEN_ADDRESS = 'CD25MNVTZDL4Y3XBCPCJXGXATV5WUHHOWMYFF4YBEGU5FCPGMYTVG5JY'
+
+    const result = await pool.query(
+      `
+      WITH claims AS (
+        SELECT
+          pool_id,
+          (ledger_closed_at AT TIME ZONE 'UTC')::date::text AS claim_date,
+          claim_amount::numeric / 1e7 AS blnd_amount
+        FROM user_action_history
+        WHERE user_address = $1
+          AND action_type = 'claim'
+          AND claim_amount IS NOT NULL
+          AND claim_amount > 0
+        ORDER BY ledger_closed_at
+      )
+      SELECT
+        c.pool_id,
+        c.claim_date,
+        c.blnd_amount,
+        COALESCE(price_data.usd_price, NULL) AS price,
+        price_data.price_date AS price_source_date
+      FROM claims c
+      LEFT JOIN LATERAL (
+        SELECT usd_price, price_date::text
+        FROM daily_token_prices
+        WHERE token_address = '${BLND_TOKEN_ADDRESS}'
+          AND price_date <= c.claim_date::date
+        ORDER BY price_date DESC
+        LIMIT 1
+      ) price_data ON true
+      ORDER BY c.claim_date
+      `,
+      [userAddress]
+    )
+
+    return result.rows.map((row) => {
+      const blndAmount = parseFloat(row.blnd_amount) || 0
+      let price = row.price ? parseFloat(row.price) : sdkBlndPrice
+      let priceSource: 'daily_token_prices' | 'forward_fill' | 'sdk_fallback'
+
+      if (row.price !== null) {
+        if (row.price_source_date === row.claim_date) {
+          priceSource = 'daily_token_prices'
+        } else {
+          priceSource = 'forward_fill'
+        }
+      } else {
+        price = sdkBlndPrice
+        priceSource = 'sdk_fallback'
+      }
+
+      return {
+        date: row.claim_date,
+        blndAmount,
+        priceAtClaim: price,
+        usdValueAtClaim: blndAmount * price,
+        poolId: row.pool_id,
+        priceSource,
+      }
+    })
   }
 }
 

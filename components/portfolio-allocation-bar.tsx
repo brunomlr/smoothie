@@ -242,12 +242,10 @@ export function PortfolioAllocationBar({
                     <div className="w-2 h-2 rounded-full bg-muted-foreground/40" />
                   </div>
                 </TooltipTrigger>
-                <TooltipContent className="bg-black text-white border-black" arrowClassName="bg-black fill-black">
-                  <div className="text-sm">
-                    <div className="font-medium">{pool.poolName}</div>
-                    <div className="text-gray-400">{formatPercentage(pool.percentage)} of portfolio</div>
-                    {poolData && <div className="mt-1">{formatUsd(poolData.totalValue)}</div>}
-                  </div>
+                <TooltipContent>
+                  <div className="font-medium">{pool.poolName}</div>
+                  <div className="text-zinc-400">{formatPercentage(pool.percentage)} of portfolio</div>
+                  {poolData && <div className="mt-1">{formatUsd(poolData.totalValue)}</div>}
                 </TooltipContent>
               </Tooltip>
             )
@@ -273,19 +271,17 @@ export function PortfolioAllocationBar({
                     }}
                   />
                 </TooltipTrigger>
-                <TooltipContent className="bg-black text-white border-black" arrowClassName="bg-black fill-black">
-                  <div className="text-sm">
-                    <div className="flex items-center gap-1.5 font-medium">
-                      <div
-                        className="w-2.5 h-2.5 rounded-full"
-                        style={{ backgroundColor: segment.color }}
-                      />
-                      {segment.symbol}
-                    </div>
-                    <div className="text-gray-400">{segment.poolName}</div>
-                    <div className="mt-1">
-                      {formatUsd(segment.value)} ({formatPercentage(segment.percentage)})
-                    </div>
+                <TooltipContent>
+                  <div className="flex items-center gap-1.5 font-medium">
+                    <div
+                      className="w-2 h-2 rounded-full"
+                      style={{ backgroundColor: segment.color }}
+                    />
+                    {segment.symbol}
+                  </div>
+                  <div className="text-zinc-400">{segment.poolName}</div>
+                  <div className="mt-1">
+                    {formatUsd(segment.value)} ({formatPercentage(segment.percentage)})
                   </div>
                 </TooltipContent>
               </Tooltip>
