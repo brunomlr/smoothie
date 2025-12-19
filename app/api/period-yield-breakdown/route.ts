@@ -65,6 +65,7 @@ export interface PeriodYieldBreakdownResponse {
       forward_fill: number
       sdk_fallback: number
     }
+    earliestDepositDate: string | null
   }
 }
 
@@ -246,8 +247,10 @@ export async function GET(request: NextRequest) {
     })
 
     // Group actions by pool-asset and collect unique asset addresses
+    // Also track earliest deposit date for accurate "All" period calculation
     const poolAssetPairs = new Map<string, { poolId: string; assetAddress: string }>()
     const uniqueAssets = new Set<string>()
+    let earliestSupplyActionDate: string | null = null
 
     for (const action of userActions) {
       if (!action.pool_id || !action.asset_address) continue
@@ -258,6 +261,13 @@ export async function GET(request: NextRequest) {
           assetAddress: action.asset_address,
         })
         uniqueAssets.add(action.asset_address)
+      }
+      // Track earliest action date for supply positions
+      if (action.action_type === 'supply' || action.action_type === 'supply_collateral') {
+        const actionDate = action.ledger_closed_at ? action.ledger_closed_at.split('T')[0] : null
+        if (actionDate && (!earliestSupplyActionDate || actionDate < earliestSupplyActionDate)) {
+          earliestSupplyActionDate = actionDate
+        }
       }
     }
 
@@ -300,6 +310,9 @@ export async function GET(request: NextRequest) {
     let totalValueNow = 0
     let totalProtocolYieldUsd = 0
     let totalPriceChangeUsd = 0
+
+    // Track earliest deposit date for accurate "All" period APY calculation
+    let earliestDepositDate: string | null = null
 
     // Track price sources for debugging
     const priceSourceCounts = {
@@ -427,6 +440,11 @@ export async function GET(request: NextRequest) {
       assetCount++
     }
 
+    // Update global earliest deposit date with supply action date
+    if (earliestSupplyActionDate) {
+      earliestDepositDate = earliestSupplyActionDate
+    }
+
     // Process backstop positions
     const backstopPoolAddresses = Object.keys(backstopPositions)
 
@@ -451,6 +469,21 @@ export async function GET(request: NextRequest) {
         undefined, // All pools
         lpTokenPrice
       )
+
+      // Track earliest backstop deposit date for accurate "All" period calculation
+      let earliestBackstopDepositDate: string | null = null
+      for (const deposit of backstopEventsData.deposits) {
+        if (!earliestBackstopDepositDate || deposit.date < earliestBackstopDepositDate) {
+          earliestBackstopDepositDate = deposit.date
+        }
+      }
+
+      // Update global earliest deposit date
+      if (earliestBackstopDepositDate) {
+        earliestDepositDate = earliestDepositDate
+          ? (earliestBackstopDepositDate < earliestDepositDate ? earliestBackstopDepositDate : earliestDepositDate)
+          : earliestBackstopDepositDate
+      }
 
       // Process each backstop pool
       for (const poolAddress of backstopPoolAddresses) {
@@ -539,9 +572,20 @@ export async function GET(request: NextRequest) {
       : 0
 
     // Calculate period days
-    const periodStartMs = new Date(periodStartDate).getTime()
+    // Use the LATER of (requested period start, earliest deposit date) for accurate APY calculation
+    // For example: if user deposited 3 days ago but selected "1W", use 3 days not 7
+    // This ensures APY calculations reflect the actual time the user has been invested
+    let effectivePeriodStartDate = periodStartDate
+    if (earliestDepositDate !== null) {
+      // Use the more recent date (max) to get accurate period length
+      // If earliest deposit is after requested period start, use deposit date
+      if (earliestDepositDate > periodStartDate) {
+        effectivePeriodStartDate = earliestDepositDate
+      }
+    }
+    const periodStartMs = new Date(effectivePeriodStartDate).getTime()
     const todayMs = new Date(todayStr).getTime()
-    const periodDays = Math.round((todayMs - periodStartMs) / (1000 * 60 * 60 * 24))
+    const periodDays = Math.max(1, Math.round((todayMs - periodStartMs) / (1000 * 60 * 60 * 24)))
 
     return NextResponse.json({
       byAsset,
@@ -554,12 +598,13 @@ export async function GET(request: NextRequest) {
         totalEarnedUsd,
         totalEarnedPercent,
       },
-      periodStartDate,
+      periodStartDate: effectivePeriodStartDate,
       periodDays,
       debug: {
         assetCount,
         backstopCount,
         priceSourceCounts,
+        earliestDepositDate,
       },
     } as PeriodYieldBreakdownResponse, {
       headers: {

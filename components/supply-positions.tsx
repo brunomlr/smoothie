@@ -349,7 +349,7 @@ export function SupplyPositions({
                                     </p>
                                   </TooltipTrigger>
                                   <TooltipContent className="p-2.5">
-                                    <p className="font-medium text-zinc-400 mb-1.5">Breakdown</p>
+                                    <p className="font-semibold text-xs text-zinc-200 mb-2">Breakdown</p>
                                     <div className="space-y-1">
                                       <div className="flex justify-between gap-6">
                                         <span className="text-zinc-400">Cost Basis</span>
@@ -467,7 +467,7 @@ export function SupplyPositions({
                                       </p>
                                     </TooltipTrigger>
                                     <TooltipContent className="p-2.5">
-                                      <p className="font-medium text-zinc-400 mb-1.5">Breakdown</p>
+                                      <p className="font-semibold text-xs text-zinc-200 mb-2">Breakdown</p>
                                       <div className="space-y-1">
                                         <div className="flex justify-between gap-6">
                                           <span className="text-zinc-400">Cost Basis</span>

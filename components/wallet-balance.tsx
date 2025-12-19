@@ -58,7 +58,12 @@ interface BlendPosition {
 // Type for backstop positions
 interface BackstopPosition {
   poolId: string
+  poolName: string
   lpTokens: number
+  lpTokensUsd: number
+  interestApr: number
+  emissionApy: number
+  yieldPercent?: number
 }
 
 interface WalletBalanceProps {
@@ -623,7 +628,8 @@ const WalletBalanceComponent = ({ data, chartData, publicKey, balanceHistoryData
         <div className="flex items-center gap-1.5 flex-wrap">
           {!isDemoMode && (
             (balanceHistoryData?.earningsStats?.currentAPY && balanceHistoryData.earningsStats.currentAPY > 0) ||
-            (!periodYieldBreakdownAPI.isLoading && periodYieldBreakdownAPI.totals.valueAtStart > 0)
+            (!periodYieldBreakdownAPI.isLoading && periodYieldBreakdownAPI.totals.valueNow > 0) ||
+            (backstopPositions && backstopPositions.some(bp => bp.lpTokens > 0))
           ) ? (
             <TooltipProvider>
               <Tooltip>
@@ -639,9 +645,9 @@ const WalletBalanceComponent = ({ data, chartData, publicKey, balanceHistoryData
                   </p>
                 </TooltipTrigger>
                 <TooltipContent className="max-w-xs p-2.5">
-                  {!periodYieldBreakdownAPI.isLoading && periodYieldBreakdownAPI.totals.valueAtStart > 0 ? (
+                  {!periodYieldBreakdownAPI.isLoading && periodYieldBreakdownAPI.totals.valueNow > 0 ? (
                     <div className="space-y-1.5 text-[11px]">
-                      <div className="font-medium text-zinc-400 border-b border-zinc-700 pb-1">
+                      <div className="font-semibold text-xs text-zinc-200 mb-2">
                         Breakdown ({selectedPeriod === "All" ? "All Time" : selectedPeriod})
                       </div>
                       <div className="flex justify-between gap-4">
@@ -666,31 +672,36 @@ const WalletBalanceComponent = ({ data, chartData, publicKey, balanceHistoryData
                         <div className="border-t border-zinc-700 pt-1 flex justify-between gap-4">
                           <span className="text-zinc-400">Yield APY:</span>
                           <span className="text-zinc-300">
-                            {(selectedPeriod === "All" || selectedPeriod === "Projection") && balanceHistoryData?.earningsStats?.currentAPY !== undefined
-                              ? formatPercentage(balanceHistoryData.earningsStats.currentAPY)
-                              : yieldBreakdown?.totalCostBasisHistorical && yieldBreakdown.totalCostBasisHistorical > 0
-                                ? ((periodYieldBreakdownAPI.totals.protocolYieldUsd / yieldBreakdown.totalCostBasisHistorical) * (365 / periodYieldBreakdownAPI.periodDays) * 100).toFixed(2)
-                                : "0.00"}%
+                            {(() => {
+                              // 1. Use supply APY if available and > 0
+                              if ((selectedPeriod === "All" || selectedPeriod === "Projection") &&
+                                  balanceHistoryData?.earningsStats?.currentAPY &&
+                                  balanceHistoryData.earningsStats.currentAPY > 0) {
+                                return formatPercentage(balanceHistoryData.earningsStats.currentAPY)
+                              }
+                              // 2. Calculate from API data using derived cost basis
+                              const costBasis = periodYieldBreakdownAPI.totals.valueNow - periodYieldBreakdownAPI.totals.totalEarnedUsd
+                              if (costBasis > 0 && periodYieldBreakdownAPI.totals.protocolYieldUsd !== 0) {
+                                const apy = (periodYieldBreakdownAPI.totals.protocolYieldUsd / costBasis) * (365 / periodYieldBreakdownAPI.periodDays) * 100
+                                return formatPercentage(apy)
+                              }
+                              // 3. Use yieldBreakdown cost basis if available
+                              if (yieldBreakdown?.totalCostBasisHistorical && yieldBreakdown.totalCostBasisHistorical > 0) {
+                                const apy = (periodYieldBreakdownAPI.totals.protocolYieldUsd / yieldBreakdown.totalCostBasisHistorical) * (365 / periodYieldBreakdownAPI.periodDays) * 100
+                                return apy.toFixed(2)
+                              }
+                              return "0.00"
+                            })()}%
                           </span>
                         </div>
                       )}
-                      <div className="border-t border-zinc-700 pt-1 text-zinc-500">
-                        <div className="flex justify-between gap-4">
-                          <span>Value at Start:</span>
-                          <span className="text-zinc-300">{formatInCurrency(periodYieldBreakdownAPI.totals.valueAtStart)}</span>
-                        </div>
-                        <div className="flex justify-between gap-4">
-                          <span>Value Now:</span>
-                          <span className="text-zinc-300">{formatInCurrency(periodYieldBreakdownAPI.totals.valueNow)}</span>
-                        </div>
-                      </div>
                       <p className="text-[10px] text-zinc-500 pt-1">
                         Over {periodYieldBreakdownAPI.periodDays} days{periodYieldBreakdownAPI.periodStartDate && ` (from ${periodYieldBreakdownAPI.periodStartDate})`}
                       </p>
                     </div>
                   ) : yieldBreakdown && yieldBreakdown.totalCostBasisHistorical > 0 ? (
                     <div className="space-y-1.5 text-[11px]">
-                      <div className="font-medium text-zinc-400 border-b border-zinc-700 pb-1">Breakdown (All Time)</div>
+                      <div className="font-semibold text-xs text-zinc-200 mb-2">Breakdown (All Time)</div>
                       <div className="flex justify-between gap-4">
                         <span className="text-zinc-400">Yield:</span>
                         <span className={yieldBreakdown.totalProtocolYieldUsd >= 0 ? "text-emerald-400" : "text-red-400"}>
@@ -731,9 +742,35 @@ const WalletBalanceComponent = ({ data, chartData, publicKey, balanceHistoryData
                         Over {actualPeriodDays} days
                       </p>
                     </div>
+                  ) : backstopPositions && backstopPositions.length > 0 && backstopPositions.some(bp => bp.lpTokens > 0) ? (
+                    <div className="space-y-1.5 text-[11px]">
+                      <div className="font-medium text-zinc-400 border-b border-zinc-700 pb-1">Backstop Position</div>
+                      {backstopPositions.filter(bp => bp.lpTokens > 0).map(bp => (
+                        <div key={bp.poolId} className="space-y-1">
+                          <div className="flex justify-between gap-4">
+                            <span className="text-zinc-400">{bp.poolName}:</span>
+                            <span className="text-zinc-300">{formatInCurrency(bp.lpTokensUsd)}</span>
+                          </div>
+                          <div className="flex justify-between gap-4 pl-2">
+                            <span className="text-zinc-500">Interest APR:</span>
+                            <span className="text-emerald-400">{formatPercentage(bp.interestApr)}%</span>
+                          </div>
+                          <div className="flex justify-between gap-4 pl-2">
+                            <span className="text-zinc-500">BLND Emissions:</span>
+                            <span className="text-emerald-400">{formatPercentage(bp.emissionApy)}%</span>
+                          </div>
+                          {bp.yieldPercent !== undefined && bp.yieldPercent > 0 && (
+                            <div className="flex justify-between gap-4 pl-2">
+                              <span className="text-zinc-500">Total Yield:</span>
+                              <span className="text-emerald-400">+{formatPercentage(bp.yieldPercent)}%</span>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   ) : (
                     <>
-                      <p>Yield APY: {formatPercentage(balanceHistoryData.earningsStats.currentAPY)}%</p>
+                      <p>Yield APY: {formatPercentage(balanceHistoryData?.earningsStats?.currentAPY ?? 0)}%</p>
                       <p className="text-[10px] text-zinc-500">Over {actualPeriodDays} days</p>
                     </>
                   )}

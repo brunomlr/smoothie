@@ -144,7 +144,7 @@ const AssetCardComponent = ({ data, onAction, isDemoMode = false }: AssetCardPro
                       </TooltipTrigger>
                       <TooltipContent side="bottom" className="max-w-xs p-2.5">
                         <div className="space-y-1.5 text-[11px]">
-                          <div className="font-medium text-zinc-400 border-b border-zinc-700 pb-1">Breakdown</div>
+                          <div className="font-semibold text-xs text-zinc-200 mb-2">Breakdown</div>
                           <div className="flex justify-between gap-4">
                             <span className="text-zinc-400">Yield:</span>
                             <span className={breakdown.protocolYieldUsd >= 0 ? "text-emerald-400" : "text-red-400"}>

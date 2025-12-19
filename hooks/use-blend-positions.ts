@@ -172,9 +172,10 @@ export function useBlendPositions(walletPublicKey: string | undefined, totalCost
     queryKey: ["blend-wallet-snapshot", walletPublicKey, trackedPools.map(p => p.id).join(',')],
     enabled: !!walletPublicKey && trackedPools.length > 0,
     queryFn: () => fetchWalletBlendSnapshot(walletPublicKey, trackedPools),
-    staleTime: 30_000,
-    refetchInterval: 60_000,
+    staleTime: 60_000, // Data considered stale after 1 minute (was 30s)
+    refetchInterval: 120_000, // Refetch every 2 minutes (was 60s) - positions don't change frequently
     refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true, // Refetch when user returns to tab
   })
 
   // Fetch backstop cost bases from database

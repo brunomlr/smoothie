@@ -162,10 +162,27 @@ interface CacheEntry<T> {
 }
 
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const POOL_CACHE_TTL = 30 * 1000; // 30 seconds for pool-level data
 
 const backstopCache = new Map<string, Backstop | null>();
 const tokenMetadataGlobalCache = new Map<string, CacheEntry<TokenMetadata>>();
 const priceGlobalCache = new Map<string, CacheEntry<PriceQuote | null>>();
+
+// Pool instance cache - caches pool-level data (metadata, pool, oracle, backstop)
+interface PoolInstanceCacheEntry {
+  metadata: PoolMetadata;
+  pool: Pool;
+  oracle: PoolOracle | null;
+  backstop: Backstop | null;
+  timestamp: number;
+}
+const poolInstanceCache = new Map<string, PoolInstanceCacheEntry>();
+
+// Backstop pool cache - caches BackstopPoolV1/V2 data
+const backstopPoolCache = new Map<string, CacheEntry<BackstopPoolV1 | BackstopPoolV2>>();
+
+// In-flight request deduplication - prevents concurrent duplicate RPC calls
+const inFlightRequests = new Map<string, Promise<BlendWalletSnapshot>>();
 
 function isCacheValid<T>(entry: CacheEntry<T> | undefined): boolean {
   if (!entry) return false;
@@ -211,28 +228,78 @@ async function loadBackstop(
   }
 }
 
+// Cached backstop pool loading with TTL
+async function loadBackstopPoolCached(
+  network: Network,
+  backstopId: string,
+  poolId: string,
+  version: Version
+): Promise<BackstopPoolV1 | BackstopPoolV2 | null> {
+  const cacheKey = `${backstopId}:${poolId}`;
+  const cached = getCachedValue(backstopPoolCache, cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  try {
+    const backstopPool = version === Version.V2
+      ? await BackstopPoolV2.load(network, backstopId, poolId)
+      : await BackstopPoolV1.load(network, backstopId, poolId);
+    setCachedValue(backstopPoolCache, cacheKey, backstopPool);
+    return backstopPool;
+  } catch (error) {
+    console.warn(
+      `[blend] Failed to load backstop pool ${poolId}:`,
+      (error as Error)?.message ?? error
+    );
+    return null;
+  }
+}
+
 async function loadPoolInstance(
   trackedPool: TrackedPool,
   network: Network
 ): Promise<PoolSnapshot | null> {
   try {
+    // Check pool instance cache first (30s TTL)
+    const cached = poolInstanceCache.get(trackedPool.id);
+    if (cached && Date.now() - cached.timestamp < POOL_CACHE_TTL) {
+      return {
+        tracked: trackedPool,
+        metadata: cached.metadata,
+        pool: cached.pool,
+        oracle: cached.oracle,
+        user: undefined, // User data is always fresh
+        backstop: cached.backstop,
+      };
+    }
+
     const metadata = await PoolMetadata.load(network, trackedPool.id);
     const pool: Pool =
       trackedPool.version === Version.V2
         ? await PoolV2.loadWithMetadata(network, trackedPool.id, metadata)
         : await PoolV1.loadWithMetadata(network, trackedPool.id, metadata);
 
-    let oracle: PoolOracle | null = null;
-    try {
-      oracle = await pool.loadOracle();
-    } catch (oracleError) {
-      console.warn(
-        `[blend] Failed to load oracle for pool ${trackedPool.id}:`,
-        (oracleError as Error)?.message ?? oracleError
-      );
-    }
+    // Load oracle and backstop in parallel (optimization: saves 1 round-trip)
+    const [oracle, backstop] = await Promise.all([
+      pool.loadOracle().catch((oracleError) => {
+        console.warn(
+          `[blend] Failed to load oracle for pool ${trackedPool.id}:`,
+          (oracleError as Error)?.message ?? oracleError
+        );
+        return null;
+      }),
+      loadBackstop(network, metadata.backstop),
+    ]);
 
-    const backstop = await loadBackstop(network, metadata.backstop);
+    // Cache the pool instance for 30 seconds
+    poolInstanceCache.set(trackedPool.id, {
+      metadata,
+      pool,
+      oracle,
+      backstop,
+      timestamp: Date.now(),
+    });
 
     const snapshot: PoolSnapshot = {
       tracked: trackedPool,
@@ -726,8 +793,59 @@ function computeNetApyFromEstimates(
   };
 }
 
+// Request deduplication wrapper - prevents concurrent duplicate RPC calls
 export async function fetchWalletBlendSnapshot(
   walletPublicKey: string | undefined,
+  pools: TrackedPool[],
+  options?: Partial<Omit<LoadContext, 'pools'>>
+): Promise<BlendWalletSnapshot> {
+  // Return empty snapshot immediately if no wallet or pools
+  if (!pools.length || !walletPublicKey) {
+    return {
+      positions: [],
+      backstopPositions: [],
+      poolEstimates: [],
+      totalSupplyUsd: 0,
+      totalBorrowUsd: 0,
+      totalCollateralUsd: 0,
+      totalNonCollateralUsd: 0,
+      totalBackstopUsd: 0,
+      totalBackstopQ4wUsd: 0,
+      netPositionUsd: 0,
+      weightedSupplyApy: null,
+      weightedBorrowApy: null,
+      netApy: null,
+      weightedBlndApy: null,
+      totalEmissions: 0,
+      perPoolEmissions: {},
+      blndPrice: null,
+      lpTokenPrice: null,
+    };
+  }
+
+  // Create a cache key for this specific request
+  const cacheKey = `${walletPublicKey}:${pools.map(p => p.id).sort().join(',')}`;
+
+  // Check if there's already an in-flight request for this exact data
+  const existing = inFlightRequests.get(cacheKey);
+  if (existing) {
+    return existing;
+  }
+
+  // Create and track the new request
+  const promise = fetchWalletBlendSnapshotInternal(walletPublicKey, pools, options);
+  inFlightRequests.set(cacheKey, promise);
+
+  try {
+    return await promise;
+  } finally {
+    // Clean up after request completes (success or failure)
+    inFlightRequests.delete(cacheKey);
+  }
+}
+
+async function fetchWalletBlendSnapshotInternal(
+  walletPublicKey: string,
   pools: TrackedPool[],
   options?: Partial<Omit<LoadContext, 'pools'>>
 ): Promise<BlendWalletSnapshot> {
@@ -737,7 +855,7 @@ export async function fetchWalletBlendSnapshot(
     oracleDecimals: options?.oracleDecimals ?? new Map<string, number>(),
   };
 
-  if (!context.pools.length || !walletPublicKey) {
+  if (!context.pools.length) {
     return {
       positions: [],
       backstopPositions: [],
@@ -836,6 +954,26 @@ export async function fetchWalletBlendSnapshot(
     }
   }
 
+  // Pre-fetch oracle decimals for all unique oracles (optimization: prevents redundant calls during parallel price fetching)
+  const uniqueOracleIds = [...new Set(
+    allReserveData
+      .map(({ snapshot }) => snapshot.metadata.oracle)
+      .filter((oracleId): oracleId is string => !!oracleId)
+  )];
+  await Promise.all(
+    uniqueOracleIds.map(async (oracleId) => {
+      if (!context.oracleDecimals.has(oracleId)) {
+        try {
+          const result = await getOracleDecimals(context.network, oracleId);
+          context.oracleDecimals.set(oracleId, result.decimals ?? 14);
+        } catch (error) {
+          console.warn(`[blend] Failed to pre-fetch oracle decimals for ${oracleId}:`, error);
+          context.oracleDecimals.set(oracleId, 14); // Default fallback
+        }
+      }
+    })
+  );
+
   // Fetch all token metadata in parallel
   const tokenMetadataResults = await Promise.all(
     allReserveData.map(({ reserve }) =>
@@ -843,7 +981,7 @@ export async function fetchWalletBlendSnapshot(
     )
   );
 
-  // Fetch all prices in parallel (now that we have metadata)
+  // Fetch all prices in parallel (now that we have metadata and oracle decimals are cached)
   const priceResults = await Promise.all(
     allReserveData.map(({ snapshot, reserve }, i) =>
       getPriceQuote(context, snapshot, reserve, tokenMetadataResults[i], priceCache)
@@ -932,22 +1070,18 @@ export async function fetchWalletBlendSnapshot(
     error: null;
   }>;
 
-  // Step 3: Load all BackstopPool data in parallel
+  // Step 3: Load all BackstopPool data in parallel (with caching)
   const backstopPoolResults = await Promise.all(
     usersWithPositions.map(async ({ poolSnapshot }) => {
-      try {
-        const backstopId = poolSnapshot.metadata.backstop!;
-        const poolId = poolSnapshot.tracked.id;
-        let backstopPool: BackstopPoolV1 | BackstopPoolV2;
-        if (poolSnapshot.tracked.version === Version.V2) {
-          backstopPool = await BackstopPoolV2.load(context.network, backstopId, poolId);
-        } else {
-          backstopPool = await BackstopPoolV1.load(context.network, backstopId, poolId);
-        }
-        return { backstopPool, error: null };
-      } catch (error) {
-        return { backstopPool: null, error };
-      }
+      const backstopId = poolSnapshot.metadata.backstop!;
+      const poolId = poolSnapshot.tracked.id;
+      const backstopPool = await loadBackstopPoolCached(
+        context.network,
+        backstopId,
+        poolId,
+        poolSnapshot.tracked.version
+      );
+      return { backstopPool, error: backstopPool ? null : new Error('Failed to load') };
     })
   );
 

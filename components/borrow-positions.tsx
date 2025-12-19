@@ -130,7 +130,7 @@ export function BorrowPositions({
                                   </p>
                                 </TooltipTrigger>
                                 <TooltipContent className="p-2.5">
-                                  <p className="font-medium text-zinc-400 mb-1.5">Debt Breakdown</p>
+                                  <p className="font-semibold text-xs text-zinc-200 mb-2">Debt Breakdown</p>
                                   <div className="space-y-1">
                                     <div className="flex justify-between gap-6">
                                       <span className="text-zinc-400">Original Borrowed</span>
@@ -284,7 +284,7 @@ export function BorrowPositions({
                                     </p>
                                   </TooltipTrigger>
                                   <TooltipContent className="p-2.5">
-                                    <p className="font-medium text-zinc-400 mb-1.5">Debt Breakdown</p>
+                                    <p className="font-semibold text-xs text-zinc-200 mb-2">Debt Breakdown</p>
                                     <div className="space-y-1">
                                       <div className="flex justify-between gap-6">
                                         <span className="text-zinc-400">Original Borrowed</span>
