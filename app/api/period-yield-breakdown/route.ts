@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { eventsRepository } from '@/lib/db/events-repository'
+import { LP_TOKEN_ADDRESS } from '@/lib/constants'
 
 export type PeriodType = '1W' | '1M' | '1Y' | 'All'
 
@@ -135,44 +136,21 @@ function getPeriodStartDate(period: PeriodType, timezone: string = 'UTC'): strin
 function findTokenBalanceBeforeDate(
   history: Array<{ snapshot_date: string; supply_balance: number; collateral_balance: number; pool_id: string }>,
   targetDate: string,
-  poolId: string,
-  debug: boolean = false
+  poolId: string
 ): number {
   // Filter by pool and sort by date descending (newest first)
   const sorted = history
     .filter(r => r.pool_id === poolId)
     .sort((a, b) => b.snapshot_date.localeCompare(a.snapshot_date))
 
-  if (debug) {
-    console.log(`[findTokenBalanceBeforeDate] Looking for balance BEFORE ${targetDate} for pool ${poolId.slice(0, 8)}...`)
-    console.log(`[findTokenBalanceBeforeDate] Total records for pool: ${sorted.length}`)
-    // Show records around target date
-    const nearbyRecords = sorted.filter(r =>
-      r.snapshot_date >= targetDate.slice(0, 7) // Same month or later
-    ).slice(0, 5)
-    console.log(`[findTokenBalanceBeforeDate] Nearby records:`, nearbyRecords.map(r => ({
-      date: r.snapshot_date,
-      supply: r.supply_balance?.toFixed(2),
-      collateral: r.collateral_balance?.toFixed(2),
-      total: ((r.supply_balance || 0) + (r.collateral_balance || 0)).toFixed(2)
-    })))
-  }
-
   // Find the first record STRICTLY BEFORE the target date
   // This gives us the end-of-day balance from the day before the period starts
   for (const record of sorted) {
     if (record.snapshot_date < targetDate) {
-      const balance = (record.supply_balance || 0) + (record.collateral_balance || 0)
-      if (debug) {
-        console.log(`[findTokenBalanceBeforeDate] Found record at ${record.snapshot_date}: supply=${record.supply_balance}, collateral=${record.collateral_balance}, total=${balance}`)
-      }
-      return balance
+      return (record.supply_balance || 0) + (record.collateral_balance || 0)
     }
   }
 
-  if (debug) {
-    console.log(`[findTokenBalanceBeforeDate] No record found before ${targetDate}`)
-  }
   // If no record found before target date, user didn't have position before this period
   return 0
 }
@@ -209,8 +187,6 @@ export async function GET(request: NextRequest) {
   const lpTokenPriceParam = searchParams.get('lpTokenPrice')
   // Get timezone from query param - should match the chart's timezone for consistent dates
   const timezone = searchParams.get('timezone') || 'UTC'
-
-  console.log('[Period Yield API] Called with:', { userAddress, period, timezone })
 
   if (!userAddress) {
     return NextResponse.json(
@@ -252,13 +228,6 @@ export async function GET(request: NextRequest) {
   // Parse LP token price
   const lpTokenPrice = lpTokenPriceParam ? parseFloat(lpTokenPriceParam) : 0
 
-  console.log('[Period Yield API] Backstop params:', {
-    backstopPositionsParam: backstopPositionsParam?.slice(0, 100),
-    backstopPositionsCount: Object.keys(backstopPositions).length,
-    lpTokenPriceParam,
-    lpTokenPrice,
-  })
-
   try {
     const periodStartDate = getPeriodStartDate(period, timezone)
     // Get today's date in user's timezone
@@ -292,23 +261,38 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    console.log(`[Period Yield API] Found ${userActions.length} actions, ${poolAssetPairs.size} pool-asset pairs, ${uniqueAssets.size} unique assets`)
-    console.log(`[Period Yield API] Assets in sdkPrices:`, Object.keys(sdkPrices))
-    console.log(`[Period Yield API] All unique assets from actions:`, Array.from(uniqueAssets))
-
-    // Fetch balance history for all unique assets from database
+    // Fetch balance history for all unique assets from database IN PARALLEL
     // This is the same data source the chart uses
     const balanceHistoryByAsset = new Map<string, Array<{ snapshot_date: string; supply_balance: number; collateral_balance: number; pool_id: string }>>()
 
-    for (const assetAddress of uniqueAssets) {
+    const balanceHistoryPromises = Array.from(uniqueAssets).map(async (assetAddress) => {
       const { history } = await eventsRepository.getBalanceHistoryFromEvents(
         userAddress,
         assetAddress,
         365, // Get up to 1 year of history
         timezone // Use user's timezone to match chart data
       )
-      balanceHistoryByAsset.set(assetAddress, history as Array<{ snapshot_date: string; supply_balance: number; collateral_balance: number; pool_id: string }>)
+      return { assetAddress, history: history as Array<{ snapshot_date: string; supply_balance: number; collateral_balance: number; pool_id: string }> }
+    })
+
+    const balanceHistoryResults = await Promise.all(balanceHistoryPromises)
+    for (const { assetAddress, history } of balanceHistoryResults) {
+      balanceHistoryByAsset.set(assetAddress, history)
     }
+
+    // Pre-fetch all historical prices for period start date in a single batch query
+    const priceRequests: Array<{ tokenAddress: string; targetDate: string }> = []
+    for (const assetAddress of uniqueAssets) {
+      priceRequests.push({ tokenAddress: assetAddress, targetDate: periodStartDate })
+    }
+    // Also add LP token price request
+    priceRequests.push({ tokenAddress: LP_TOKEN_ADDRESS, targetDate: periodStartDate })
+
+    const sdkPricesMap = new Map<string, number>(Object.entries(sdkPrices))
+    const batchedPrices = await eventsRepository.getHistoricalPricesForMultipleTokensAndDates(
+      priceRequests,
+      sdkPricesMap
+    )
 
     const byAsset: Record<string, AssetPeriodBreakdown> = {}
     const byBackstop: Record<string, BackstopPeriodBreakdown> = {}
@@ -336,31 +320,25 @@ export async function GET(request: NextRequest) {
       // periodStartDate to get what the user had at the START of the period.
       // Example: For period starting Nov 19, we get Nov 18 EOD balance
       const history = balanceHistoryByAsset.get(assetAddress) || []
-      const tokensAtStart = findTokenBalanceBeforeDate(history, periodStartDate, poolId, true)
+      const tokensAtStart = findTokenBalanceBeforeDate(history, periodStartDate, poolId)
 
       // Skip only if BOTH current AND start balances are zero (never had position in this period)
       if (tokensNow <= 0 && tokensAtStart <= 0) {
-        console.log(`[Period Yield API] Skipping ${compositeKey.slice(0, 16)}... tokensNow=${tokensNow}, tokensAtStart=${tokensAtStart}`)
         continue
       }
 
       // For closed positions (tokensNow = 0), we still need to calculate valueAtStart
-      // Get historical price if no SDK price available
+      // Get historical price from batched results if no SDK price available
       let effectivePrice = sdkPrice
       if (sdkPrice <= 0 && tokensAtStart > 0) {
         // Position was closed - get historical price at period start for valueAtStart calculation
-        const { price: historicalPrice } = await eventsRepository.getHistoricalPriceAtDate(
-          assetAddress,
-          periodStartDate,
-          0 // No fallback - we need actual price
-        )
+        const assetPrices = batchedPrices.get(assetAddress)
+        const historicalPrice = assetPrices?.get(periodStartDate)?.price || 0
         effectivePrice = historicalPrice
-        console.log(`[Period Yield API] Closed position ${compositeKey.slice(0, 16)}... using historical price: ${historicalPrice}`)
       }
 
       // Skip if still no price available
       if (effectivePrice <= 0) {
-        console.log(`[Period Yield API] Skipping ${compositeKey.slice(0, 16)}... no price available`)
         continue
       }
 
@@ -385,39 +363,14 @@ export async function GET(request: NextRequest) {
       const withdrawalsInPeriodTokens = withdrawalsInPeriod.reduce((sum, w) => sum + w.tokens, 0)
       const netDepositedInPeriod = depositsInPeriodTokens - withdrawalsInPeriodTokens
 
-      // Debug: log each deposit event
-      console.log(`[Period Yield API] Deposit events for ${compositeKey.slice(0, 24)}:`, {
-        periodStartDate,
-        timezone,
-        deposits: depositsInPeriod.map(d => ({ date: d.date, tokens: d.tokens.toFixed(2) })),
-        totalDeposits: depositsInPeriodTokens.toFixed(2),
-        totalWithdrawals: withdrawalsInPeriodTokens.toFixed(2),
-        netDeposited: netDepositedInPeriod.toFixed(2),
-      })
-
-      // Step 3: Get ACTUAL market price at period start from daily_token_prices
+      // Step 3: Get ACTUAL market price at period start from batched prices
       // This is different from all-time which uses weighted average deposit price.
       // For period calculation, we want to know how much the market price changed
       // during this period, not since the user first bought.
-      const { price: priceAtStart, source: priceSource } = await eventsRepository.getHistoricalPriceAtDate(
-        assetAddress,
-        periodStartDate,
-        effectivePrice
-      )
-
-      console.log(`[Period Yield API] Asset ${assetAddress.slice(0, 8)}... in pool ${poolId.slice(0, 8)}...`, {
-        periodStartDate,
-        priceAtStart: priceAtStart.toFixed(6),
-        priceSource,
-        priceNow: effectivePrice.toFixed(6),
-        priceDiff: (effectivePrice - priceAtStart).toFixed(6),
-        tokensAtStart: tokensAtStart.toFixed(4),
-        tokensNow: tokensNow.toFixed(4),
-        netDepositedInPeriod: netDepositedInPeriod.toFixed(4),
-        depositsCount: depositsInPeriod.length,
-        withdrawalsCount: withdrawalsInPeriod.length,
-        isClosedPosition: tokensNow <= 0 && tokensAtStart > 0,
-      })
+      const assetPrices = batchedPrices.get(assetAddress)
+      const priceData = assetPrices?.get(periodStartDate) || { price: effectivePrice, source: 'sdk_fallback' as const }
+      const priceAtStart = priceData.price
+      const priceSource = priceData.source
 
       // Step 4: Calculate breakdown using the CORRECT formulas
       // Interest earned = current tokens - tokens at start - net deposits in period
@@ -472,35 +425,12 @@ export async function GET(request: NextRequest) {
       totalPriceChangeUsd += priceChangeUsd
       priceSourceCounts[priceSource]++
       assetCount++
-
-      console.log(`[Period Yield API] ${compositeKey}:`, {
-        tokensAtStart,
-        tokensNow,
-        netDepositedInPeriod,
-        interestEarnedTokens,
-        priceAtStart,
-        priceNow: sdkPrice,
-        protocolYieldUsd,
-        priceChangeUsd,
-        priceChangeBreakdown: {
-          onStartTokens: priceChangeOnStartTokens,
-          onDeposits: priceChangeOnDeposits,
-          lostOnWithdrawals: priceChangeLostOnWithdrawals,
-        },
-        totalEarnedUsd,
-      })
     }
 
     // Process backstop positions
-    const LP_TOKEN_ADDRESS = 'CAS3FL6TLZKDGGSISDBWGGPXT3NRR4DYTZD7YOD3HMYO6LTJUVGRVEAM'
     const backstopPoolAddresses = Object.keys(backstopPositions)
 
     if (backstopPoolAddresses.length > 0 && lpTokenPrice > 0) {
-      console.log('[Period Yield API] Processing backstop positions:', {
-        poolCount: backstopPoolAddresses.length,
-        lpTokenPrice,
-      })
-
       // Fetch backstop balance history for all pools
       const backstopHistory = await eventsRepository.getBackstopUserBalanceHistoryMultiplePools(
         userAddress,
@@ -509,18 +439,11 @@ export async function GET(request: NextRequest) {
         timezone // Use user's timezone to match chart data
       )
 
-      // Get LP token price at period start
-      const { price: lpPriceAtStart, source: lpPriceSource } = await eventsRepository.getHistoricalPriceAtDate(
-        LP_TOKEN_ADDRESS,
-        periodStartDate,
-        lpTokenPrice
-      )
-
-      console.log('[Period Yield API] LP token price at period start:', {
-        lpPriceAtStart,
-        lpPriceSource,
-        lpPriceNow: lpTokenPrice,
-      })
+      // Get LP token price at period start from batched prices
+      const lpPrices = batchedPrices.get(LP_TOKEN_ADDRESS)
+      const lpPriceData = lpPrices?.get(periodStartDate) || { price: lpTokenPrice, source: 'sdk_fallback' as const }
+      const lpPriceAtStart = lpPriceData.price
+      const lpPriceSource = lpPriceData.source
 
       // Get backstop events within period for net deposited calculation
       const backstopEventsData = await eventsRepository.getBackstopEventsWithPrices(
@@ -539,16 +462,6 @@ export async function GET(request: NextRequest) {
         const poolHistory = backstopHistory.filter(h => h.pool_address === poolAddress)
         let lpTokensAtStart = 0
 
-        // Debug: log history dates
-        const historyDates = poolHistory.map(h => h.date).sort()
-        console.log(`[Period Yield API] Backstop ${poolAddress.slice(0, 16)}... history:`, {
-          recordCount: poolHistory.length,
-          firstDate: historyDates[0],
-          lastDate: historyDates[historyDates.length - 1],
-          periodStartDate,
-          sampleRecords: poolHistory.slice(0, 3).map(h => ({ date: h.date, lp_tokens_value: h.lp_tokens_value })),
-        })
-
         // Sort by date descending and find first record STRICTLY BEFORE period start
         const sortedHistory = poolHistory.sort((a, b) => b.date.localeCompare(a.date))
         for (const record of sortedHistory) {
@@ -560,7 +473,6 @@ export async function GET(request: NextRequest) {
 
         // Skip if no position in this period
         if (lpTokensNow <= 0 && lpTokensAtStart <= 0) {
-          console.log(`[Period Yield API] Skipping backstop ${poolAddress.slice(0, 16)}... lpTokensNow=${lpTokensNow}, lpTokensAtStart=${lpTokensAtStart}`)
           continue
         }
 
@@ -618,23 +530,6 @@ export async function GET(request: NextRequest) {
         totalPriceChangeUsd += priceChangeUsd
         priceSourceCounts[lpPriceSource]++
         backstopCount++
-
-        console.log(`[Period Yield API] Backstop ${poolAddress.slice(0, 16)}...:`, {
-          lpTokensAtStart,
-          lpTokensNow,
-          netDepositedInPeriod,
-          interestEarnedLpTokens,
-          lpPriceAtStart,
-          lpPriceNow: lpTokenPrice,
-          protocolYieldUsd,
-          priceChangeUsd,
-          priceChangeBreakdown: {
-            onStartTokens: priceChangeOnStartTokens,
-            onDeposits: priceChangeOnDeposits,
-            lostOnWithdrawals: priceChangeLostOnWithdrawals,
-          },
-          totalEarnedUsd: backstopTotalEarned,
-        })
       }
     }
 
@@ -647,18 +542,6 @@ export async function GET(request: NextRequest) {
     const periodStartMs = new Date(periodStartDate).getTime()
     const todayMs = new Date(todayStr).getTime()
     const periodDays = Math.round((todayMs - periodStartMs) / (1000 * 60 * 60 * 24))
-
-    console.log('[Period Yield API] Totals:', {
-      period,
-      periodStartDate,
-      periodDays,
-      totalValueAtStart,
-      totalValueNow,
-      totalProtocolYieldUsd,
-      totalPriceChangeUsd,
-      totalEarnedUsd,
-      totalEarnedPercent: totalEarnedPercent.toFixed(2) + '%',
-    })
 
     return NextResponse.json({
       byAsset,

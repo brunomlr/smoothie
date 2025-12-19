@@ -21,7 +21,6 @@ import { useUserActions } from "@/hooks/use-user-actions"
 import { FormattedBalance } from "@/components/formatted-balance"
 import { CurrencySelector } from "@/components/currency-selector"
 import { useCurrencyPreference } from "@/hooks/use-currency-preference"
-import { usePeriodYieldBreakdown, type PeriodType } from "@/hooks/use-period-yield-breakdown"
 import { usePeriodYieldBreakdownAPI } from "@/hooks/use-period-yield-breakdown-api"
 import type { PeriodType as APIPeriodType } from "@/app/api/period-yield-breakdown/route"
 import type { ChartHistoricalPrices } from "@/hooks/use-chart-historical-prices"
@@ -200,7 +199,7 @@ const DUMMY_CHART_DATA: WalletChartDataPoint[] = [
 
 const WalletBalanceComponent = ({ data, chartData, publicKey, balanceHistoryData, loading, isDemoMode = false, onToggleDemoMode, usdcPrice = 1, poolInputs = [], yieldBreakdown, balanceHistoryDataMap, historicalPrices, blendPositions, backstopPositions, lpTokenPrice }: WalletBalanceProps) => {
   // State for time period selection
-  const [selectedPeriod, setSelectedPeriod] = useState<TimePeriod>("1M")
+  const [selectedPeriod, setSelectedPeriod] = useState<TimePeriod>("All")
 
   // Currency preference for multi-currency display
   const { currency, setCurrency, format: formatInCurrency, convert: convertToCurrency } = useCurrencyPreference()
@@ -217,26 +216,7 @@ const WalletBalanceComponent = ({ data, chartData, publicKey, balanceHistoryData
   // Use balance history data from props if available (not in demo mode)
   const historyChartData = isDemoMode ? [] : (balanceHistoryData?.chartData || [])
 
-  // Map TimePeriod to PeriodType for period yield breakdown
-  const periodTypeMap: Record<TimePeriod, PeriodType> = {
-    "1W": "1W",
-    "1M": "1M",
-    "1Y": "1Y",
-    "All": "All",
-    "Projection": "All", // Projection uses all-time data
-  }
-
-  // Calculate period-specific yield breakdown (old client-side approach - deprecated)
-  const periodYieldBreakdown = usePeriodYieldBreakdown(
-    periodTypeMap[selectedPeriod],
-    balanceHistoryDataMap || new Map(),
-    historicalPrices || { prices: new Map(), getPrice: () => 0, hasHistoricalData: false, isLoading: true, error: null },
-    blendPositions,
-    backstopPositions,
-    lpTokenPrice,
-  )
-
-  // New API-based period yield breakdown (accurate calculation from deposit events)
+  // Map TimePeriod to API PeriodType for period yield breakdown
   const apiPeriodTypeMap: Record<TimePeriod, APIPeriodType> = {
     "1W": "1W",
     "1M": "1M",
@@ -454,23 +434,6 @@ const WalletBalanceComponent = ({ data, chartData, publicKey, balanceHistoryData
 
     // Total Earned = Protocol Yield + Price Change (excludes deposits)
     const totalEarned = protocolYield + priceChange
-
-    console.log('[ChartBasedPeriodBreakdown] Using chart data:', {
-      period: selectedPeriod,
-      periodStartStr,
-      chartPointDate: chartPointAtStart?.date,
-      valueAtStart,
-      yieldAtStart,
-      depositAtStart,
-      depositNow,
-      netDepositedInPeriod,
-      valueNow,
-      totalYield,
-      protocolYield,
-      priceChange,
-      totalEarned,
-      totalChange,
-    })
 
     return {
       valueAtStart,

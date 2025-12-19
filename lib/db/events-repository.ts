@@ -1,5 +1,6 @@
 import { pool } from './config'
 import { UserBalance, UserAction, Pool, Token, DailyRate, BackstopPoolState, BackstopUserBalance, BackstopCostBasis, BackstopYield } from './types'
+import { LP_TOKEN_ADDRESS } from '@/lib/constants'
 
 export class EventsRepository {
   /**
@@ -1580,9 +1581,6 @@ export class EventsRepository {
       throw new Error('Database pool not initialized')
     }
 
-    // LP token address for the BLND-USDC Comet pool
-    const LP_TOKEN_ADDRESS = 'CAS3FL6TLZKDGGSISDBWGGPXT3NRR4DYTZD7YOD3HMYO6LTJUVGRVEAM'
-
     let whereClause = 'WHERE b.user_address = $1'
     const params: string[] = [userAddress]
 
@@ -1766,6 +1764,95 @@ export class EventsRepository {
         priceSource,
       }
     })
+  }
+
+  /**
+   * Get historical prices for multiple token/date combinations in a single query.
+   * Returns a Map of tokenAddress -> Map of date -> { price, source }
+   * Uses forward-fill (most recent price on or before each date).
+   */
+  async getHistoricalPricesForMultipleTokensAndDates(
+    requests: Array<{ tokenAddress: string; targetDate: string }>,
+    sdkPrices: Map<string, number>
+  ): Promise<Map<string, Map<string, { price: number; source: 'daily_token_prices' | 'forward_fill' | 'sdk_fallback' }>>> {
+    if (!pool) {
+      throw new Error('Database pool not initialized')
+    }
+
+    const result = new Map<string, Map<string, { price: number; source: 'daily_token_prices' | 'forward_fill' | 'sdk_fallback' }>>()
+
+    if (requests.length === 0) {
+      return result
+    }
+
+    // Group requests by token address
+    const requestsByToken = new Map<string, string[]>()
+    for (const req of requests) {
+      if (!requestsByToken.has(req.tokenAddress)) {
+        requestsByToken.set(req.tokenAddress, [])
+      }
+      requestsByToken.get(req.tokenAddress)!.push(req.targetDate)
+    }
+
+    // Get unique token addresses and all unique dates
+    const tokenAddresses = Array.from(requestsByToken.keys())
+    const allDates = [...new Set(requests.map(r => r.targetDate))].sort()
+
+    // Fetch all relevant prices in a single query using LATERAL join for forward-fill
+    const queryResult = await pool.query(
+      `
+      WITH tokens AS (
+        SELECT unnest($1::text[]) AS token_address
+      ),
+      dates AS (
+        SELECT unnest($2::text[])::date AS target_date
+      ),
+      token_date_pairs AS (
+        SELECT t.token_address, d.target_date
+        FROM tokens t
+        CROSS JOIN dates d
+      )
+      SELECT
+        td.token_address,
+        td.target_date::text,
+        p.usd_price,
+        p.price_date::text AS actual_price_date
+      FROM token_date_pairs td
+      LEFT JOIN LATERAL (
+        SELECT usd_price, price_date
+        FROM daily_token_prices
+        WHERE token_address = td.token_address
+          AND price_date <= td.target_date
+        ORDER BY price_date DESC
+        LIMIT 1
+      ) p ON true
+      `,
+      [tokenAddresses, allDates]
+    )
+
+    // Process results
+    for (const row of queryResult.rows) {
+      const tokenAddress = row.token_address
+      const targetDate = row.target_date
+
+      if (!result.has(tokenAddress)) {
+        result.set(tokenAddress, new Map())
+      }
+
+      const tokenPrices = result.get(tokenAddress)!
+
+      if (row.usd_price !== null) {
+        const price = parseFloat(row.usd_price)
+        const source = row.actual_price_date === targetDate ? 'daily_token_prices' : 'forward_fill'
+        tokenPrices.set(targetDate, { price, source })
+      } else {
+        // Fallback to SDK price
+        const sdkPrice = sdkPrices.get(tokenAddress) || 0
+        tokenPrices.set(targetDate, { price: sdkPrice, source: 'sdk_fallback' })
+      }
+    }
+
+    return result
   }
 
   /**

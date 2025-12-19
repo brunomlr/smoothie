@@ -102,14 +102,9 @@ export function useHistoricalYieldBreakdown(
   // Build SDK prices map from blend positions
   const sdkPrices = useMemo(() => {
     const prices: Record<string, number> = {}
-    if (!blendPositions) {
-      console.log('[YieldBreakdown] No blendPositions provided')
-      return prices
-    }
+    if (!blendPositions) return prices
 
-    console.log('[YieldBreakdown] blendPositions count:', blendPositions.length)
     blendPositions.forEach(pos => {
-      console.log('[YieldBreakdown] Position:', { id: pos.id, assetId: pos.assetId, supplyAmount: pos.supplyAmount, price: pos.price?.usdPrice })
       if (pos.assetId && pos.price?.usdPrice && pos.price.usdPrice > 0) {
         prices[pos.assetId] = pos.price.usdPrice
       }
@@ -134,10 +129,6 @@ export function useHistoricalYieldBreakdown(
 
     return balances
   }, [blendPositions])
-
-  // Debug: log what we're sending to the API
-  console.log('[YieldBreakdown] sdkPrices keys:', Object.keys(sdkPrices))
-  console.log('[YieldBreakdown] Query enabled:', !!userAddress && Object.keys(sdkPrices).length > 0)
 
   // Fetch historical cost basis data
   const costBasisQuery = useQuery({
@@ -168,38 +159,12 @@ export function useHistoricalYieldBreakdown(
     let totalEarnedUsd = 0
     let totalCurrentValueUsd = 0
 
-    // Debug: log keys for comparison (stringify to see actual values)
-    const apiKeys = costBasisQuery.data?.byAsset ? Object.keys(costBasisQuery.data.byAsset) : []
-    const clientKeys = Array.from(currentBalances.keys())
-    console.log('[YieldBreakdown] === KEY COMPARISON DEBUG ===')
-    console.log('[YieldBreakdown] API byAsset keys:', JSON.stringify(apiKeys))
-    console.log('[YieldBreakdown] currentBalances keys:', JSON.stringify(clientKeys))
-
-    // Check each API key against client keys
-    apiKeys.forEach((apiKey, i) => {
-      const hasMatch = clientKeys.includes(apiKey)
-      console.log(`[YieldBreakdown] API key[${i}] "${apiKey}" -> ${hasMatch ? 'MATCH' : 'NO MATCH'}`)
-      if (!hasMatch) {
-        // Check for partial matches to diagnose
-        clientKeys.forEach((clientKey, j) => {
-          if (apiKey.includes(clientKey) || clientKey.includes(apiKey)) {
-            console.log(`[YieldBreakdown]   Partial match with client key[${j}]: "${clientKey}"`)
-          }
-        })
-      }
-    })
-
-    const allMatch = apiKeys.length > 0 && apiKeys.every(k => clientKeys.includes(k))
-    console.log('[YieldBreakdown] All keys match?', allMatch)
-    console.log('[YieldBreakdown] === END DEBUG ===')
-
     if (costBasisQuery.data?.byAsset) {
       for (const [compositeKey, historicalData] of Object.entries(costBasisQuery.data.byAsset)) {
         const currentBalance = currentBalances.get(compositeKey)
 
         if (!currentBalance) {
           // No current position, skip
-          console.log('[YieldBreakdown] No match for API key:', compositeKey)
           continue
         }
 
@@ -222,16 +187,6 @@ export function useHistoricalYieldBreakdown(
 
         byAsset.set(compositeKey, assetBreakdown)
 
-        console.log(`[YieldBreakdown] Calculated breakdown for ${compositeKey}:`, {
-          currentTokens,
-          currentPrice,
-          netDepositedTokens: historicalData.netDepositedTokens,
-          costBasisHistorical: breakdown.costBasisHistorical,
-          protocolYieldUsd: breakdown.protocolYieldUsd,
-          priceChangeUsd: breakdown.priceChangeUsd,
-          totalEarnedUsd: breakdown.totalEarnedUsd,
-        })
-
         totalCostBasisHistorical += breakdown.costBasisHistorical
         totalProtocolYieldUsd += breakdown.protocolYieldUsd
         totalPriceChangeUsd += breakdown.priceChangeUsd
@@ -239,14 +194,6 @@ export function useHistoricalYieldBreakdown(
         totalCurrentValueUsd += breakdown.currentValueUsd
       }
     }
-
-    console.log('[YieldBreakdown] Final totals:', {
-      totalCostBasisHistorical,
-      totalProtocolYieldUsd,
-      totalPriceChangeUsd,
-      totalEarnedUsd,
-      byAssetSize: byAsset.size,
-    })
 
     // Calculate per-pool backstop breakdowns using historical LP prices
     const byBackstop = new Map<string, BackstopYieldBreakdown>()
@@ -291,16 +238,6 @@ export function useHistoricalYieldBreakdown(
             ...breakdown,
             poolAddress: poolId,
           }
-
-          console.log(`[YieldBreakdown] Backstop breakdown for pool ${poolId} (with historical prices):`, {
-            lpTokens: bp.lpTokens,
-            depositsCount: deposits.length,
-            withdrawalsCount: withdrawals.length,
-            costBasisHistorical: breakdown.costBasisHistorical,
-            protocolYieldUsd: breakdown.protocolYieldUsd,
-            priceChangeUsd: breakdown.priceChangeUsd,
-            totalEarnedUsd: breakdown.totalEarnedUsd,
-          })
         } else {
           // Fallback: use cost basis from position (no historical prices for this pool)
           const costBasisLp = bp.costBasisLp || 0
@@ -321,12 +258,6 @@ export function useHistoricalYieldBreakdown(
             ...breakdown,
             poolAddress: poolId,
           }
-
-          console.log(`[YieldBreakdown] Backstop breakdown for pool ${poolId} (fallback):`, {
-            lpTokens: bp.lpTokens,
-            costBasisLp,
-            costBasisHistorical: breakdown.costBasisHistorical,
-          })
         }
 
         byBackstop.set(poolId, poolBreakdown)

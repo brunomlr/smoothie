@@ -520,7 +520,7 @@ export const BalanceBarChart = memo(function BalanceBarChart({
   onPeriodYieldChange,
   poolInputs = [],
 }: BalanceBarChartProps) {
-  const [internalPeriod, setInternalPeriod] = useState<TimePeriod>("1M")
+  const [internalPeriod, setInternalPeriod] = useState<TimePeriod>("All")
   const [error, setError] = useState<Error | null>(null)
 
   // Currency preference for multi-currency display

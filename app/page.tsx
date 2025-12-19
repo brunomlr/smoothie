@@ -20,6 +20,7 @@ import { BlndRewardsCard } from "@/components/blnd-rewards-card"
 import { PortfolioAllocationBar } from "@/components/portfolio-allocation-bar"
 import { SupplyPositions } from "@/components/supply-positions"
 import { BorrowPositions } from "@/components/borrow-positions"
+import { LP_TOKEN_ADDRESS } from "@/lib/constants"
 
 function HomeContent() {
   const queryClient = useQueryClient()
@@ -89,7 +90,6 @@ function HomeContent() {
 
     // Add LP token price if available
     if (lpTokenPrice && lpTokenPrice > 0) {
-      const LP_TOKEN_ADDRESS = 'CAS3FL6TLZKDGGSISDBWGGPXT3NRR4DYTZD7YOD3HMYO6LTJUVGRVEAM'
       map.set(LP_TOKEN_ADDRESS, lpTokenPrice)
     }
 
@@ -119,7 +119,6 @@ function HomeContent() {
   const allTokenAddresses = useMemo(() => {
     const addresses = [...uniqueAssetAddresses]
     // Include LP token for backstop historical pricing
-    const LP_TOKEN_ADDRESS = 'CAS3FL6TLZKDGGSISDBWGGPXT3NRR4DYTZD7YOD3HMYO6LTJUVGRVEAM'
     if (backstopPositions.length > 0 && !addresses.includes(LP_TOKEN_ADDRESS)) {
       addresses.push(LP_TOKEN_ADDRESS)
     }
@@ -132,15 +131,6 @@ function HomeContent() {
     dates: chartDates,
     sdkPrices: sdkPricesMap,
     enabled: chartDates.length > 0 && allTokenAddresses.length > 0,
-  })
-
-  // Debug: log historical prices state
-  console.log('[Page] Historical prices:', {
-    hasHistoricalData: historicalPrices.hasHistoricalData,
-    isLoading: historicalPrices.isLoading,
-    pricesSize: historicalPrices.prices.size,
-    tokenAddresses: allTokenAddresses,
-    chartDatesCount: chartDates.length,
   })
 
   // Compute derived balance data (enriched cards, aggregated history, etc.)
@@ -174,33 +164,14 @@ function HomeContent() {
   // This updates BOTH the earnedYield value AND adds the breakdown tooltip data
   const enrichedAssetCardsWithBreakdown = useMemo(() => {
     if (yieldBreakdown.isLoading || yieldBreakdown.byAsset.size === 0) {
-      console.log('[Page] Skipping yield breakdown merge:', {
-        isLoading: yieldBreakdown.isLoading,
-        byAssetSize: yieldBreakdown.byAsset.size,
-      })
       return enrichedAssetCards
     }
-
-    console.log('[Page] Merging yield breakdown into cards:', {
-      cardCount: enrichedAssetCards.length,
-      breakdownCount: yieldBreakdown.byAsset.size,
-      cardIds: enrichedAssetCards.map(c => c.id),
-      breakdownKeys: Array.from(yieldBreakdown.byAsset.keys()),
-    })
 
     return enrichedAssetCards.map(card => {
       const breakdown = yieldBreakdown.byAsset.get(card.id)
       if (!breakdown) {
-        console.log(`[Page] No breakdown found for card: ${card.id}`)
         return card
       }
-
-      console.log(`[Page] Applying breakdown to card ${card.id}:`, {
-        oldEarnedYield: card.earnedYield,
-        newEarnedYield: breakdown.totalEarnedUsd,
-        protocolYield: breakdown.protocolYieldUsd,
-        priceChange: breakdown.priceChangeUsd,
-      })
 
       return {
         ...card,
