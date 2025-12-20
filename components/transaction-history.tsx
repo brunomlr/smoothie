@@ -578,7 +578,7 @@ function MobileTransactionCard({ actions, currentUserAddress, historicalPrices, 
       {actions.map((action) => (
         <div key={action.id} className="flex justify-between items-center">
           <ActionBadge action={action} currentUserAddress={currentUserAddress} />
-          <div className="flex-1 flex justify-end">
+          <div className="w-36">
             <AmountWithCurrency
               action={action}
               currentUserAddress={currentUserAddress}
