@@ -86,7 +86,8 @@ export function useComputedBalance(
   balanceHistoryQueries: BalanceHistoryQueryResult[],
   backstopBalanceHistoryQuery: BackstopBalanceHistoryQuery,
   uniqueAssetAddresses: string[],
-  historicalPrices?: HistoricalPriceGetter  // Optional: historical prices for chart
+  historicalPrices?: HistoricalPriceGetter,  // Optional: historical prices for chart
+  showPriceChanges: boolean = true  // When false, use current prices for chart instead of historical
 ): UseComputedBalanceReturn {
   // Build a map of asset address -> USD price from SDK positions
   const assetPriceMap = useMemo(() => {
@@ -292,8 +293,9 @@ export function useComputedBalance(
         if (!point) return
 
         // Get USD price for this asset
-        // Use historical price if available, otherwise fall back to current SDK price
-        const usdPrice = historicalPrices?.hasHistoricalData
+        // When showPriceChanges is OFF, always use current SDK price (no historical price impact)
+        // When showPriceChanges is ON, use historical price if available
+        const usdPrice = showPriceChanges && historicalPrices?.hasHistoricalData
           ? historicalPrices.getPrice(assetAddress, date)
           : (assetPriceMap.get(assetAddress) || 1)
 
@@ -316,10 +318,11 @@ export function useComputedBalance(
       })
 
       // Add backstop balance (LP tokens * LP price)
-      // Use historical LP price if available, otherwise current LP price
+      // When showPriceChanges is OFF, always use current LP price (no historical price impact)
+      // When showPriceChanges is ON, use historical LP price if available
       const backstopLpTokens = backstopByDate.get(date) || 0
       const LP_TOKEN_ADDRESS = 'CAS3FL6TLZKDGGSISDBWGGPXT3NRR4DYTZD7YOD3HMYO6LTJUVGRVEAM'
-      const lpPrice = historicalPrices?.hasHistoricalData
+      const lpPrice = showPriceChanges && historicalPrices?.hasHistoricalData
         ? historicalPrices.getPrice(LP_TOKEN_ADDRESS, date)
         : (lpTokenPrice || 0)
       const backstopUsdValue = backstopLpTokens * lpPrice
@@ -373,7 +376,7 @@ export function useComputedBalance(
       isLoading: balanceHistoryQueries.some(q => q.isLoading) || backstopBalanceHistoryQuery.isLoading,
       error: balanceHistoryQueries.find(q => q.error)?.error || backstopBalanceHistoryQuery.error || null,
     } as AggregatedHistoryData
-  }, [balanceHistoryDataMap, assetPriceMap, uniqueAssetAddresses, balanceHistoryQueries, backstopBalanceHistoryQuery, lpTokenPrice, backstopPositions, historicalPrices])
+  }, [balanceHistoryDataMap, assetPriceMap, uniqueAssetAddresses, balanceHistoryQueries, backstopBalanceHistoryQuery, lpTokenPrice, backstopPositions, historicalPrices, showPriceChanges])
 
   return {
     assetPriceMap,

@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import dynamic from "next/dynamic"
 import { TrendingUp, TrendingDown, Info } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
@@ -202,9 +202,26 @@ const DUMMY_CHART_DATA: WalletChartDataPoint[] = [
   { date: "2025-11-01", balance: 13040, deposit: 10000, yield: 3040, type: 'historical' },
 ]
 
+const SELECTED_PERIOD_KEY = "smoothie-selected-period"
+
 const WalletBalanceComponent = ({ data, chartData, publicKey, balanceHistoryData, loading, isDemoMode = false, onToggleDemoMode, usdcPrice = 1, poolInputs = [], yieldBreakdown, balanceHistoryDataMap, historicalPrices, blendPositions, backstopPositions, lpTokenPrice }: WalletBalanceProps) => {
-  // State for time period selection
-  const [selectedPeriod, setSelectedPeriod] = useState<TimePeriod>("All")
+  // State for time period selection with localStorage persistence
+  const [selectedPeriod, setSelectedPeriod] = useState<TimePeriod>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem(SELECTED_PERIOD_KEY)
+      if (saved && ["1W", "1M", "1Y", "All", "Projection"].includes(saved)) {
+        return saved as TimePeriod
+      }
+    }
+    return "All"
+  })
+
+  // Persist selected period to localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(SELECTED_PERIOD_KEY, selectedPeriod)
+    }
+  }, [selectedPeriod])
 
   // Currency preference for multi-currency display
   const { currency, format: formatInCurrency, convert: convertToCurrency } = useCurrencyPreference()

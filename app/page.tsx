@@ -14,6 +14,7 @@ import { DashboardLayout } from "@/components/dashboard-layout"
 import { WalletBalance } from "@/components/wallet-balance"
 import { TransactionHistory } from "@/components/transaction-history"
 import { useBlendPositions } from "@/hooks/use-blend-positions"
+import { useDisplayPreferences } from "@/contexts/display-preferences-context"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { ArrowDownFromLine, History, PiggyBank } from "lucide-react"
 import { BlndRewardsCard } from "@/components/blnd-rewards-card"
@@ -33,6 +34,7 @@ function HomeContent() {
   } = useWalletState()
   const [isDemoMode, setIsDemoMode] = useState(false)
   const { capture } = useAnalytics()
+  const { preferences: displayPreferences } = useDisplayPreferences()
 
   // Handle pull-to-refresh
   const handleRefresh = useCallback(async () => {
@@ -149,7 +151,8 @@ function HomeContent() {
     balanceHistoryQueries,
     backstopBalanceHistoryQuery,
     uniqueAssetAddresses,
-    historicalPrices.hasHistoricalData ? historicalPrices : undefined
+    historicalPrices.hasHistoricalData ? historicalPrices : undefined,
+    displayPreferences.showPriceChanges  // When false, chart uses current prices instead of historical
   )
 
   // Fetch historical yield breakdown data for tooltips

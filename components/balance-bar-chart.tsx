@@ -605,6 +605,11 @@ export const BalanceBarChart = memo(function BalanceBarChart({
     }
   }, [chartData])
 
+  // Check if there's any borrow data to render the borrow bar
+  const hasBorrowData = useMemo(() => {
+    return chartData.some((d) => d.borrow > 0)
+  }, [chartData])
+
   // Calculate and report period yield using correct formula:
   // Period Yield = End Balance - Start Balance - Net Cash Flow
   useEffect(() => {
@@ -740,9 +745,13 @@ export const BalanceBarChart = memo(function BalanceBarChart({
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
               data={chartData}
-              margin={{ top: 0, right: 12, left: 12, bottom: 28 }}
-              barCategoryGap="2%"
-              barGap={1}
+              margin={{ top: 0, right: 0, left: 0, bottom: 28 }}
+              barCategoryGap={
+                !hasBorrowData
+                  ? (chartData.length <= 3 ? "25%" : chartData.length <= 5 ? "18%" : "20%")
+                  : (chartData.length <= 3 ? "20%" : chartData.length <= 5 ? "10%" : "5%")
+              }
+              barGap={4}
             >
               <defs>
                 <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
@@ -825,7 +834,7 @@ export const BalanceBarChart = memo(function BalanceBarChart({
                 </Bar>
               )}
 
-              {selectedPeriod !== "Projection" && (
+              {selectedPeriod !== "Projection" && hasBorrowData && (
                 <Bar
                   dataKey="borrow"
                   radius={4}
