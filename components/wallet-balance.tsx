@@ -594,6 +594,10 @@ const WalletBalanceComponent = ({ data, chartData, publicKey, balanceHistoryData
     showSign: true,
   })
 
+  // Check if we're loading period-specific data for a period that requires API
+  // When loading, we don't want to show the all-time fallback value
+  const isLoadingPeriodData = (selectedPeriod !== "All" && selectedPeriod !== "Projection") && periodYieldBreakdownAPI.isLoading
+
   // Use period-specific percentage gain instead of total percentage
   const percentageGain = periodPercentageGain
   const showPercentageGain = Number.isFinite(percentageGain) && hasSignificantAmount(displayYield)
@@ -672,7 +676,12 @@ const WalletBalanceComponent = ({ data, chartData, publicKey, balanceHistoryData
           )}
         </div>
         <div className="flex items-center gap-1.5 flex-wrap">
-          {!isDemoMode && (
+          {isLoadingPeriodData ? (
+            <div className="flex items-center gap-1.5">
+              <Skeleton className="h-5 w-20" />
+              <Skeleton className="h-5 w-12" />
+            </div>
+          ) : !isDemoMode && (
             (balanceHistoryData?.earningsStats?.currentAPY && balanceHistoryData.earningsStats.currentAPY > 0) ||
             (!periodYieldBreakdownAPI.isLoading && periodYieldBreakdownAPI.totals.valueNow > 0) ||
             (backstopPositions && backstopPositions.some(bp => bp.lpTokens > 0))
