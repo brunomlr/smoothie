@@ -25,9 +25,9 @@ export interface DepositEvent {
 }
 
 export interface HistoricalYieldBreakdown {
-  // Cost basis (what you paid)
-  costBasisHistorical: number      // Sum of deposits - withdrawals at historical prices
-  weightedAvgDepositPrice: number  // Weighted average price of deposits
+  // Cost basis (what you paid) - uses AVERAGE COST METHOD
+  costBasisHistorical: number      // Cost of remaining tokens at average deposit price
+  weightedAvgDepositPrice: number  // Actual average price paid for all deposits
   netDepositedTokens: number       // Tokens deposited - withdrawn
 
   // Protocol yield (what you earned from lending/backstop)
@@ -46,12 +46,18 @@ export interface HistoricalYieldBreakdown {
 
 /**
  * Calculate yield breakdown separating protocol earnings from price changes.
+ * Uses AVERAGE COST METHOD for accurate cost basis calculation.
  *
  * Key insight:
- * - Cost basis = what you deposited, valued at deposit-time prices
+ * - Avg deposit price = total USD deposited / total tokens deposited
+ * - Cost basis = remaining tokens × avg deposit price (withdrawals reduce at avg cost)
  * - Current value = current balance × current SDK price
  * - Protocol yield = tokens earned (balance - net deposits) × current price
- * - Price change = net deposited tokens × (current price - weighted avg deposit price)
+ * - Price change = net deposited tokens × (current price - avg deposit price)
+ *
+ * This method ensures the "weighted average price" shown to users matches
+ * the actual price they paid, rather than inflated values caused by
+ * withdrawals at different market prices.
  *
  * @param currentBalance Current token balance from SDK
  * @param currentPrice Current token price from SDK (ALWAYS use SDK, not DB)
@@ -64,20 +70,23 @@ export function calculateHistoricalYieldBreakdown(
   deposits: DepositEvent[],
   withdrawals: DepositEvent[],
 ): HistoricalYieldBreakdown {
-  // 1. Calculate cost basis at historical deposit prices
+  // 1. Calculate totals
   const totalDepositedUsd = deposits.reduce((sum, d) => sum + d.usdValue, 0)
-  const totalWithdrawnUsd = withdrawals.reduce((sum, w) => sum + w.usdValue, 0)
-  const costBasisHistorical = totalDepositedUsd - totalWithdrawnUsd
-
-  // 2. Calculate net tokens deposited
   const totalDepositedTokens = deposits.reduce((sum, d) => sum + d.tokens, 0)
   const totalWithdrawnTokens = withdrawals.reduce((sum, w) => sum + w.tokens, 0)
   const netDepositedTokens = totalDepositedTokens - totalWithdrawnTokens
 
-  // 3. Calculate weighted average deposit price
-  const weightedAvgDepositPrice = netDepositedTokens > 0
-    ? costBasisHistorical / netDepositedTokens
+  // 2. Calculate weighted average deposit price (AVERAGE COST METHOD)
+  // This is the actual average price paid for deposits, regardless of withdrawals
+  const weightedAvgDepositPrice = totalDepositedTokens > 0
+    ? totalDepositedUsd / totalDepositedTokens
     : currentPrice // Fallback to current if no deposits
+
+  // 3. Calculate cost basis using AVERAGE COST METHOD
+  // Withdrawals reduce cost basis at the average deposit price, not at withdrawal-time market price
+  // This prevents confusing "average prices" that exceed the asset's historical max price
+  const costRemovedByWithdrawals = totalWithdrawnTokens * weightedAvgDepositPrice
+  const costBasisHistorical = totalDepositedUsd - costRemovedByWithdrawals
 
   // 4. Calculate protocol yield (tokens earned from APY)
   const protocolYieldTokens = currentBalance - netDepositedTokens

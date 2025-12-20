@@ -90,17 +90,21 @@ export async function GET(request: NextRequest) {
       // Skip if no events
       if (deposits.length === 0 && withdrawals.length === 0) continue
 
-      // Calculate net tokens (we need current balance from SDK to compute yield)
-      // For now, calculate just the cost basis from events
-      const netDepositedTokens = deposits.reduce((sum, d) => sum + d.tokens, 0)
-        - withdrawals.reduce((sum, w) => sum + w.tokens, 0)
+      // Calculate using AVERAGE COST METHOD
+      // This ensures the weighted average price reflects actual prices paid
+      const totalDepositedUsd = deposits.reduce((sum, d) => sum + d.usdValue, 0)
+      const totalDepositedTokens = deposits.reduce((sum, d) => sum + d.tokens, 0)
+      const totalWithdrawnTokens = withdrawals.reduce((sum, w) => sum + w.tokens, 0)
+      const netDepositedTokens = totalDepositedTokens - totalWithdrawnTokens
 
-      const costBasisHistorical = deposits.reduce((sum, d) => sum + d.usdValue, 0)
-        - withdrawals.reduce((sum, w) => sum + w.usdValue, 0)
-
-      const weightedAvgPrice = netDepositedTokens > 0
-        ? costBasisHistorical / netDepositedTokens
+      // Weighted average deposit price = total USD deposited / total tokens deposited
+      const weightedAvgPrice = totalDepositedTokens > 0
+        ? totalDepositedUsd / totalDepositedTokens
         : sdkPrice
+
+      // Cost basis = remaining tokens × avg deposit price (withdrawals reduce at avg cost)
+      const costRemovedByWithdrawals = totalWithdrawnTokens * weightedAvgPrice
+      const costBasisHistorical = totalDepositedUsd - costRemovedByWithdrawals
 
       // We don't have current balance here (it comes from SDK on client side)
       // So we'll just return the cost basis data and let client calculate the full breakdown
