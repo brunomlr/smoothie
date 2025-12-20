@@ -19,8 +19,8 @@ import type { PoolProjectionInput } from "@/lib/chart-utils"
 import { useLiveBalance } from "@/hooks/use-live-balance"
 import { useUserActions } from "@/hooks/use-user-actions"
 import { FormattedBalance } from "@/components/formatted-balance"
-import { CurrencySelector } from "@/components/currency-selector"
 import { useCurrencyPreference } from "@/hooks/use-currency-preference"
+import { useDisplayPreferences } from "@/contexts/display-preferences-context"
 import { usePeriodYieldBreakdownAPI } from "@/hooks/use-period-yield-breakdown-api"
 import type { PeriodType as APIPeriodType } from "@/app/api/period-yield-breakdown/route"
 import type { ChartHistoricalPrices } from "@/hooks/use-chart-historical-prices"
@@ -207,7 +207,10 @@ const WalletBalanceComponent = ({ data, chartData, publicKey, balanceHistoryData
   const [selectedPeriod, setSelectedPeriod] = useState<TimePeriod>("All")
 
   // Currency preference for multi-currency display
-  const { currency, setCurrency, format: formatInCurrency, convert: convertToCurrency } = useCurrencyPreference()
+  const { currency, format: formatInCurrency, convert: convertToCurrency } = useCurrencyPreference()
+
+  // Display preferences (show price changes toggle)
+  const { preferences: displayPreferences } = useDisplayPreferences()
 
   // Use dummy data when in demo mode
   const activeData = isDemoMode ? DUMMY_DATA : data
@@ -454,16 +457,24 @@ const WalletBalanceComponent = ({ data, chartData, publicKey, balanceHistoryData
     }
   }, [displayChartData, selectedPeriod, initialBalance, totalYield])
 
-  // Display yield based on selected period
-  // Prefer API data when available (more accurate), fallback to chart-based calculation
+  // Display yield based on selected period and display preferences
+  // When showPriceChanges is OFF, show only protocol yield; when ON, show total (yield + price change)
   const displayYield = useMemo(() => {
-    // For periods with API data, use the API's totalEarnedUsd (includes proper price change calculation)
+    // For periods with API data, use the API values
     if (!periodYieldBreakdownAPI.isLoading && periodYieldBreakdownAPI.totals.valueAtStart > 0) {
-      return periodYieldBreakdownAPI.totals.totalEarnedUsd
+      return displayPreferences.showPriceChanges
+        ? periodYieldBreakdownAPI.totals.totalEarnedUsd
+        : periodYieldBreakdownAPI.totals.protocolYieldUsd
     }
-    // Fallback to chart-based calculation
+    // Secondary fallback: use yieldBreakdown prop if available (for All Time)
+    if (yieldBreakdown && yieldBreakdown.totalCostBasisHistorical > 0) {
+      return displayPreferences.showPriceChanges
+        ? yieldBreakdown.totalEarnedUsd
+        : yieldBreakdown.totalProtocolYieldUsd
+    }
+    // Final fallback to chart-based calculation (only has total, not breakdown)
     return calculatedPeriodYield
-  }, [periodYieldBreakdownAPI.isLoading, periodYieldBreakdownAPI.totals, calculatedPeriodYield])
+  }, [periodYieldBreakdownAPI.isLoading, periodYieldBreakdownAPI.totals, calculatedPeriodYield, displayPreferences.showPriceChanges, yieldBreakdown])
 
   // Derive cost basis from SDK: costBasis = totalYield / (growthPercentage / 100)
   const costBasis = useMemo(() => {
@@ -476,10 +487,27 @@ const WalletBalanceComponent = ({ data, chartData, publicKey, balanceHistoryData
   // Calculate period-specific percentage gain
   // All periods use: periodYield / costBasis * 100
   // This ensures consistency - when all data is within 1Y, "All" and "1Y" show same percentage
+  // When showPriceChanges is OFF, show only protocol yield percentage
   const periodPercentageGain = useMemo(() => {
     // For periods with API data, use the API's percentage
     if (!periodYieldBreakdownAPI.isLoading && periodYieldBreakdownAPI.totals.valueAtStart > 0) {
-      return periodYieldBreakdownAPI.totals.totalEarnedPercent
+      if (displayPreferences.showPriceChanges) {
+        return periodYieldBreakdownAPI.totals.totalEarnedPercent
+      }
+      // Calculate yield-only percentage
+      const valueAtStart = periodYieldBreakdownAPI.totals.valueAtStart
+      if (valueAtStart > 0) {
+        return (periodYieldBreakdownAPI.totals.protocolYieldUsd / valueAtStart) * 100
+      }
+      return 0
+    }
+
+    // Secondary fallback: use yieldBreakdown prop if available (for All Time)
+    if (yieldBreakdown && yieldBreakdown.totalCostBasisHistorical > 0) {
+      if (displayPreferences.showPriceChanges) {
+        return (yieldBreakdown.totalEarnedUsd / yieldBreakdown.totalCostBasisHistorical) * 100
+      }
+      return (yieldBreakdown.totalProtocolYieldUsd / yieldBreakdown.totalCostBasisHistorical) * 100
     }
 
     if (costBasis <= 0) {
@@ -497,16 +525,20 @@ const WalletBalanceComponent = ({ data, chartData, publicKey, balanceHistoryData
     }
 
     return (calculatedPeriodYield / costBasis) * 100
-  }, [selectedPeriod, calculatedPeriodYield, activeData.growthPercentage, costBasis, periodYieldBreakdownAPI.isLoading, periodYieldBreakdownAPI.totals])
+  }, [selectedPeriod, calculatedPeriodYield, activeData.growthPercentage, costBasis, periodYieldBreakdownAPI.isLoading, periodYieldBreakdownAPI.totals, displayPreferences.showPriceChanges, yieldBreakdown])
 
   // Get period label for yield display
-  const periodLabel = {
-    "1W": "week",
-    "1M": "month",
-    "1Y": "year",
-    "All": "total",
-    "Projection": "total",
-  }[selectedPeriod]
+  // When showPriceChanges is OFF, show "yield" instead of "total"
+  const periodLabel = useMemo(() => {
+    const labels = {
+      "1W": "week",
+      "1M": "month",
+      "1Y": "year",
+      "All": displayPreferences.showPriceChanges ? "total" : "yield",
+      "Projection": displayPreferences.showPriceChanges ? "total" : "yield",
+    }
+    return labels[selectedPeriod]
+  }, [selectedPeriod, displayPreferences.showPriceChanges])
 
   // Calculate actual period days for tooltip (limited by first activity date)
   const actualPeriodDays = useMemo(() => {
@@ -574,41 +606,38 @@ const WalletBalanceComponent = ({ data, chartData, publicKey, balanceHistoryData
   return (
     <div className="@container/card">
       <div className="flex flex-col space-y-1.5 pt-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {/* Current APY from SDK (primary) */}
-            {!isDemoMode && hasNonZeroPercentage(activeData.apyPercentage) && (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger>
-                    <Badge variant="outline" className="text-xs py-0.5 px-2 whitespace-nowrap bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border-gray-300 dark:border-gray-600">
-                      <TrendingUp className="mr-1 h-3 w-3" />
-                      {formatPercentage(activeData.apyPercentage)}% APY
-                    </Badge>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Current weighted average APY from pool positions</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            )}
-            {isDemoMode && (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger>
-                    <Badge variant="outline" className="text-xs py-0.5 px-2 whitespace-nowrap bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border-gray-300 dark:border-gray-600">
-                      <TrendingUp className="mr-1 h-3 w-3" />
-                      {formatPercentage(DUMMY_DATA.apyPercentage)}% APY
-                    </Badge>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Demo APY</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            )}
-          </div>
-          <CurrencySelector value={currency} onChange={setCurrency} />
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {/* Current APY from SDK (primary) */}
+          {!isDemoMode && hasNonZeroPercentage(activeData.apyPercentage) && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger>
+                  <Badge variant="outline" className="text-xs py-0.5 px-2 whitespace-nowrap bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border-gray-300 dark:border-gray-600">
+                    <TrendingUp className="mr-1 h-3 w-3" />
+                    {formatPercentage(activeData.apyPercentage)}% APY
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Current weighted average APY from pool positions</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+          {isDemoMode && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger>
+                  <Badge variant="outline" className="text-xs py-0.5 px-2 whitespace-nowrap bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border-gray-300 dark:border-gray-600">
+                    <TrendingUp className="mr-1 h-3 w-3" />
+                    {formatPercentage(DUMMY_DATA.apyPercentage)}% APY
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Demo APY</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
         </div>
         <div className="flex items-end gap-2 flex-wrap">
           <h3

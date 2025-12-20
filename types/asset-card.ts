@@ -4,9 +4,9 @@
  */
 
 export interface YieldBreakdown {
-  // Cost basis (what you paid)
-  costBasisHistorical: number;      // Sum of deposits - withdrawals at historical prices
-  weightedAvgDepositPrice: number;  // Weighted average price of deposits
+  // Cost basis (what you paid) - uses AVERAGE COST METHOD
+  costBasisHistorical: number;      // Cost of remaining tokens at average deposit price
+  weightedAvgDepositPrice: number;  // Actual average price paid for all deposits
   netDepositedTokens: number;       // Tokens deposited - withdrawn
 
   // Protocol yield (what you earned from lending/backstop)

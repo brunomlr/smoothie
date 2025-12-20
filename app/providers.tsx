@@ -4,6 +4,7 @@ import * as React from "react"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { ThemeProvider as NextThemesProvider } from "next-themes"
 import { CurrencyProvider } from "@/contexts/currency-context"
+import { DisplayPreferencesProvider } from "@/contexts/display-preferences-context"
 import posthog from "posthog-js"
 
 if (typeof window !== "undefined" && process.env.NEXT_PUBLIC_POSTHOG_KEY) {
@@ -40,7 +41,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
         disableTransitionOnChange
       >
         <CurrencyProvider>
-          {children}
+          <DisplayPreferencesProvider>
+            {children}
+          </DisplayPreferencesProvider>
         </CurrencyProvider>
       </NextThemesProvider>
     </QueryClientProvider>

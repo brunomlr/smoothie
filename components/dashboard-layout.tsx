@@ -1,6 +1,8 @@
 "use client"
 
 import Image from "next/image"
+import Link from "next/link"
+import { Settings } from "lucide-react"
 import { WalletSelector } from "@/components/wallet-selector"
 import { PullToRefresh } from "@/components/pull-to-refresh"
 import { Footer } from "@/components/footer"
@@ -47,13 +49,24 @@ export function DashboardLayout({
     <div className="min-h-screen bg-background">
       <header className="fixed top-0 left-0 right-0 z-50 bg-background shadow-[0_4px_6px_0px_oklch(0.145_0_0),0_8px_20px_-2px_oklch(0.145_0_0)] dark:shadow-[0_4px_6px_0px_oklch(0.145_0_0),0_8px_20px_-2px_oklch(0.145_0_0)]">
         <div className="container max-w-4xl mx-auto px-4 py-1.5 sm:py-2 flex items-center justify-between gap-2">
+          {/* Icon logo for small mobile */}
+          <Image
+            src="/logo/logo-icon.png"
+            alt="Smoothie"
+            width={0}
+            height={0}
+            sizes="100vw"
+            className="h-12 w-auto sm:hidden"
+            priority
+          />
+          {/* Full logo for larger screens */}
           <Image
             src="/logo/logo.png"
             alt="Smoothie"
             width={0}
             height={0}
             sizes="100vw"
-            className="h-10 sm:h-12 w-auto"
+            className="hidden sm:block h-12 w-auto"
             priority
           />
           <div className="flex items-center gap-2">
@@ -64,6 +77,12 @@ export function DashboardLayout({
               onConnectWallet={onConnectWallet}
               onDisconnect={onDisconnect}
             />
+            <Link
+              href="/settings"
+              className="flex items-center justify-center w-9 h-9 rounded-full hover:bg-muted transition-colors"
+            >
+              <Settings className="h-5 w-5 text-muted-foreground" />
+            </Link>
           </div>
         </div>
       </header>

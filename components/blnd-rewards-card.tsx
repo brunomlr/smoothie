@@ -16,6 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { useUserActions } from "@/hooks/use-user-actions"
 import { fetchWithTimeout } from "@/lib/fetch-utils"
 import { useCurrencyPreference } from "@/hooks/use-currency-preference"
+import { useDisplayPreferences } from "@/contexts/display-preferences-context"
 
 interface BackstopPositionData {
   poolId: string
@@ -61,6 +62,9 @@ export function BlndRewardsCard({
 
   // Currency preference for multi-currency display
   const { format: formatInCurrency } = useCurrencyPreference()
+
+  // Display preferences (BLND historical prices toggle)
+  const { preferences: displayPreferences } = useDisplayPreferences()
 
   const formatUsd = (value: number) => {
     if (!Number.isFinite(value)) return formatInCurrency(0)
@@ -110,6 +114,15 @@ export function BlndRewardsCard({
 
   // Get historical USD value for pool claims from API
   const poolClaimedUsdHistorical = backstopClaimsData?.total_claimed_blnd_usd_historical || 0
+
+  // Calculate pool claimed USD based on preference (historical vs current price)
+  const poolClaimedUsdDisplay = useMemo(() => {
+    if (displayPreferences.useHistoricalBlndPrices) {
+      return poolClaimedUsdHistorical
+    }
+    // Use current price for all claims
+    return poolClaimedBlnd * (blndPrice || 0)
+  }, [displayPreferences.useHistoricalBlndPrices, poolClaimedUsdHistorical, poolClaimedBlnd, blndPrice])
 
   // Calculate total claimed BLND from backstop emissions (LP tokens → BLND)
   const backstopClaimedBlnd = useMemo(() => {
@@ -355,7 +368,7 @@ export function BlndRewardsCard({
                 <div className="tabular-nums">{formatNumber(totalClaimedBlnd, 2)}</div>
                 {blndPrice && totalClaimedBlnd > 0 && (
                   <div className="text-xs font-normal">
-                    {formatUsd(poolClaimedUsdHistorical + (backstopClaimedBlnd * blndPrice))}
+                    {formatUsd(poolClaimedUsdDisplay + (backstopClaimedBlnd * blndPrice))}
                   </div>
                 )}
               </div>
@@ -378,8 +391,8 @@ export function BlndRewardsCard({
                         <TooltipTrigger>
                           <span className="text-muted-foreground ml-2 cursor-help border-b border-dotted border-muted-foreground/50">
                             ({formatUsd(
-                              // Pending uses current price, claimed uses historical prices
-                              (totalPendingBlnd * blndPrice) + poolClaimedUsdHistorical + (backstopClaimedBlnd * blndPrice)
+                              // Pending uses current price, claimed uses historical or current based on preference
+                              (totalPendingBlnd * blndPrice) + poolClaimedUsdDisplay + (backstopClaimedBlnd * blndPrice)
                             )})
                           </span>
                         </TooltipTrigger>
@@ -392,7 +405,7 @@ export function BlndRewardsCard({
                             {poolClaimedBlnd > 0 && (
                               <div className="flex justify-between gap-4">
                                 <span className="text-zinc-400">Claimed - Pool ({formatNumber(poolClaimedBlnd, 2)} BLND)</span>
-                                <span className="text-zinc-200">{formatUsd(poolClaimedUsdHistorical)}</span>
+                                <span className="text-zinc-200">{formatUsd(poolClaimedUsdDisplay)}</span>
                               </div>
                             )}
                             {backstopClaimedBlnd > 0 && (
@@ -402,7 +415,9 @@ export function BlndRewardsCard({
                               </div>
                             )}
                             <div className="border-t border-zinc-700 pt-1 mt-1 text-[10px] text-zinc-500">
-                              Pool claims valued at price when claimed
+                              {displayPreferences.useHistoricalBlndPrices
+                                ? "Pool claims valued at price when claimed"
+                                : "All BLND valued at current price"}
                             </div>
                           </div>
                         </TooltipContent>

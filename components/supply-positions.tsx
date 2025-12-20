@@ -5,6 +5,7 @@ import { TokenLogo } from "@/components/token-logo"
 import { formatAmount } from "@/lib/format-utils"
 import { DEMO_SUPPLY_POSITIONS } from "@/lib/demo-data"
 import { useCurrencyPreference } from "@/hooks/use-currency-preference"
+import { useDisplayPreferences } from "@/contexts/display-preferences-context"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
@@ -69,6 +70,9 @@ export function SupplyPositions({
 }: SupplyPositionsProps) {
   // Currency preference for multi-currency display
   const { format: formatInCurrency } = useCurrencyPreference()
+
+  // Display preferences (show price changes toggle)
+  const { preferences: displayPreferences } = useDisplayPreferences()
 
   const formatUsdAmount = (value: number) => {
     if (!Number.isFinite(value)) return formatInCurrency(0)
@@ -303,13 +307,21 @@ export function SupplyPositions({
                             </p>
                             {hasSignificantYield && (
                               asset.yieldBreakdown ? (() => {
-                                const pct = asset.yieldBreakdown.totalEarnedPercent
+                                // Show total (yield + price change) when showPriceChanges is ON, otherwise just yield
+                                const displayValue = displayPreferences.showPriceChanges
+                                  ? asset.yieldBreakdown.totalEarnedUsd
+                                  : asset.yieldBreakdown.protocolYieldUsd
+                                const pct = displayPreferences.showPriceChanges
+                                  ? asset.yieldBreakdown.totalEarnedPercent
+                                  : (asset.yieldBreakdown.costBasisHistorical > 0
+                                      ? (asset.yieldBreakdown.protocolYieldUsd / asset.yieldBreakdown.costBasisHistorical) * 100
+                                      : 0)
                                 const formattedPct = pct !== 0 ? ` (${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%)` : ''
                                 return (
                                 <Tooltip>
                                   <TooltipTrigger asChild>
-                                    <p className={`text-xs cursor-pointer flex items-center gap-1 ${asset.yieldBreakdown.totalEarnedUsd >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
-                                      {formatYieldValue(asset.yieldBreakdown.totalEarnedUsd)}{formattedPct}
+                                    <p className={`text-xs cursor-pointer flex items-center gap-1 ${displayValue >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                                      {formatYieldValue(displayValue)}{formattedPct}
                                       <Info className="h-3 w-3" />
                                     </p>
                                   </TooltipTrigger>
@@ -421,13 +433,21 @@ export function SupplyPositions({
 
                               // Show tooltip if breakdown is available
                               if (backstopPosition.yieldBreakdown) {
-                                const pct = backstopPosition.yieldBreakdown.totalEarnedPercent
+                                // Show total (yield + price change) when showPriceChanges is ON, otherwise just yield
+                                const displayValue = displayPreferences.showPriceChanges
+                                  ? backstopPosition.yieldBreakdown.totalEarnedUsd
+                                  : backstopPosition.yieldBreakdown.protocolYieldUsd
+                                const pct = displayPreferences.showPriceChanges
+                                  ? backstopPosition.yieldBreakdown.totalEarnedPercent
+                                  : (backstopPosition.yieldBreakdown.costBasisHistorical > 0
+                                      ? (backstopPosition.yieldBreakdown.protocolYieldUsd / backstopPosition.yieldBreakdown.costBasisHistorical) * 100
+                                      : 0)
                                 const formattedPct = pct !== 0 ? ` (${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%)` : ''
                                 return (
                                   <Tooltip>
                                     <TooltipTrigger asChild>
-                                      <p className={`text-xs cursor-pointer flex items-center gap-1 ${backstopPosition.yieldBreakdown.totalEarnedUsd >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
-                                        {formatYieldValue(backstopPosition.yieldBreakdown.totalEarnedUsd)}{formattedPct}
+                                      <p className={`text-xs cursor-pointer flex items-center gap-1 ${displayValue >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                                        {formatYieldValue(displayValue)}{formattedPct}
                                         <Info className="h-3 w-3" />
                                       </p>
                                     </TooltipTrigger>
