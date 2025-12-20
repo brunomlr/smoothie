@@ -20,7 +20,7 @@ import {
   AlertTriangle,
   Circle,
   Shield,
-  Settings,
+  SlidersHorizontal,
 } from "lucide-react"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -881,7 +881,7 @@ export const BalanceBarChart = memo(function BalanceBarChart({
                 className="right-3 p-1.5 rounded-md hover:bg-accent transition-colors"
                 aria-label="Projection settings"
               >
-                <Settings className="h-4 w-4 text-muted-foreground" />
+                <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
               </button>
             </PopoverTrigger>
             <PopoverContent className="w-72" align="end">
