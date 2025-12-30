@@ -392,6 +392,37 @@ function HomeContent() {
             lpTokenPrice={lpTokenPrice}
           />
 
+          {(isLoading || totalEmissions > 0 || backstopPositions.some(bp => bp.lpTokens > 0) || isDemoMode) && (
+            <BlndRewardsCard
+              publicKey={activeWallet.publicKey}
+              pendingEmissions={isDemoMode ? 156.75 : totalEmissions}
+              pendingSupplyEmissions={isDemoMode ? 120.5 : blendSnapshot?.totalSupplyEmissions}
+              pendingBorrowEmissions={isDemoMode ? 36.25 : blendSnapshot?.totalBorrowEmissions}
+              backstopClaimableBlnd={isDemoMode ? 25.5 : backstopPositions.reduce((sum, bp) => sum + (bp.claimableBlnd || 0), 0)}
+              blndPrice={isDemoMode ? 0.0125 : blndPrice}
+              blndPerLpToken={isDemoMode ? 0.85 : (backstopPositions[0]?.blndAmount && backstopPositions[0]?.lpTokens
+                ? backstopPositions[0].blndAmount / backstopPositions[0].lpTokens
+                : 0)}
+              blndApy={isDemoMode ? 0.91 : balanceData.blndApy}
+              totalPositionUsd={isDemoMode ? 50000 : ((blendSnapshot?.totalSupplyUsd || 0) + (blendSnapshot?.totalBackstopUsd || 0))}
+              isLoading={isDemoMode ? false : isLoading}
+              perPoolEmissions={isDemoMode ? { "demo-pool-1": 156.75 } : blendSnapshot?.perPoolEmissions}
+              perPoolSupplyEmissions={isDemoMode ? { "demo-pool-1": 120.5 } : blendSnapshot?.perPoolSupplyEmissions}
+              perPoolBorrowEmissions={isDemoMode ? { "demo-pool-1": 36.25 } : blendSnapshot?.perPoolBorrowEmissions}
+              backstopPositions={isDemoMode ? [{ poolId: "demo-pool-1", poolName: "YieldBlox", claimableBlnd: 25.5 }] : backstopPositions.map(bp => ({
+                poolId: bp.poolId,
+                poolName: bp.poolName,
+                claimableBlnd: bp.claimableBlnd,
+              }))}
+              poolNames={isDemoMode ? { "demo-pool-1": "YieldBlox", "demo-pool-2": "Blend" } : (blendSnapshot?.positions?.reduce((acc, pos) => {
+                if (pos.poolId && pos.poolName) {
+                  acc[pos.poolId] = pos.poolName
+                }
+                return acc
+              }, {} as Record<string, string>) || {})}
+            />
+          )}
+
           <Tabs defaultValue="positions" className="w-full" onValueChange={(tab) => capture('tab_changed', { tab })}>
             <TabsList className="grid w-full grid-cols-3 h-10 sm:h-11 mb-2 bg-transparent border border-gray-500/20 rounded-lg">
               <TabsTrigger value="positions" className="gap-1.5 text-xs sm:text-sm">
@@ -409,32 +440,6 @@ function HomeContent() {
             </TabsList>
 
             <TabsContent value="positions" className="space-y-4">
-              {(isLoading || totalEmissions > 0 || backstopPositions.some(bp => bp.lpTokens > 0) || isDemoMode) && (
-                <BlndRewardsCard
-                  publicKey={activeWallet.publicKey}
-                  pendingEmissions={isDemoMode ? 156.75 : totalEmissions}
-                  backstopClaimableBlnd={isDemoMode ? 25.5 : backstopPositions.reduce((sum, bp) => sum + (bp.claimableBlnd || 0), 0)}
-                  blndPrice={isDemoMode ? 0.0125 : blndPrice}
-                  blndPerLpToken={isDemoMode ? 0.85 : (backstopPositions[0]?.blndAmount && backstopPositions[0]?.lpTokens
-                    ? backstopPositions[0].blndAmount / backstopPositions[0].lpTokens
-                    : 0)}
-                  blndApy={isDemoMode ? 0.91 : balanceData.blndApy}
-                  isLoading={isDemoMode ? false : isLoading}
-                  perPoolEmissions={isDemoMode ? { "demo-pool-1": 156.75 } : blendSnapshot?.perPoolEmissions}
-                  backstopPositions={isDemoMode ? [{ poolId: "demo-pool-1", poolName: "YieldBlox", claimableBlnd: 25.5 }] : backstopPositions.map(bp => ({
-                    poolId: bp.poolId,
-                    poolName: bp.poolName,
-                    claimableBlnd: bp.claimableBlnd,
-                  }))}
-                  poolNames={isDemoMode ? { "demo-pool-1": "YieldBlox", "demo-pool-2": "Blend" } : (blendSnapshot?.positions?.reduce((acc, pos) => {
-                    if (pos.poolId && pos.poolName) {
-                      acc[pos.poolId] = pos.poolName
-                    }
-                    return acc
-                  }, {} as Record<string, string>) || {})}
-                />
-              )}
-
               <PortfolioAllocationBar
                 positions={blendSnapshot?.positions || []}
                 backstopPositions={backstopPositions}

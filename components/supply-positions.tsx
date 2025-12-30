@@ -10,7 +10,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { Skeleton } from "@/components/ui/skeleton"
-import { TrendingUp, ChevronRight, Flame, Shield, Clock, Info } from "lucide-react"
+import { TrendingUp, ChevronRight, Flame, Shield, Clock, Info, CheckCircle } from "lucide-react"
 import type { AssetCardData } from "@/types/asset-card"
 
 interface Q4WChunkData {
@@ -40,6 +40,7 @@ interface BackstopPositionData {
   q4wExpiration: number | null
   q4wChunks: Q4WChunkData[]
   unlockedQ4wShares: bigint
+  unlockedQ4wLpTokens: number
   yieldBreakdown?: BackstopYieldBreakdown
 }
 
@@ -386,18 +387,12 @@ export function SupplyPositions({
                     if (!backstopPosition || backstopPosition.lpTokensUsd <= 0) return null
 
                     const hasQ4w = backstopPosition.q4wShares > BigInt(0)
-                    const hasUnlockedQ4w = backstopPosition.unlockedQ4wShares > BigInt(0)
-                    const q4wExpDate = backstopPosition.q4wExpiration && backstopPosition.q4wExpiration > 0
-                      ? new Date(backstopPosition.q4wExpiration * 1000)
-                      : null
-                    const isQ4wExpired = q4wExpDate && q4wExpDate <= new Date()
-                    // If no q4w array entries but we have totalQ4W, all shares are unlocked
-                    const allQ4wUnlocked = hasQ4w && !q4wExpDate && hasUnlockedQ4w
-                    // Format as "Xd Yh" (no minutes on home page)
+                    // Format time remaining for single locked chunk as "Xd Yh"
                     const timeRemaining = (() => {
-                      if (!q4wExpDate) return null
+                      if (backstopPosition.q4wChunks.length !== 1) return null
+                      const q4wExpDate = new Date(backstopPosition.q4wChunks[0].expiration * 1000)
                       const diff = q4wExpDate.getTime() - Date.now()
-                      if (diff <= 0) return "0d 0h"
+                      if (diff <= 0) return null
                       const days = Math.floor(diff / (1000 * 60 * 60 * 24))
                       const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
                       if (days > 0) return `${days}d ${hours}h`
@@ -493,42 +488,54 @@ export function SupplyPositions({
                               )
                             })()}
                             {hasQ4w && (
-                              <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
-                                <Clock className="h-3 w-3" />
-                                {isQ4wExpired || allQ4wUnlocked ? (
-                                  `${formatAmount(backstopPosition.q4wLpTokens, 2)} LP ready to withdraw`
-                                ) : backstopPosition.q4wChunks.length > 1 ? (
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <span className="underline decoration-dotted cursor-pointer">
-                                        {formatAmount(backstopPosition.q4wLpTokens, 2)} LP in {backstopPosition.q4wChunks.length} unlocks
-                                      </span>
-                                    </TooltipTrigger>
-                                    <TooltipContent className="p-2.5">
-                                      <p className="font-medium text-zinc-400 mb-1.5">Unlock Schedule</p>
-                                      <div className="space-y-1">
-                                        {backstopPosition.q4wChunks.map((chunk, i) => {
-                                          const chunkExpDate = new Date(chunk.expiration * 1000)
-                                          const diff = chunkExpDate.getTime() - Date.now()
-                                          const days = Math.floor(diff / (1000 * 60 * 60 * 24))
-                                          const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
-                                          const chunkTime = days > 0 ? `${days}d ${hours}h` : `${hours}h`
-                                          return (
-                                            <div key={i} className="flex justify-between gap-6">
-                                              <span className="font-mono">{formatAmount(chunk.lpTokens, 2)} LP</span>
-                                              <span className="text-zinc-400">{chunkTime}</span>
-                                            </div>
-                                          )
-                                        })}
-                                      </div>
-                                    </TooltipContent>
-                                  </Tooltip>
-                                ) : timeRemaining ? (
-                                  `${formatAmount(backstopPosition.q4wLpTokens, 2)} LP unlocks in ${timeRemaining}`
-                                ) : (
-                                  `${formatAmount(backstopPosition.q4wLpTokens, 2)} LP queued for withdrawal`
+                              <div className="text-xs text-amber-600 dark:text-amber-400 flex flex-col gap-0.5 mt-1">
+                                {/* Show queued LP with unlock schedule */}
+                                {backstopPosition.q4wChunks.length > 0 && (
+                                  <p className="flex items-center gap-1">
+                                    <Clock className="h-3 w-3" />
+                                    {backstopPosition.q4wChunks.length > 1 ? (
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <span className="underline decoration-dotted cursor-pointer">
+                                            {formatAmount(backstopPosition.q4wChunks.reduce((sum, c) => sum + c.lpTokens, 0), 2)} LP in {backstopPosition.q4wChunks.length} queued
+                                          </span>
+                                        </TooltipTrigger>
+                                        <TooltipContent className="p-2.5">
+                                          <p className="font-medium text-zinc-400 mb-1.5">Queued Withdrawals</p>
+                                          <div className="space-y-1">
+                                            {backstopPosition.q4wChunks.map((chunk, i) => {
+                                              const chunkExpDate = new Date(chunk.expiration * 1000)
+                                              const diff = chunkExpDate.getTime() - Date.now()
+                                              const days = Math.floor(diff / (1000 * 60 * 60 * 24))
+                                              const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
+                                              const chunkTime = diff > 0
+                                                ? (days > 0 ? `${days}d ${hours}h` : `${hours}h`)
+                                                : "Ready"
+                                              return (
+                                                <div key={i} className="flex justify-between gap-6">
+                                                  <span className="font-mono">{formatAmount(chunk.lpTokens, 2)} LP</span>
+                                                  <span className="text-zinc-400">{chunkTime}</span>
+                                                </div>
+                                              )
+                                            })}
+                                          </div>
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    ) : timeRemaining ? (
+                                      `${formatAmount(backstopPosition.q4wChunks[0].lpTokens, 2)} LP queued, ${timeRemaining}`
+                                    ) : (
+                                      `${formatAmount(backstopPosition.q4wChunks[0].lpTokens, 2)} LP queued`
+                                    )}
+                                  </p>
                                 )}
-                              </p>
+                                {/* Show ready to withdraw LP */}
+                                {backstopPosition.unlockedQ4wLpTokens > 0.001 && (
+                                  <p className="flex items-center gap-1 text-green-600 dark:text-green-400">
+                                    <CheckCircle className="h-3 w-3" />
+                                    {formatAmount(backstopPosition.unlockedQ4wLpTokens, 2)} LP ready to withdraw
+                                  </p>
+                                )}
+                              </div>
                             )}
                           </div>
                         </div>

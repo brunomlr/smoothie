@@ -1,9 +1,8 @@
 "use client"
 
-import { useState, useCallback, useEffect } from "react"
+import { useState, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { DollarSign, Flame } from "lucide-react"
-import { useAnalytics } from "@/hooks/use-analytics"
 import { useMetadata } from "@/hooks/use-metadata"
 import { useExplore } from "@/hooks/use-explore"
 import { ExploreFilters, FilterState } from "@/components/explore/explore-filters"
@@ -16,12 +15,6 @@ export default function ExplorePage() {
   const [showUsdPrimary, setShowUsdPrimary] = useState(false)
   const [offset, setOffset] = useState(0)
   const limit = 50
-  const { capture } = useAnalytics()
-
-  // Track page view
-  useEffect(() => {
-    capture('page_viewed', { page: 'explore' })
-  }, [capture])
 
   // Filter state
   const [filters, setFilters] = useState<FilterState>({
@@ -51,27 +44,17 @@ export default function ExplorePage() {
   })
 
   const handleFiltersChange = useCallback((newFilters: FilterState) => {
-    capture('explore_filters_applied', {
-      query: newFilters.query,
-      asset: newFilters.assetAddress,
-      pool: newFilters.poolId,
-      time_range: newFilters.timeRange,
-      event_types: newFilters.eventTypes
-    })
     setFilters(newFilters)
     setOffset(0) // Reset pagination when filters change
-  }, [capture])
+  }, [])
 
   const handlePageChange = useCallback((newOffset: number) => {
-    capture('explore_results_paginated', { offset: newOffset, limit })
     setOffset(newOffset)
-  }, [capture, limit])
+  }, [])
 
   const handleDisplayToggle = useCallback(() => {
-    const newMode = !showUsdPrimary
-    capture('explore_display_toggled', { mode: newMode ? 'usd' : 'token' })
-    setShowUsdPrimary(newMode)
-  }, [showUsdPrimary, capture])
+    setShowUsdPrimary(prev => !prev)
+  }, [])
 
   return (
     <div className="min-h-screen bg-background">

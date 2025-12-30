@@ -11,6 +11,7 @@ import {
   PoolOracle,
   PoolV1,
   PoolV2,
+  PoolUserEmissionData,
   PositionsEstimate,
   TokenMetadata,
   Version,
@@ -88,8 +89,9 @@ export interface BlendBackstopPosition {
   q4wLpTokens: number; // LP tokens value of queued shares (total)
   q4wLpTokensUsd: number; // USD value of queued shares (total)
   q4wExpiration: number | null; // Unix timestamp when closest Q4W unlocks
-  q4wChunks: Q4WChunk[]; // Individual Q4W chunks with their own amounts and expirations
+  q4wChunks: Q4WChunk[]; // Individual Q4W chunks with their own amounts and expirations (locked only)
   unlockedQ4wShares: bigint; // Shares ready to withdraw (past expiration)
+  unlockedQ4wLpTokens: number; // LP tokens ready to withdraw (past expiration)
   // APR/APY
   interestApr: number; // APR from pool interest (backstop's share of borrower interest)
   emissionApy: number; // APY from BLND emissions for this pool's backstop (in %)
@@ -135,7 +137,11 @@ export interface BlendWalletSnapshot {
   netApy: number | null;
   weightedBlndApy: number | null;
   totalEmissions: number; // Total claimable BLND emissions in tokens
-  perPoolEmissions: Record<string, number>; // Per-pool claimable BLND emissions
+  totalSupplyEmissions: number; // Claimable BLND from deposits
+  totalBorrowEmissions: number; // Claimable BLND from borrows
+  perPoolEmissions: Record<string, number>; // Per-pool claimable BLND emissions (total)
+  perPoolSupplyEmissions: Record<string, number>; // Per-pool claimable BLND from deposits
+  perPoolBorrowEmissions: Record<string, number>; // Per-pool claimable BLND from borrows
   blndPrice: number | null; // BLND price in USDC from backstop
   lpTokenPrice: number | null; // LP token price in USD from backstop
 }
@@ -537,6 +543,97 @@ function computeBorrowBlndEmissionApy(
   }
 }
 
+/**
+ * Emission breakdown result with supply and borrow separated
+ */
+interface EmissionBreakdown {
+  totalEmissions: number;
+  supplyEmissions: number;  // from deposits (bToken)
+  borrowEmissions: number;  // from loans (dToken)
+  perReserveSupply: Map<string, number>;  // assetId -> supply emissions
+  perReserveBorrow: Map<string, number>;  // assetId -> borrow emissions
+}
+
+/**
+ * Estimate emissions with breakdown by source (supply vs borrow).
+ * This replicates the SDK's estimateEmissions logic but returns the breakdown.
+ */
+function estimateEmissionsWithBreakdown(
+  user: PoolUser,
+  reserves: Reserve[]
+): EmissionBreakdown {
+  let supplyEmissions = 0;
+  let borrowEmissions = 0;
+  const perReserveSupply = new Map<string, number>();
+  const perReserveBorrow = new Map<string, number>();
+
+  for (const reserve of reserves) {
+    // Borrow emissions (dToken)
+    const dTokenId = reserve.getDTokenEmissionIndex();
+    const dTokenData = user.emissions.get(dTokenId);
+    const dTokenPosition = user.getLiabilityDTokens(reserve);
+
+    if (reserve.borrowEmissions && (dTokenData || dTokenPosition > BigInt(0))) {
+      let dTokenAccrual = 0;
+      if (dTokenData) {
+        dTokenAccrual = dTokenData.estimateAccrual(
+          reserve.borrowEmissions,
+          reserve.config.decimals,
+          dTokenPosition
+        );
+      } else if (dTokenPosition > BigInt(0)) {
+        // User position created before emissions started
+        const tempData = new PoolUserEmissionData(BigInt(0), BigInt(0));
+        dTokenAccrual = tempData.estimateAccrual(
+          reserve.borrowEmissions,
+          reserve.config.decimals,
+          dTokenPosition
+        );
+      }
+      if (dTokenAccrual > 0) {
+        borrowEmissions += dTokenAccrual;
+        perReserveBorrow.set(reserve.assetId, dTokenAccrual);
+      }
+    }
+
+    // Supply emissions (bToken)
+    const bTokenId = reserve.getBTokenEmissionIndex();
+    const bTokenData = user.emissions.get(bTokenId);
+    const bTokenPosition = user.getSupplyBTokens(reserve) + user.getCollateralBTokens(reserve);
+
+    if (reserve.supplyEmissions && (bTokenData || bTokenPosition > BigInt(0))) {
+      let bTokenAccrual = 0;
+      if (bTokenData) {
+        bTokenAccrual = bTokenData.estimateAccrual(
+          reserve.supplyEmissions,
+          reserve.config.decimals,
+          bTokenPosition
+        );
+      } else if (bTokenPosition > BigInt(0)) {
+        // User position created before emissions started
+        const tempData = new PoolUserEmissionData(BigInt(0), BigInt(0));
+        bTokenAccrual = tempData.estimateAccrual(
+          reserve.supplyEmissions,
+          reserve.config.decimals,
+          bTokenPosition
+        );
+      }
+      if (bTokenAccrual > 0) {
+        supplyEmissions += bTokenAccrual;
+        perReserveSupply.set(reserve.assetId, bTokenAccrual);
+      }
+    }
+  }
+
+  return {
+    totalEmissions: supplyEmissions + borrowEmissions,
+    supplyEmissions,
+    borrowEmissions,
+    perReserveSupply,
+    perReserveBorrow,
+  };
+}
+
 function buildPosition(
   snapshot: PoolSnapshot,
   reserve: Reserve,
@@ -730,7 +827,11 @@ function aggregateSnapshot(
     netApy,
     weightedBlndApy,
     totalEmissions: 0, // Will be set by fetchWalletBlendSnapshot
+    totalSupplyEmissions: 0, // Will be set by fetchWalletBlendSnapshot
+    totalBorrowEmissions: 0, // Will be set by fetchWalletBlendSnapshot
     perPoolEmissions: {}, // Will be set by fetchWalletBlendSnapshot
+    perPoolSupplyEmissions: {}, // Will be set by fetchWalletBlendSnapshot
+    perPoolBorrowEmissions: {}, // Will be set by fetchWalletBlendSnapshot
     blndPrice: null, // Will be set by fetchWalletBlendSnapshot
     lpTokenPrice: null, // Will be set by fetchWalletBlendSnapshot
   };
@@ -817,7 +918,11 @@ export async function fetchWalletBlendSnapshot(
       netApy: null,
       weightedBlndApy: null,
       totalEmissions: 0,
+      totalSupplyEmissions: 0,
+      totalBorrowEmissions: 0,
       perPoolEmissions: {},
+      perPoolSupplyEmissions: {},
+      perPoolBorrowEmissions: {},
       blndPrice: null,
       lpTokenPrice: null,
     };
@@ -872,7 +977,11 @@ async function fetchWalletBlendSnapshotInternal(
       netApy: null,
       weightedBlndApy: null,
       totalEmissions: 0,
+      totalSupplyEmissions: 0,
+      totalBorrowEmissions: 0,
       perPoolEmissions: {},
+      perPoolSupplyEmissions: {},
+      perPoolBorrowEmissions: {},
       blndPrice: null,
       lpTokenPrice: null,
     };
@@ -894,37 +1003,45 @@ async function fetchWalletBlendSnapshotInternal(
   const priceCache = new Map<string, PriceQuote | null>();
 
   // Calculate total emissions and per-reserve claimable BLND across all pools
+  // With breakdown by source: supply (deposits) vs borrow
   let totalEmissions = 0;
-  // Map: poolId -> assetId -> claimable BLND
+  let totalSupplyEmissions = 0;
+  let totalBorrowEmissions = 0;
+  // Map: poolId -> assetId -> claimable BLND (combined)
   const perReserveEmissions = new Map<string, Map<string, number>>();
   // Map: poolId -> total claimable BLND for that pool
   const perPoolEmissionsMap = new Map<string, number>();
+  // Map: poolId -> supply emissions for that pool
+  const perPoolSupplyEmissionsMap = new Map<string, number>();
+  // Map: poolId -> borrow emissions for that pool
+  const perPoolBorrowEmissionsMap = new Map<string, number>();
 
   for (const snapshot of snapshotsWithUsers) {
     if (!snapshot.user || !snapshot.pool) {
       continue;
     }
     try {
-      // estimateEmissions returns { emissions: number, claimedTokens: number[] }
-      // The emissions value is already a float (converted via FixedMath.toFloat in the SDK)
-      // claimedTokens[i] corresponds to reserves[i] - the claimable BLND for that reserve
       const reserves = Array.from(snapshot.pool.reserves.values());
-      const result = snapshot.user.estimateEmissions(reserves);
+      // Use our custom function that returns the breakdown
+      const breakdown = estimateEmissionsWithBreakdown(snapshot.user, reserves);
 
-      if (result && typeof result.emissions === 'number' && result.emissions > 0) {
-        totalEmissions += result.emissions;
-        // Store per-pool total emissions
-        perPoolEmissionsMap.set(snapshot.tracked.id, result.emissions);
+      if (breakdown.totalEmissions > 0) {
+        totalEmissions += breakdown.totalEmissions;
+        totalSupplyEmissions += breakdown.supplyEmissions;
+        totalBorrowEmissions += breakdown.borrowEmissions;
 
-        // Store per-reserve claimable amounts
+        // Store per-pool totals
+        perPoolEmissionsMap.set(snapshot.tracked.id, breakdown.totalEmissions);
+        perPoolSupplyEmissionsMap.set(snapshot.tracked.id, breakdown.supplyEmissions);
+        perPoolBorrowEmissionsMap.set(snapshot.tracked.id, breakdown.borrowEmissions);
+
+        // Store per-reserve claimable amounts (combined supply + borrow per asset)
         const poolEmissions = new Map<string, number>();
-        if (result.claimedTokens && Array.isArray(result.claimedTokens)) {
-          reserves.forEach((reserve, index) => {
-            const claimable = result.claimedTokens[index] ?? 0;
-            if (claimable > 0) {
-              poolEmissions.set(reserve.assetId, claimable);
-            }
-          });
+        for (const [assetId, amount] of breakdown.perReserveSupply) {
+          poolEmissions.set(assetId, (poolEmissions.get(assetId) ?? 0) + amount);
+        }
+        for (const [assetId, amount] of breakdown.perReserveBorrow) {
+          poolEmissions.set(assetId, (poolEmissions.get(assetId) ?? 0) + amount);
         }
         perReserveEmissions.set(snapshot.tracked.id, poolEmissions);
       }
@@ -1106,6 +1223,7 @@ async function fetchWalletBlendSnapshotInternal(
       // Convert shares to LP tokens
       const lpTokens = backstopPool.sharesToBackstopTokensFloat(userShares);
       const q4wLpTokens = backstopPool.sharesToBackstopTokensFloat(totalQ4wShares);
+      const unlockedQ4wLpTokens = backstopPool.sharesToBackstopTokensFloat(backstopUser.balance.unlockedQ4W);
 
       // Calculate USD values
       const tokenPrice = lpTokenPrice ?? 0;
@@ -1209,6 +1327,7 @@ async function fetchWalletBlendSnapshotInternal(
         q4wExpiration,
         q4wChunks,
         unlockedQ4wShares: backstopUser.balance.unlockedQ4W,
+        unlockedQ4wLpTokens,
         interestApr: Number.isFinite(interestApr) ? interestApr : 0,
         emissionApy: Number.isFinite(emissionApy) ? emissionApy : 0,
         blndEmissionsPerLpToken: Number.isFinite(blndEmissionsPerLpToken) ? blndEmissionsPerLpToken : 0,
@@ -1237,17 +1356,31 @@ async function fetchWalletBlendSnapshotInternal(
     estimatesResult.netApy
   );
 
-  // Convert per-pool emissions map to a plain object for serialization
+  // Convert per-pool emissions maps to plain objects for serialization
   const perPoolEmissions: Record<string, number> = {};
   perPoolEmissionsMap.forEach((value, key) => {
     perPoolEmissions[key] = value;
+  });
+
+  const perPoolSupplyEmissions: Record<string, number> = {};
+  perPoolSupplyEmissionsMap.forEach((value, key) => {
+    perPoolSupplyEmissions[key] = value;
+  });
+
+  const perPoolBorrowEmissions: Record<string, number> = {};
+  perPoolBorrowEmissionsMap.forEach((value, key) => {
+    perPoolBorrowEmissions[key] = value;
   });
 
   // Add total emissions, per-pool emissions, BLND price, and LP token price to snapshot
   return {
     ...snapshot,
     totalEmissions,
+    totalSupplyEmissions,
+    totalBorrowEmissions,
     perPoolEmissions,
+    perPoolSupplyEmissions,
+    perPoolBorrowEmissions,
     blndPrice,
     lpTokenPrice,
   };
