@@ -787,18 +787,24 @@ function aggregateSnapshot(
         ) / totalBorrowUsd
       : null;
 
-  // Weighted BLND APY includes both supply positions and backstop emissions
+  // Weighted BLND APY includes supply positions, borrow positions, and backstop emissions
   const supplyBlndValue = positions.reduce(
     (acc, position) => acc + position.supplyUsdValue * (position.blndApy || 0),
+    0
+  );
+  const borrowBlndValue = positions.reduce(
+    (acc, position) => acc + position.borrowUsdValue * (position.borrowBlndApy || 0),
     0
   );
   const backstopBlndValue = backstopPositions.reduce(
     (acc, bp) => acc + bp.lpTokensUsd * (bp.emissionApy || 0),
     0
   );
+  // Total position value earning BLND (supply + borrow + backstop)
+  const totalBlndEarningUsd = totalSupplyUsd + totalBorrowUsd + totalBackstopUsd;
   const weightedBlndApy =
-    totalPositionUsd > 0
-      ? (supplyBlndValue + backstopBlndValue) / totalPositionUsd
+    totalBlndEarningUsd > 0
+      ? (supplyBlndValue + borrowBlndValue + backstopBlndValue) / totalBlndEarningUsd
       : null;
 
   const computedNetApy =

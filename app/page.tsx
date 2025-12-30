@@ -404,7 +404,7 @@ function HomeContent() {
                 ? backstopPositions[0].blndAmount / backstopPositions[0].lpTokens
                 : 0)}
               blndApy={isDemoMode ? 0.91 : balanceData.blndApy}
-              totalPositionUsd={isDemoMode ? 50000 : ((blendSnapshot?.totalSupplyUsd || 0) + (blendSnapshot?.totalBackstopUsd || 0))}
+              totalPositionUsd={isDemoMode ? 50000 : ((blendSnapshot?.totalSupplyUsd || 0) + (blendSnapshot?.totalBorrowUsd || 0) + (blendSnapshot?.totalBackstopUsd || 0))}
               isLoading={isDemoMode ? false : isLoading}
               perPoolEmissions={isDemoMode ? { "demo-pool-1": 156.75 } : blendSnapshot?.perPoolEmissions}
               perPoolSupplyEmissions={isDemoMode ? { "demo-pool-1": 120.5 } : blendSnapshot?.perPoolSupplyEmissions}
