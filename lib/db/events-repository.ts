@@ -2179,16 +2179,6 @@ export class EventsRepository {
     let backstopWithdrawn = 0
     const sdkLpPrice = sdkPrices.get(LP_TOKEN_ADDRESS) || 0
 
-    console.log('[getRealizedYieldData] Backstop events:', {
-      rowCount: backstopEventsResult.rows.length,
-      sdkLpPrice,
-      firstRow: backstopEventsResult.rows[0] ? {
-        lpTokens: backstopEventsResult.rows[0].lp_tokens,
-        price: backstopEventsResult.rows[0].price,
-        actionType: backstopEventsResult.rows[0].action_type,
-      } : null,
-    })
-
     for (const row of backstopEventsResult.rows) {
       const lpTokens = parseFloat(row.lp_tokens) || 0
       const price = row.price ? parseFloat(row.price) : sdkLpPrice

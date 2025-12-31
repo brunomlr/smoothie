@@ -85,8 +85,6 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    console.log('[API realized-yield] Fetching data for:', userAddress)
-
     // Build SDK prices map
     const sdkPrices = new Map<string, number>()
 
@@ -115,23 +113,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    console.log('[API realized-yield] SDK prices:', {
-      sdkBlndPrice,
-      sdkLpPrice,
-      sdkPricesCount: sdkPrices.size,
-      hasLpPrice: sdkPrices.has(LP_TOKEN_ADDRESS),
-    })
-
     const data = await eventsRepository.getRealizedYieldData(userAddress, sdkPrices)
-
-    console.log('[API realized-yield] Got data:', {
-      totalDepositedUsd: data.totalDepositedUsd,
-      totalWithdrawnUsd: data.totalWithdrawnUsd,
-      transactionCount: data.transactions.length,
-      poolsDeposited: data.pools.deposited,
-      backstopDeposited: data.backstop.deposited,
-      backstopWithdrawn: data.backstop.withdrawn,
-    })
 
     // Calculate cumulative time series for charting
     const cumulativeRealized: Array<{
@@ -221,9 +203,6 @@ export async function GET(request: NextRequest) {
       },
     })
   } catch (error) {
-    console.error('[API realized-yield] Error:', error)
-    console.error('[API realized-yield] Error message:', error instanceof Error ? error.message : String(error))
-    console.error('[API realized-yield] Error stack:', error instanceof Error ? error.stack : 'No stack')
     return NextResponse.json(
       { error: 'Failed to fetch realized yield data', details: error instanceof Error ? error.message : String(error) },
       { status: 500 }
