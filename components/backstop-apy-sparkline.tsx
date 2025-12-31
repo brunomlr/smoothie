@@ -55,7 +55,7 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
       <p className="text-zinc-400">
         {format(new Date(date), "MMM d, yyyy")}
       </p>
-      <p className="font-medium text-green-400">{formatPercent(apy)} APR</p>
+      <p className="font-medium text-emerald-400">{formatPercent(apy)} APR</p>
     </div>
   )
 }
@@ -145,13 +145,13 @@ export function BackstopApySparkline({
             <Line
               type="monotone"
               dataKey="apy"
-              stroke="#22c55e"
+              stroke="#34d399"
               strokeWidth={1.5}
               dot={false}
               activeDot={{
                 r: 3,
-                fill: "#22c55e",
-                stroke: "#22c55e",
+                fill: "#34d399",
+                stroke: "#34d399",
               }}
               isAnimationActive={false}
             />

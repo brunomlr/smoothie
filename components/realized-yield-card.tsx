@@ -96,13 +96,13 @@ export function RealizedYieldCard({
       >
         <div className="flex items-center gap-2">
           {isPositive ? (
-            <TrendingUp className="h-5 w-5 text-green-500" />
+            <TrendingUp className="h-5 w-5 text-emerald-400" />
           ) : (
-            <TrendingDown className="h-5 w-5 text-red-500" />
+            <TrendingDown className="h-5 w-5 text-red-400" />
           )}
           <div>
             <div className="text-base font-semibold">
-              <span className={isPositive ? "text-green-500" : "text-red-500"}>
+              <span className={isPositive ? "text-emerald-400" : "text-red-400"}>
                 {isPositive ? "+" : ""}{formatUsd(data.realizedPnl)}
               </span>
               <span className="text-muted-foreground text-sm font-normal ml-1.5">realized</span>
@@ -119,7 +119,7 @@ export function RealizedYieldCard({
                 <TooltipTrigger onClick={(e) => e.stopPropagation()}>
                   <Badge
                     variant="outline"
-                    className={`text-xs ${isPositive ? "text-green-500 border-green-500/30" : "text-red-500 border-red-500/30"}`}
+                    className={`text-xs ${isPositive ? "text-emerald-400 border-emerald-400/30" : "text-red-400 border-red-400/30"}`}
                   >
                     {isPositive ? "+" : ""}{data.roiPercent.toFixed(1)}% ROI
                   </Badge>
@@ -157,7 +157,7 @@ export function RealizedYieldCard({
             </div>
             <div>
               <div className="text-xs text-muted-foreground mb-0.5">Net Realized</div>
-              <div className={`font-semibold tabular-nums text-sm ${isPositive ? "text-green-500" : "text-red-500"}`}>
+              <div className={`font-semibold tabular-nums text-sm ${isPositive ? "text-emerald-400" : "text-red-400"}`}>
                 {isPositive ? "+" : ""}{formatUsd(data.realizedPnl)}
               </div>
             </div>
@@ -190,7 +190,7 @@ export function RealizedYieldCard({
                 <div className="w-20 text-right tabular-nums">
                   {data.pools.withdrawn > 0 ? formatUsd(data.pools.withdrawn) : '-'}
                 </div>
-                <div className={`w-20 text-right tabular-nums font-medium ${data.pools.realized >= 0 ? "text-green-500" : "text-red-500"}`}>
+                <div className={`w-20 text-right tabular-nums font-medium ${data.pools.realized >= 0 ? "text-emerald-400" : "text-red-400"}`}>
                   {data.pools.realized !== 0 ? (data.pools.realized >= 0 ? "+" : "") + formatUsd(data.pools.realized) : '-'}
                 </div>
               </div>
@@ -209,7 +209,7 @@ export function RealizedYieldCard({
                 <div className="w-20 text-right tabular-nums">
                   {data.backstop.withdrawn > 0 ? formatUsd(data.backstop.withdrawn) : '-'}
                 </div>
-                <div className={`w-20 text-right tabular-nums font-medium ${data.backstop.realized >= 0 ? "text-green-500" : "text-red-500"}`}>
+                <div className={`w-20 text-right tabular-nums font-medium ${data.backstop.realized >= 0 ? "text-emerald-400" : "text-red-400"}`}>
                   {data.backstop.realized !== 0 ? (data.backstop.realized >= 0 ? "+" : "") + formatUsd(data.backstop.realized) : '-'}
                 </div>
               </div>
@@ -226,7 +226,7 @@ export function RealizedYieldCard({
                 <div className="w-20 text-right tabular-nums">
                   {formatUsd(data.emissions.usdValue)}
                 </div>
-                <div className="w-20 text-right tabular-nums font-medium text-green-500">
+                <div className="w-20 text-right tabular-nums font-medium text-emerald-400">
                   +{formatUsd(data.emissions.usdValue)}
                 </div>
               </div>
@@ -237,7 +237,7 @@ export function RealizedYieldCard({
               <div>Total</div>
               <div className="w-20 text-right tabular-nums">{formatUsd(data.totalDepositedUsd)}</div>
               <div className="w-20 text-right tabular-nums">{formatUsd(data.totalWithdrawnUsd)}</div>
-              <div className={`w-20 text-right tabular-nums ${isPositive ? "text-green-500" : "text-red-500"}`}>
+              <div className={`w-20 text-right tabular-nums ${isPositive ? "text-emerald-400" : "text-red-400"}`}>
                 {isPositive ? "+" : ""}{formatUsd(data.realizedPnl)}
               </div>
             </div>
@@ -250,19 +250,19 @@ export function RealizedYieldCard({
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Realized P&L</span>
-                  <span className={`font-semibold tabular-nums ${isPositive ? "text-green-500" : "text-red-500"}`}>
+                  <span className={`font-semibold tabular-nums ${isPositive ? "text-emerald-400" : "text-red-400"}`}>
                     {isPositive ? "+" : ""}{formatUsd(data.realizedPnl)}
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Unrealized P&L</span>
-                  <span className={`font-semibold tabular-nums ${unrealizedPnl >= 0 ? "text-green-500" : "text-red-500"}`}>
+                  <span className={`font-semibold tabular-nums ${unrealizedPnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
                     {unrealizedPnl >= 0 ? "+" : ""}{formatUsd(unrealizedPnl)}
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-sm pt-2 border-t border-border/50">
                   <span className="font-medium">Total Lifetime P&L</span>
-                  <span className={`font-bold tabular-nums ${totalPnl >= 0 ? "text-green-500" : "text-red-500"}`}>
+                  <span className={`font-bold tabular-nums ${totalPnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
                     {totalPnl >= 0 ? "+" : ""}{formatUsd(totalPnl)}
                   </span>
                 </div>

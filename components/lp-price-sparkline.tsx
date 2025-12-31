@@ -140,13 +140,13 @@ export function LpPriceSparkline({
             <Line
               type="monotone"
               dataKey="price"
-              stroke="#a855f7"
+              stroke="#c084fc"
               strokeWidth={1.5}
               dot={false}
               activeDot={{
                 r: 3,
-                fill: "#a855f7",
-                stroke: "#a855f7",
+                fill: "#c084fc",
+                stroke: "#c084fc",
               }}
               isAnimationActive={false}
             />
@@ -155,7 +155,7 @@ export function LpPriceSparkline({
       </div>
       <div className="text-[10px] text-muted-foreground whitespace-nowrap">
         6mo:<br />
-        <span className={isPositive ? "text-green-500" : "text-red-500"}>
+        <span className={isPositive ? "text-emerald-400" : "text-red-400"}>
           {isPositive ? "+" : ""}{priceChangePercent.toFixed(1)}%
         </span>
       </div>

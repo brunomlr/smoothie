@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from "react"
 import { useParams } from "next/navigation"
 import Link from "next/link"
 import { useQuery } from "@tanstack/react-query"
-import { ArrowLeft, TrendingUp, TrendingDown, AlertTriangle, ExternalLink, Lock, Unlock, Flame, Shield, Clock } from "lucide-react"
+import { ArrowLeft, TrendingUp, TrendingDown, AlertTriangle, ExternalLink, Lock, Unlock, Flame, Shield, Clock, Coins } from "lucide-react"
 import { ApySparkline } from "@/components/apy-sparkline"
 import { BackstopApySparkline } from "@/components/backstop-apy-sparkline"
 import { LpPriceSparkline } from "@/components/lp-price-sparkline"
@@ -110,8 +110,8 @@ function PoolSummary({ estimate, formatUsd }: { estimate: BlendPoolEstimate; for
           <p className="text-xs text-muted-foreground mb-1">Total Supplied</p>
           <p className="text-lg md:text-xl font-semibold truncate">{formatUsd(estimate.totalSupplied)}</p>
           <div className="flex items-center gap-1 mt-1">
-            <TrendingUp className="h-3 w-3 text-green-500 shrink-0" />
-            <span className="text-xs text-green-500">{formatPercent(estimate.supplyApy)} APY</span>
+            <TrendingUp className="h-3 w-3 text-emerald-400 shrink-0" />
+            <span className="text-xs text-emerald-400">{formatPercent(estimate.supplyApy)} APY</span>
           </div>
         </CardContent>
       </Card>
@@ -122,8 +122,8 @@ function PoolSummary({ estimate, formatUsd }: { estimate: BlendPoolEstimate; for
           <p className="text-lg md:text-xl font-semibold truncate">{formatUsd(estimate.totalBorrowed)}</p>
           {estimate.totalBorrowed > 0 && (
             <div className="flex items-center gap-1 mt-1">
-              <TrendingDown className="h-3 w-3 text-red-500 shrink-0" />
-              <span className="text-xs text-red-500">{formatPercent(estimate.borrowApy)} APY</span>
+              <TrendingDown className="h-3 w-3 text-red-400 shrink-0" />
+              <span className="text-xs text-red-400">{formatPercent(estimate.borrowApy)} APY</span>
             </div>
           )}
         </CardContent>
@@ -132,7 +132,7 @@ function PoolSummary({ estimate, formatUsd }: { estimate: BlendPoolEstimate; for
       <Card className="py-2 md:py-3">
         <CardContent className="p-3 md:p-4">
           <p className="text-xs text-muted-foreground mb-1">Net APY</p>
-          <p className={`text-lg md:text-xl font-semibold ${estimate.netApy >= 0 ? "text-green-500" : "text-red-500"}`}>
+          <p className={`text-lg md:text-xl font-semibold ${estimate.netApy >= 0 ? "text-emerald-400" : "text-red-400"}`}>
             {formatPercent(estimate.netApy)}
           </p>
           <p className="text-xs text-muted-foreground mt-1 truncate">
@@ -145,17 +145,17 @@ function PoolSummary({ estimate, formatUsd }: { estimate: BlendPoolEstimate; for
         <CardContent className="p-3 md:p-4">
           <p className="text-xs text-muted-foreground mb-1">Borrow Limit</p>
           <div className="flex items-center gap-2">
-            <p className={`text-lg md:text-xl font-semibold ${isDanger ? "text-red-500" : isWarning ? "text-yellow-500" : "text-green-500"}`}>
+            <p className={`text-lg md:text-xl font-semibold ${isDanger ? "text-red-400" : isWarning ? "text-yellow-400" : "text-emerald-400"}`}>
               {formatPercent(healthPercent)}
             </p>
-            {isDanger && <AlertTriangle className="h-4 w-4 text-red-500 shrink-0" />}
+            {isDanger && <AlertTriangle className="h-4 w-4 text-red-400 shrink-0" />}
           </div>
           <Progress
             value={healthPercent}
             className={`h-1.5 mt-2 ${
-              isDanger ? "[&>div]:bg-red-500" :
-              isWarning ? "[&>div]:bg-yellow-500" :
-              "[&>div]:bg-green-500"
+              isDanger ? "[&>div]:bg-red-400" :
+              isWarning ? "[&>div]:bg-yellow-400" :
+              "[&>div]:bg-emerald-400"
             }`}
           />
         </CardContent>
@@ -195,7 +195,7 @@ function AssetRow({ position, blndPrice, formatUsd, formatYield }: {
         </div>
         <div className="flex gap-1 flex-wrap justify-end">
           <Badge variant="secondary" className="text-xs">
-            <TrendingUp className="mr-1 h-3 w-3 text-green-500" />
+            <TrendingUp className="mr-1 h-3 w-3 text-emerald-400" />
             {formatPercent(position.supplyApy)}
           </Badge>
           {position.blndApy > 0 && (
@@ -206,7 +206,7 @@ function AssetRow({ position, blndPrice, formatUsd, formatYield }: {
           )}
           {hasBorrow && (
             <Badge variant="secondary" className="text-xs">
-              <TrendingDown className="mr-1 h-3 w-3 text-red-500" />
+              <TrendingDown className="mr-1 h-3 w-3 text-red-400" />
               {formatPercent(position.borrowApy)}
             </Badge>
           )}
@@ -233,10 +233,7 @@ function AssetRow({ position, blndPrice, formatUsd, formatYield }: {
       <div className="grid grid-cols-6 gap-4 text-sm">
         {/* Collateral */}
         <div>
-          <p className="text-xs text-muted-foreground flex items-center gap-1 mb-1">
-            <Lock className="h-3 w-3 text-amber-500" />
-            Collateral
-          </p>
+          <p className="text-xs text-muted-foreground mb-1">Collateral</p>
           {hasCollateral ? (
             <>
               <p className="font-mono text-white">{formatNumber(position.collateralAmount)}</p>
@@ -249,10 +246,7 @@ function AssetRow({ position, blndPrice, formatUsd, formatYield }: {
 
         {/* Non-Collateral */}
         <div>
-          <p className="text-xs text-muted-foreground flex items-center gap-1 mb-1">
-            <Unlock className="h-3 w-3 text-green-500" />
-            Non-Collateral
-          </p>
+          <p className="text-xs text-muted-foreground mb-1">Non-Collateral</p>
           {hasNonCollateral ? (
             <>
               <p className="font-mono text-white">{formatNumber(position.nonCollateralAmount)}</p>
@@ -295,10 +289,7 @@ function AssetRow({ position, blndPrice, formatUsd, formatYield }: {
 
         {/* BLND Emissions per token - always show for visibility */}
         <div>
-          <p className="text-xs text-muted-foreground flex items-center gap-1 mb-1">
-            <Flame className="h-3 w-3 text-purple-500" />
-            BLND Rewards
-          </p>
+          <p className="text-xs text-muted-foreground mb-1">BLND Rewards</p>
           <div className="space-y-1">
             <div>
               <p className="font-mono text-purple-400">
@@ -380,7 +371,7 @@ function MobileAssetCard({ position, blndPrice, formatUsd, formatYield }: {
       {/* APY badges - in a row below header for better mobile layout */}
       <div className="flex gap-1.5 flex-wrap mb-3">
         <Badge variant="secondary" className="text-xs">
-          <TrendingUp className="mr-1 h-3 w-3 text-green-500" />
+          <TrendingUp className="mr-1 h-3 w-3 text-emerald-400" />
           {formatPercent(position.supplyApy)}
         </Badge>
         {position.blndApy > 0 && (
@@ -391,7 +382,7 @@ function MobileAssetCard({ position, blndPrice, formatUsd, formatYield }: {
         )}
         {hasBorrow && (
           <Badge variant="secondary" className="text-xs">
-            <TrendingDown className="mr-1 h-3 w-3 text-red-500" />
+            <TrendingDown className="mr-1 h-3 w-3 text-red-400" />
             {formatPercent(position.borrowApy)}
           </Badge>
         )}
@@ -417,10 +408,7 @@ function MobileAssetCard({ position, blndPrice, formatUsd, formatYield }: {
       <div className="grid grid-cols-2 gap-3 text-sm">
         {hasCollateral && (
           <div>
-            <p className="text-xs text-muted-foreground flex items-center gap-1 mb-1">
-              <Lock className="h-3 w-3 text-amber-500" />
-              Collateral
-            </p>
+            <p className="text-xs text-muted-foreground mb-1">Collateral</p>
             <p className="font-mono text-white">{formatNumber(position.collateralAmount)}</p>
             <p className="text-xs text-muted-foreground">{formatUsd(position.collateralUsdValue)}</p>
           </div>
@@ -428,10 +416,7 @@ function MobileAssetCard({ position, blndPrice, formatUsd, formatYield }: {
 
         {hasNonCollateral && (
           <div>
-            <p className="text-xs text-muted-foreground flex items-center gap-1 mb-1">
-              <Unlock className="h-3 w-3 text-green-500" />
-              Non-Collateral
-            </p>
+            <p className="text-xs text-muted-foreground mb-1">Non-Collateral</p>
             <p className="font-mono text-white">{formatNumber(position.nonCollateralAmount)}</p>
             <p className="text-xs text-muted-foreground">{formatUsd(position.nonCollateralUsdValue)}</p>
           </div>
@@ -460,10 +445,7 @@ function MobileAssetCard({ position, blndPrice, formatUsd, formatYield }: {
 
         {/* BLND Rewards per token - always show */}
         <div>
-          <p className="text-xs text-muted-foreground flex items-center gap-1 mb-1">
-            <Flame className="h-3 w-3 text-purple-500" />
-            BLND Rewards
-          </p>
+          <p className="text-xs text-muted-foreground mb-1">BLND Rewards</p>
           <div className="space-y-1">
             <div>
               <p className="font-mono text-purple-400">
@@ -559,36 +541,40 @@ function BackstopSection({ position, claimedLp = 0, blndPerLpToken = 0, blndPric
   // Pool-level Q4W percentage
   const poolQ4w = position.poolQ4wPercent
 
+  // Calculate derived values
+  const lpTokenPrice = position.lpTokens > 0 ? position.lpTokensUsd / position.lpTokens : 0
+  const yieldUsd = position.yieldLp * lpTokenPrice
+  const claimedBlndApprox = claimedLp * blndPerLpToken
+
   return (
     <Card>
-      <CardHeader className="pb-2">
+      <CardHeader className="pb-3">
         <CardTitle className="text-lg flex items-center gap-2">
           <Shield className="h-5 w-5 text-purple-500" />
           Backstop Position
         </CardTitle>
       </CardHeader>
-      <CardContent>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <CardContent className="space-y-6">
+        {/* Main Stats Grid */}
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 text-sm">
           {/* LP Tokens */}
           <div>
             <p className="text-xs text-muted-foreground mb-1">LP Tokens</p>
-            <p className="font-mono text-lg">{formatNumber(position.lpTokens, 4)}</p>
+            <p className="font-mono text-white">{formatNumber(position.lpTokens, 2)}</p>
             <p className="text-xs text-muted-foreground">{formatUsd(position.lpTokensUsd)}</p>
           </div>
 
-          {/* APR/APY */}
+          {/* Yield Rates */}
           <div>
             <p className="text-xs text-muted-foreground mb-1">Yield Rates</p>
-            <div className="flex flex-col gap-1">
+            <div className="flex flex-wrap gap-1.5">
               {position.interestApr > 0 && (
-                <Badge variant="secondary" className="text-xs w-fit">
-                  <TrendingUp className="mr-1 h-3 w-3" />
+                <Badge variant="secondary" className="text-xs">
                   {formatPercent(position.interestApr)} APR
                 </Badge>
               )}
               {position.emissionApy > 0 && (
-                <Badge variant="secondary" className="text-xs w-fit">
-                  <Flame className="mr-1 h-3 w-3" />
+                <Badge variant="secondary" className="text-xs">
                   {formatPercent(position.emissionApy)} BLND
                 </Badge>
               )}
@@ -598,144 +584,108 @@ function BackstopSection({ position, claimedLp = 0, blndPerLpToken = 0, blndPric
           {/* Yield Earned */}
           <div>
             <p className="text-xs text-muted-foreground mb-1">Yield Earned</p>
-            {(() => {
-              // Calculate yield in USD
-              const lpTokenPrice = position.lpTokens > 0
-                ? position.lpTokensUsd / position.lpTokens
-                : 0
-              const yieldUsd = position.yieldLp * lpTokenPrice
-
-              return (
-                <>
-                  <p className={`font-mono ${position.yieldLp >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}`}>
-                    {formatYield(yieldUsd)}
-                  </p>
-                  <p className={`text-xs ${position.yieldLp >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}`}>
-                    {position.yieldPercent >= 0 ? '+' : ''}{formatPercent(position.yieldPercent)}
-                  </p>
-                </>
-              )
-            })()}
+            <p className={`font-mono ${position.yieldLp >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+              {formatYield(yieldUsd)}
+            </p>
+            <p className={`text-xs ${position.yieldLp >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+              {position.yieldPercent >= 0 ? '+' : ''}{formatPercent(position.yieldPercent)}
+            </p>
           </div>
 
           {/* BLND Rewards */}
           <div>
-            <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
-              <Flame className="h-3 w-3 text-purple-500" />
-              BLND Rewards
+            <p className="text-xs text-muted-foreground mb-1">BLND Rewards</p>
+            <p className="font-mono text-purple-400">
+              {formatNumber(position.claimableBlnd, 2)} BLND
             </p>
-            {(() => {
-              const claimedBlndApprox = claimedLp * blndPerLpToken
-              return (
-                <div className="space-y-2">
-                  {/* To Claim */}
-                  <div>
-                    <p className="font-mono text-purple-400">
-                      {formatNumber(position.claimableBlnd, 4)} BLND
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {position.claimableBlnd > 0 && blndPrice
-                        ? `${formatUsd(position.claimableBlnd * blndPrice)} to claim`
-                        : 'to claim'
-                      }
-                    </p>
-                  </div>
-                  {/* Claimed */}
-                  {claimedBlndApprox > 0 && (
-                    <div className="pt-2 border-t border-border/30">
-                      <p className="font-mono text-sm text-muted-foreground">
-                        ~{formatNumber(claimedBlndApprox, 2)} BLND
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {blndPrice ? `${formatUsd(claimedBlndApprox * blndPrice)} claimed` : 'claimed'}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )
-            })()}
+            {position.claimableBlnd > 0 && blndPrice && (
+              <p className="text-xs text-muted-foreground">
+                {formatUsd(position.claimableBlnd * blndPrice)}
+              </p>
+            )}
+            <p className="text-xs text-muted-foreground">to claim</p>
+            {claimedBlndApprox > 0 && (
+              <p className="text-xs text-muted-foreground border-t border-border/30 pt-1 mt-1">
+                ~{formatNumber(claimedBlndApprox, 0)} claimed
+                {blndPrice && ` · ${formatUsd(claimedBlndApprox * blndPrice)}`}
+              </p>
+            )}
           </div>
         </div>
 
-        {/* APY Sparkline - 6 month history (interest only, excludes BLND emissions) */}
-        <div className="mt-4 pt-4 border-t">
-          <p className="text-xs text-muted-foreground mb-2">Interest APR History (6 months)</p>
-          <BackstopApySparkline
-            poolId={position.poolId}
-            currentApy={position.interestApr}
-            className="w-full h-12"
-          />
+        {/* Charts Section */}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <p className="text-xs text-muted-foreground mb-1">Interest APR (6mo)</p>
+            <BackstopApySparkline
+              poolId={position.poolId}
+              currentApy={position.interestApr}
+              className="w-full h-10"
+            />
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground mb-1">LP Token Price (6mo)</p>
+            <LpPriceSparkline
+              currentPrice={lpTokenPrice || undefined}
+              className="w-full h-10"
+            />
+          </div>
         </div>
 
-        {/* LP Token Price History */}
-        <div className="mt-4 pt-4 border-t">
-          <p className="text-xs text-muted-foreground mb-2">LP Token Price (6 months)</p>
-          <LpPriceSparkline
-            currentPrice={position.lpTokens > 0 ? position.lpTokensUsd / position.lpTokens : undefined}
-            className="w-full h-12"
-          />
-        </div>
-
-        {/* Pool Stats (pool-level data, not user-specific) */}
-        <div className="mt-4 pt-4 border-t">
-          <p className="text-xs text-muted-foreground mb-2">Pool Stats</p>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-muted/30 rounded-md px-3 py-2">
-              <p className="text-xs text-muted-foreground mb-1">LP Composition</p>
-              <div className="flex items-baseline gap-2">
-                <span className="font-mono text-sm">{formatNumber(position.blndAmount, 2)}</span>
-                <span className="text-xs text-muted-foreground">BLND</span>
-                <span className="text-muted-foreground">/</span>
-                <span className="font-mono text-sm">{formatNumber(position.usdcAmount, 2)}</span>
-                <span className="text-xs text-muted-foreground">USDC</span>
-              </div>
+        {/* Pool Stats */}
+        <div className="rounded-lg bg-muted/40 p-4">
+          <p className="text-xs font-medium text-muted-foreground mb-3">Pool Info</p>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+            <div>
+              <p className="text-xs text-muted-foreground">BLND in Pool</p>
+              <p className="font-mono text-sm">{formatNumber(position.blndAmount, 0)}</p>
             </div>
-            <div className="bg-muted/30 rounded-md px-3 py-2">
-              <p className="text-xs text-muted-foreground mb-1">Pool Q4W</p>
-              <p className="font-mono text-sm">
-                {formatPercent(poolQ4w)}
-              </p>
+            <div>
+              <p className="text-xs text-muted-foreground">USDC in Pool</p>
+              <p className="font-mono text-sm">{formatNumber(position.usdcAmount, 0)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Pool Q4W</p>
+              <p className="font-mono text-sm">{formatPercent(poolQ4w)}</p>
             </div>
           </div>
         </div>
 
         {/* User Q4W Status */}
         {hasQ4w && (
-          <div className="mt-4 pt-4 border-t">
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-              <Clock className={`h-4 w-4 shrink-0 ${isQ4wExpired ? 'text-green-500' : 'text-amber-500'}`} />
-              {isQ4wExpired ? (
-                <span className="text-sm text-green-500">
-                  {formatNumber(position.q4wLpTokens, 2)} LP ready to withdraw
-                </span>
-              ) : position.q4wChunks.length > 1 ? (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="text-sm text-amber-500 underline decoration-dotted cursor-pointer">
-                      {formatNumber(position.q4wLpTokens, 2)} LP in {position.q4wChunks.length} unlocks
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent className="p-2.5">
-                    <p className="font-medium text-zinc-400 mb-1.5">Unlock Schedule</p>
-                    <div className="space-y-1">
-                      {position.q4wChunks.map((chunk, i) => (
-                        <div key={i} className="flex justify-between gap-6">
-                          <span className="font-mono">{formatNumber(chunk.lpTokens, 2)} LP</span>
-                          <span className="text-zinc-400">{formatTimeRemaining(new Date(chunk.expiration * 1000))}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </TooltipContent>
-                </Tooltip>
-              ) : (
-                <span className="text-sm text-amber-500">
-                  {formatNumber(position.q4wLpTokens, 2)} LP unlocks in {timeRemaining}
-                </span>
-              )}
-              <span className="text-xs text-muted-foreground">
-                ({formatUsd(position.q4wLpTokensUsd)})
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2">
+            <Clock className={`h-4 w-4 shrink-0 ${isQ4wExpired ? 'text-emerald-400' : 'text-amber-500'}`} />
+            {isQ4wExpired ? (
+              <span className="text-sm text-emerald-400 font-medium">
+                {formatNumber(position.q4wLpTokens, 2)} LP ready to withdraw
               </span>
-            </div>
+            ) : position.q4wChunks.length > 1 ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="text-sm text-amber-500 font-medium underline decoration-dotted cursor-pointer">
+                    {formatNumber(position.q4wLpTokens, 2)} LP in {position.q4wChunks.length} unlocks
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent className="p-2.5">
+                  <p className="font-medium text-zinc-400 mb-1.5">Unlock Schedule</p>
+                  <div className="space-y-1">
+                    {position.q4wChunks.map((chunk, i) => (
+                      <div key={i} className="flex justify-between gap-6">
+                        <span className="font-mono">{formatNumber(chunk.lpTokens, 2)} LP</span>
+                        <span className="text-zinc-400">{formatTimeRemaining(new Date(chunk.expiration * 1000))}</span>
+                      </div>
+                    ))}
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            ) : (
+              <span className="text-sm text-amber-500 font-medium">
+                {formatNumber(position.q4wLpTokens, 2)} LP unlocks in {timeRemaining}
+              </span>
+            )}
+            <span className="text-sm text-muted-foreground">
+              ({formatUsd(position.q4wLpTokensUsd)})
+            </span>
           </div>
         )}
       </CardContent>

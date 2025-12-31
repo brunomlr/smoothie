@@ -387,21 +387,21 @@ function RealizedYieldContent() {
                           />
                         </p>
                         <div className="flex items-baseline gap-2 sm:gap-3 flex-wrap">
-                          <p className={`text-2xl sm:text-3xl font-bold tabular-nums ${totalPnlPositive ? "text-green-500" : "text-red-500"}`}>
+                          <p className={`text-2xl sm:text-3xl font-bold tabular-nums ${totalPnlPositive ? "text-emerald-400" : "text-red-400"}`}>
                             {totalPnlPositive ? "+" : ""}{formatUsd(unrealizedData.totalPnl)}
                           </p>
                           {data.totalDepositedUsd > 0 && (
-                            <Badge variant="outline" className={totalPnlPositive ? "text-green-500 border-green-500/30" : "text-red-500 border-red-500/30"}>
+                            <Badge variant="outline" className={totalPnlPositive ? "text-emerald-400 border-emerald-400/30" : "text-red-400 border-red-400/30"}>
                               {totalPnlPositive ? "+" : ""}{((unrealizedData.totalPnl / data.totalDepositedUsd) * 100).toFixed(1)}%
                             </Badge>
                           )}
                         </div>
                       </div>
-                      <div className={`p-2 rounded-full ${totalPnlPositive ? "bg-green-500/10" : "bg-red-500/10"}`}>
+                      <div className={`p-2 rounded-full ${totalPnlPositive ? "bg-emerald-400/10" : "bg-red-400/10"}`}>
                         {totalPnlPositive ? (
-                          <TrendingUp className="h-5 w-5 text-green-500" />
+                          <TrendingUp className="h-5 w-5 text-emerald-400" />
                         ) : (
-                          <TrendingDown className="h-5 w-5 text-red-500" />
+                          <TrendingDown className="h-5 w-5 text-red-400" />
                         )}
                       </div>
                     </div>
@@ -435,13 +435,13 @@ function RealizedYieldContent() {
                         <p className="text-sm font-medium text-muted-foreground mb-1">
                           {data.realizedPnl >= 0 ? "Realized Profits" : "Net Cash Flow"}
                         </p>
-                        <p className={`text-2xl sm:text-3xl font-bold tabular-nums ${data.realizedPnl >= 0 ? "text-green-500" : "text-red-500"}`}>
+                        <p className={`text-2xl sm:text-3xl font-bold tabular-nums ${data.realizedPnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
                           {data.realizedPnl >= 0 ? "+" : ""}{formatUsd(data.realizedPnl)}
                         </p>
                       </div>
-                      <div className={`p-2 rounded-full ${data.realizedPnl >= 0 ? "bg-green-500/10" : "bg-blue-500/10"}`}>
+                      <div className={`p-2 rounded-full ${data.realizedPnl >= 0 ? "bg-emerald-400/10" : "bg-blue-500/10"}`}>
                         {data.realizedPnl >= 0 ? (
-                          <TrendingUp className="h-5 w-5 text-green-500" />
+                          <TrendingUp className="h-5 w-5 text-emerald-400" />
                         ) : (
                           <Wallet className="h-5 w-5 text-blue-500" />
                         )}
@@ -497,7 +497,7 @@ function RealizedYieldContent() {
                       )}
                     </p>
                     {hasCurrentPositions ? (
-                      <p className={`font-semibold text-sm tabular-nums ${totalPnlPositive ? "text-green-500" : "text-red-500"}`}>
+                      <p className={`font-semibold text-sm tabular-nums ${totalPnlPositive ? "text-emerald-400" : "text-red-400"}`}>
                         {totalPnlPositive ? "+" : ""}{((unrealizedData.totalPnl / data.totalDepositedUsd) * 100).toFixed(1)}%
                       </p>
                     ) : (
@@ -569,7 +569,7 @@ function RealizedYieldContent() {
                                   <p className="text-muted-foreground">Deposited: {formatUsd(chartData.cumulativeDeposited)}</p>
                                   <p className="text-muted-foreground">Withdrawn: {formatUsd(chartData.cumulativeWithdrawn)}</p>
                                   <Separator className="my-1" />
-                                  <p className={`font-medium ${isPositiveFlow ? "text-green-500" : "text-blue-500"}`}>
+                                  <p className={`font-medium ${isPositiveFlow ? "text-emerald-400" : "text-blue-500"}`}>
                                     Net: {isPositiveFlow ? "+" : ""}{formatUsd(netFlow)}
                                   </p>
                                 </div>
@@ -626,7 +626,7 @@ function RealizedYieldContent() {
                             <span className="text-muted-foreground">
                               <InfoLabel label="Unrealized P&L" tooltip="Current Balance minus Cost Basis. Profit still in the protocol." />
                             </span>
-                            <span className={`tabular-nums ${unrealizedData.poolsUnrealized >= 0 ? "text-green-500" : "text-red-500"}`}>
+                            <span className={`tabular-nums ${unrealizedData.poolsUnrealized >= 0 ? "text-emerald-400" : "text-red-400"}`}>
                               {unrealizedData.poolsUnrealized >= 0 ? "+" : ""}{formatUsd(unrealizedData.poolsUnrealized)}
                             </span>
                           </div>
@@ -635,7 +635,7 @@ function RealizedYieldContent() {
                       {unrealizedData.poolsCurrentUsd > 0 && (
                         <div className="flex justify-between font-medium pt-1 border-t border-border/50">
                           <span>P&L</span>
-                          <span className={`tabular-nums ${unrealizedData.poolsUnrealized >= 0 ? "text-green-500" : "text-red-500"}`}>
+                          <span className={`tabular-nums ${unrealizedData.poolsUnrealized >= 0 ? "text-emerald-400" : "text-red-400"}`}>
                             {unrealizedData.poolsUnrealized >= 0 ? "+" : ""}{formatUsd(unrealizedData.poolsUnrealized)}
                           </span>
                         </div>
@@ -670,7 +670,7 @@ function RealizedYieldContent() {
                           </div>
                           <div className="flex justify-between font-medium">
                             <span>P&L</span>
-                            <span className={`tabular-nums ${unrealizedData.backstopUnrealized >= 0 ? "text-green-500" : "text-red-500"}`}>
+                            <span className={`tabular-nums ${unrealizedData.backstopUnrealized >= 0 ? "text-emerald-400" : "text-red-400"}`}>
                               {unrealizedData.backstopUnrealized >= 0 ? "+" : ""}{formatUsd(unrealizedData.backstopUnrealized)}
                             </span>
                           </div>
@@ -704,7 +704,7 @@ function RealizedYieldContent() {
                       )}
                       <div className="flex justify-between font-medium pt-1 border-t border-border/50">
                         <span>USD Value</span>
-                        <span className="tabular-nums text-green-500">+{formatUsd(data.emissions.usdValue)}</span>
+                        <span className="tabular-nums text-emerald-400">+{formatUsd(data.emissions.usdValue)}</span>
                       </div>
                     </div>
                   </div>
@@ -731,7 +731,7 @@ function RealizedYieldContent() {
                       <Separator />
                       <div className="flex items-center justify-between">
                         <p className="font-semibold">Total P&L</p>
-                        <p className={`text-lg font-bold tabular-nums ${unrealizedData.totalPnl >= 0 ? "text-green-500" : "text-red-500"}`}>
+                        <p className={`text-lg font-bold tabular-nums ${unrealizedData.totalPnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
                           {unrealizedData.totalPnl >= 0 ? "+" : ""}{formatUsd(unrealizedData.totalPnl)}
                         </p>
                       </div>
@@ -742,7 +742,7 @@ function RealizedYieldContent() {
                       <Separator />
                       <div className="flex items-center justify-between">
                         <p className="font-semibold">{data.realizedPnl >= 0 ? "Realized Profit" : "Net Cash Flow"}</p>
-                        <p className={`text-lg font-bold tabular-nums ${data.realizedPnl >= 0 ? "text-green-500" : "text-red-500"}`}>
+                        <p className={`text-lg font-bold tabular-nums ${data.realizedPnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
                           {data.realizedPnl >= 0 ? "+" : ""}{formatUsd(data.realizedPnl)}
                         </p>
                       </div>
@@ -876,7 +876,7 @@ function RealizedYieldContent() {
                                   tx.type === "deposit"
                                     ? "text-blue-500 border-blue-500/30 bg-blue-500/5"
                                     : tx.type === "withdraw"
-                                    ? "text-green-500 border-green-500/30 bg-green-500/5"
+                                    ? "text-emerald-400 border-emerald-400/30 bg-emerald-400/5"
                                     : "text-yellow-500 border-yellow-500/30 bg-yellow-500/5"
                                 }`}
                               >
@@ -893,10 +893,10 @@ function RealizedYieldContent() {
                             <TableCell className="text-right tabular-nums py-2 text-muted-foreground hidden md:table-cell">
                               ${formatNumber(tx.priceUsd, tx.priceUsd < 0.01 ? 4 : 2)}
                             </TableCell>
-                            <TableCell className={`text-right tabular-nums py-2 font-medium ${tx.type === "deposit" ? "" : "text-green-500"}`}>
+                            <TableCell className={`text-right tabular-nums py-2 font-medium ${tx.type === "deposit" ? "" : "text-emerald-400"}`}>
                               {tx.type === "deposit" ? "-" : "+"}{formatUsd(tx.valueUsd)}
                             </TableCell>
-                            <TableCell className={`text-right tabular-nums py-2 pr-4 sm:pr-6 ${tx.runningNet >= 0 ? "text-green-500" : "text-red-500"}`}>
+                            <TableCell className={`text-right tabular-nums py-2 pr-4 sm:pr-6 ${tx.runningNet >= 0 ? "text-emerald-400" : "text-red-400"}`}>
                               {tx.runningNet >= 0 ? "+" : ""}{formatUsd(tx.runningNet)}
                             </TableCell>
                           </TableRow>
