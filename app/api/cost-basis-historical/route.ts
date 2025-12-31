@@ -57,12 +57,14 @@ export async function GET(request: NextRequest) {
     })
 
     // Group actions by pool-asset
-    const poolAssetPairs = new Map<string, { poolId: string; assetAddress: string }>()
+    const poolAssetPairs: Array<{ poolId: string; assetAddress: string }> = []
+    const seenKeys = new Set<string>()
     for (const action of userActions) {
       if (!action.pool_id || !action.asset_address) continue
       const compositeKey = `${action.pool_id}-${action.asset_address}`
-      if (!poolAssetPairs.has(compositeKey)) {
-        poolAssetPairs.set(compositeKey, {
+      if (!seenKeys.has(compositeKey)) {
+        seenKeys.add(compositeKey)
+        poolAssetPairs.push({
           poolId: action.pool_id,
           assetAddress: action.asset_address,
         })
@@ -75,17 +77,23 @@ export async function GET(request: NextRequest) {
     let totalPriceChangeUsd = 0
     let totalEarnedUsd = 0
 
+    // Fetch all deposit/withdrawal events in a single batch query (optimization: eliminates N+1)
+    const eventsMap = await eventsRepository.getDepositEventsWithPricesBatch(
+      userAddress,
+      poolAssetPairs,
+      sdkPrices
+    )
+
     // Calculate breakdown for each pool-asset pair
-    for (const [compositeKey, { poolId, assetAddress }] of poolAssetPairs) {
+    for (const { poolId, assetAddress } of poolAssetPairs) {
+      const compositeKey = `${poolId}-${assetAddress}`
       const sdkPrice = sdkPrices[assetAddress] || 0
 
-      // Get deposit/withdrawal events with historical prices
-      const { deposits, withdrawals } = await eventsRepository.getDepositEventsWithPrices(
-        userAddress,
-        assetAddress,
-        poolId,
-        sdkPrice
-      )
+      // Get events from the batch result
+      const events = eventsMap.get(compositeKey)
+      if (!events) continue
+
+      const { deposits, withdrawals } = events
 
       // Skip if no events
       if (deposits.length === 0 && withdrawals.length === 0) continue

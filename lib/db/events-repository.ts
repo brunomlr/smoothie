@@ -1890,6 +1890,581 @@ export class EventsRepository {
 
     return { price, source }
   }
+
+  // ============================================
+  // REALIZED YIELD FUNCTIONS
+  // ============================================
+
+  /**
+   * Get realized yield data for a user.
+   * Realized yield = Total withdrawn (at historical prices) - Total deposited (at historical prices)
+   *
+   * This calculates actual profits that have left the protocol, not paper gains.
+   */
+  async getRealizedYieldData(
+    userAddress: string,
+    sdkPrices: Map<string, number> = new Map()
+  ): Promise<{
+    // Summary
+    totalDepositedUsd: number
+    totalWithdrawnUsd: number
+    realizedPnl: number
+
+    // Breakdown by source
+    pools: {
+      deposited: number
+      withdrawn: number
+      realized: number
+    }
+    backstop: {
+      deposited: number
+      withdrawn: number
+      realized: number
+    }
+    emissions: {
+      blndClaimed: number
+      lpClaimed: number
+      usdValue: number
+    }
+
+    // Metadata
+    firstActivityDate: string | null
+    lastActivityDate: string | null
+
+    // Transaction list for detailed view
+    transactions: Array<{
+      date: string
+      type: 'deposit' | 'withdraw' | 'claim'
+      source: 'pool' | 'backstop'
+      asset: string
+      amount: number
+      priceUsd: number
+      valueUsd: number
+      txHash: string
+      poolId: string
+      poolName: string | null
+    }>
+  }> {
+    if (!pool) {
+      throw new Error('Database pool not initialized')
+    }
+
+    const LP_TOKEN_ADDRESS = 'CDMHROXQ75GEMEJ4LJCT4TUFKY7PH5Z7V5RCVS4KKGU2CQLQRN35DKFT'
+    const BLND_TOKEN_ADDRESS = 'CD25MNVTZDL4Y3XBCPCJXGXATV5WUHHOWMYFF4YBEGU5FCPGMYTVG5JY'
+
+    // Get pool deposits/withdrawals with historical prices
+    const poolEventsResult = await pool.query(
+      `
+      WITH events AS (
+        SELECT
+          pe.pool_id,
+          p.name AS pool_name,
+          pe.transaction_hash,
+          pe.action_type,
+          (pe.ledger_closed_at AT TIME ZONE 'UTC')::date::text AS event_date,
+          pe.ledger_closed_at,
+          pe.asset_address,
+          t.symbol AS asset_symbol,
+          pe.amount_underlying / 1e7 AS tokens
+        FROM parsed_events pe
+        LEFT JOIN pools p ON pe.pool_id = p.pool_id
+        LEFT JOIN tokens t ON pe.asset_address = t.asset_address
+        WHERE pe.user_address = $1
+          AND pe.action_type IN ('supply', 'supply_collateral', 'withdraw', 'withdraw_collateral')
+        ORDER BY pe.ledger_closed_at
+      )
+      SELECT
+        e.pool_id,
+        e.pool_name,
+        e.transaction_hash,
+        e.action_type,
+        e.event_date,
+        e.ledger_closed_at,
+        e.asset_address,
+        e.asset_symbol,
+        e.tokens,
+        COALESCE(price_data.usd_price, NULL) AS price,
+        price_data.price_date AS price_source_date
+      FROM events e
+      LEFT JOIN LATERAL (
+        SELECT usd_price, price_date::text
+        FROM daily_token_prices
+        WHERE token_address = e.asset_address
+          AND price_date <= e.event_date::date
+        ORDER BY price_date DESC
+        LIMIT 1
+      ) price_data ON true
+      ORDER BY e.ledger_closed_at
+      `,
+      [userAddress]
+    )
+
+    // Get backstop deposits/withdrawals with historical LP prices
+    const backstopEventsResult = await pool.query(
+      `
+      WITH events AS (
+        SELECT
+          b.pool_address,
+          p.name AS pool_name,
+          b.transaction_hash,
+          b.action_type,
+          (b.ledger_closed_at AT TIME ZONE 'UTC')::date::text AS event_date,
+          b.ledger_closed_at,
+          b.lp_tokens::numeric / 1e7 AS lp_tokens
+        FROM backstop_events b
+        LEFT JOIN pools p ON b.pool_address = p.pool_id
+        WHERE b.user_address = $1
+          AND b.action_type IN ('deposit', 'withdraw')
+          AND b.lp_tokens IS NOT NULL
+        ORDER BY b.ledger_closed_at
+      )
+      SELECT
+        e.pool_address,
+        e.pool_name,
+        e.transaction_hash,
+        e.action_type,
+        e.event_date,
+        e.ledger_closed_at,
+        e.lp_tokens,
+        COALESCE(price_data.usd_price, NULL) AS price,
+        price_data.price_date AS price_source_date
+      FROM events e
+      LEFT JOIN LATERAL (
+        SELECT usd_price, price_date::text
+        FROM daily_token_prices
+        WHERE token_address = $2
+          AND price_date <= e.event_date::date
+        ORDER BY price_date DESC
+        LIMIT 1
+      ) price_data ON true
+      ORDER BY e.ledger_closed_at
+      `,
+      [userAddress, LP_TOKEN_ADDRESS]
+    )
+
+    // Get BLND claims from pools with historical prices
+    // Note: claim amount is stored in amount_underlying for claim actions (not claim_amount, which is a computed column in the view)
+    const blndClaimsResult = await pool.query(
+      `
+      WITH claims AS (
+        SELECT
+          pe.pool_id,
+          p.name AS pool_name,
+          pe.transaction_hash,
+          (pe.ledger_closed_at AT TIME ZONE 'UTC')::date::text AS claim_date,
+          pe.ledger_closed_at,
+          pe.amount_underlying::numeric / 1e7 AS blnd_amount
+        FROM parsed_events pe
+        LEFT JOIN pools p ON pe.pool_id = p.pool_id
+        WHERE pe.user_address = $1
+          AND pe.action_type = 'claim'
+          AND pe.amount_underlying IS NOT NULL
+          AND pe.amount_underlying > 0
+        ORDER BY pe.ledger_closed_at
+      )
+      SELECT
+        c.pool_id,
+        c.pool_name,
+        c.transaction_hash,
+        c.claim_date,
+        c.ledger_closed_at,
+        c.blnd_amount,
+        COALESCE(price_data.usd_price, NULL) AS price,
+        price_data.price_date AS price_source_date
+      FROM claims c
+      LEFT JOIN LATERAL (
+        SELECT usd_price, price_date::text
+        FROM daily_token_prices
+        WHERE token_address = $2
+          AND price_date <= c.claim_date::date
+        ORDER BY price_date DESC
+        LIMIT 1
+      ) price_data ON true
+      ORDER BY c.ledger_closed_at
+      `,
+      [userAddress, BLND_TOKEN_ADDRESS]
+    )
+
+    // Get backstop LP claims (emissions auto-compounded)
+    const backstopClaimsResult = await pool.query(
+      `
+      WITH claim_events AS (
+        SELECT
+          COALESCE(
+            NULLIF(b.pool_address, ''),
+            (SELECT pool_address FROM backstop_events
+             WHERE transaction_hash = b.transaction_hash
+               AND action_type = 'deposit'
+               AND pool_address IS NOT NULL
+               AND pool_address != ''
+             LIMIT 1)
+          ) AS pool_address,
+          b.transaction_hash,
+          (b.ledger_closed_at AT TIME ZONE 'UTC')::date::text AS claim_date,
+          b.ledger_closed_at,
+          COALESCE(b.lp_tokens, b.emissions_shares)::numeric / 1e7 AS lp_tokens
+        FROM backstop_events b
+        WHERE b.user_address = $1
+          AND b.action_type = 'claim'
+      )
+      SELECT
+        c.pool_address,
+        p.name AS pool_name,
+        c.transaction_hash,
+        c.claim_date,
+        c.ledger_closed_at,
+        c.lp_tokens,
+        COALESCE(price_data.usd_price, NULL) AS price,
+        price_data.price_date AS price_source_date
+      FROM claim_events c
+      LEFT JOIN pools p ON c.pool_address = p.pool_id
+      LEFT JOIN LATERAL (
+        SELECT usd_price, price_date::text
+        FROM daily_token_prices
+        WHERE token_address = $2
+          AND price_date <= c.claim_date::date
+        ORDER BY price_date DESC
+        LIMIT 1
+      ) price_data ON true
+      WHERE c.pool_address IS NOT NULL
+      ORDER BY c.ledger_closed_at
+      `,
+      [userAddress, LP_TOKEN_ADDRESS]
+    )
+
+    // Process pool events
+    let poolDeposited = 0
+    let poolWithdrawn = 0
+    const transactions: Array<{
+      date: string
+      type: 'deposit' | 'withdraw' | 'claim'
+      source: 'pool' | 'backstop'
+      asset: string
+      amount: number
+      priceUsd: number
+      valueUsd: number
+      txHash: string
+      poolId: string
+      poolName: string | null
+    }> = []
+
+    for (const row of poolEventsResult.rows) {
+      const tokens = parseFloat(row.tokens) || 0
+      const price = row.price ? parseFloat(row.price) : (sdkPrices.get(row.asset_address) || 0)
+      const usdValue = tokens * price
+      const isDeposit = row.action_type === 'supply' || row.action_type === 'supply_collateral'
+
+      if (isDeposit) {
+        poolDeposited += usdValue
+      } else {
+        poolWithdrawn += usdValue
+      }
+
+      transactions.push({
+        date: row.event_date,
+        type: isDeposit ? 'deposit' : 'withdraw',
+        source: 'pool',
+        asset: row.asset_symbol || 'Unknown',
+        amount: tokens,
+        priceUsd: price,
+        valueUsd: usdValue,
+        txHash: row.transaction_hash,
+        poolId: row.pool_id,
+        poolName: row.pool_name,
+      })
+    }
+
+    // Process backstop events
+    let backstopDeposited = 0
+    let backstopWithdrawn = 0
+    const sdkLpPrice = sdkPrices.get(LP_TOKEN_ADDRESS) || 0
+
+    console.log('[getRealizedYieldData] Backstop events:', {
+      rowCount: backstopEventsResult.rows.length,
+      sdkLpPrice,
+      firstRow: backstopEventsResult.rows[0] ? {
+        lpTokens: backstopEventsResult.rows[0].lp_tokens,
+        price: backstopEventsResult.rows[0].price,
+        actionType: backstopEventsResult.rows[0].action_type,
+      } : null,
+    })
+
+    for (const row of backstopEventsResult.rows) {
+      const lpTokens = parseFloat(row.lp_tokens) || 0
+      const price = row.price ? parseFloat(row.price) : sdkLpPrice
+      const usdValue = lpTokens * price
+
+      if (row.action_type === 'deposit') {
+        backstopDeposited += usdValue
+      } else {
+        backstopWithdrawn += usdValue
+      }
+
+      transactions.push({
+        date: row.event_date,
+        type: row.action_type === 'deposit' ? 'deposit' : 'withdraw',
+        source: 'backstop',
+        asset: 'BLND-USDC LP',
+        amount: lpTokens,
+        priceUsd: price,
+        valueUsd: usdValue,
+        txHash: row.transaction_hash,
+        poolId: row.pool_address,
+        poolName: row.pool_name,
+      })
+    }
+
+    // Process BLND claims (count as withdrawals/yield received)
+    let blndClaimed = 0
+    let blndClaimsUsd = 0
+    const sdkBlndPrice = sdkPrices.get(BLND_TOKEN_ADDRESS) || 0
+
+    for (const row of blndClaimsResult.rows) {
+      const blndAmount = parseFloat(row.blnd_amount) || 0
+      const price = row.price ? parseFloat(row.price) : sdkBlndPrice
+      const usdValue = blndAmount * price
+
+      blndClaimed += blndAmount
+      blndClaimsUsd += usdValue
+
+      transactions.push({
+        date: row.claim_date,
+        type: 'claim',
+        source: 'pool',
+        asset: 'BLND',
+        amount: blndAmount,
+        priceUsd: price,
+        valueUsd: usdValue,
+        txHash: row.transaction_hash,
+        poolId: row.pool_id,
+        poolName: row.pool_name,
+      })
+    }
+
+    // Process backstop LP claims
+    let lpClaimed = 0
+    let lpClaimsUsd = 0
+
+    for (const row of backstopClaimsResult.rows) {
+      const lpTokens = parseFloat(row.lp_tokens) || 0
+      const price = row.price ? parseFloat(row.price) : sdkLpPrice
+      const usdValue = lpTokens * price
+
+      lpClaimed += lpTokens
+      lpClaimsUsd += usdValue
+
+      transactions.push({
+        date: row.claim_date,
+        type: 'claim',
+        source: 'backstop',
+        asset: 'BLND-USDC LP',
+        amount: lpTokens,
+        priceUsd: price,
+        valueUsd: usdValue,
+        txHash: row.transaction_hash,
+        poolId: row.pool_address,
+        poolName: row.pool_name,
+      })
+    }
+
+    // Sort transactions by date
+    transactions.sort((a, b) => a.date.localeCompare(b.date))
+
+    // Calculate totals
+    // For realized P&L: withdrawals + claims - deposits
+    const totalDepositedUsd = poolDeposited + backstopDeposited
+    const totalWithdrawnUsd = poolWithdrawn + backstopWithdrawn + blndClaimsUsd + lpClaimsUsd
+    const realizedPnl = totalWithdrawnUsd - totalDepositedUsd
+
+    // Get first and last activity dates
+    const allDates = transactions.map(t => t.date).filter(Boolean)
+    const firstActivityDate = allDates.length > 0 ? allDates[0] : null
+    const lastActivityDate = allDates.length > 0 ? allDates[allDates.length - 1] : null
+
+    return {
+      totalDepositedUsd,
+      totalWithdrawnUsd,
+      realizedPnl,
+      pools: {
+        deposited: poolDeposited,
+        withdrawn: poolWithdrawn,
+        realized: poolWithdrawn - poolDeposited,
+      },
+      backstop: {
+        deposited: backstopDeposited,
+        withdrawn: backstopWithdrawn,
+        realized: backstopWithdrawn - backstopDeposited,
+      },
+      emissions: {
+        blndClaimed,
+        lpClaimed,
+        usdValue: blndClaimsUsd + lpClaimsUsd,
+      },
+      firstActivityDate,
+      lastActivityDate,
+      transactions,
+    }
+  }
+
+  /**
+   * Batch version of getDepositEventsWithPrices - fetches events for multiple pool-asset pairs in a single query
+   * This eliminates the N+1 query pattern when calculating cost basis for multiple positions
+   */
+  async getDepositEventsWithPricesBatch(
+    userAddress: string,
+    poolAssetPairs: Array<{ poolId: string; assetAddress: string }>,
+    sdkPrices: Record<string, number> = {},
+    timezone: string = 'UTC'
+  ): Promise<Map<string, {
+    deposits: Array<{
+      date: string
+      tokens: number
+      priceAtDeposit: number
+      usdValue: number
+      poolId: string
+      priceSource: 'daily_token_prices' | 'forward_fill' | 'sdk_fallback'
+    }>
+    withdrawals: Array<{
+      date: string
+      tokens: number
+      priceAtWithdrawal: number
+      usdValue: number
+      poolId: string
+      priceSource: 'daily_token_prices' | 'forward_fill' | 'sdk_fallback'
+    }>
+  }>> {
+    if (!pool) {
+      throw new Error('Database pool not initialized')
+    }
+
+    if (poolAssetPairs.length === 0) {
+      return new Map()
+    }
+
+    // Get unique asset addresses for the price lookup
+    const uniqueAssets = [...new Set(poolAssetPairs.map(p => p.assetAddress))]
+
+    // Build WHERE clause for all pool-asset combinations
+    // Using (pool_id, asset_address) IN (VALUES ...) for efficient filtering
+    const pairValues = poolAssetPairs
+      .map((_, i) => `($${3 + i * 2}, $${4 + i * 2})`)
+      .join(', ')
+
+    const params: (string | number)[] = [userAddress, timezone]
+    poolAssetPairs.forEach(pair => {
+      params.push(pair.poolId, pair.assetAddress)
+    })
+
+    const result = await pool.query(
+      `
+      WITH events AS (
+        SELECT
+          pe.pool_id,
+          pe.asset_address,
+          pe.action_type,
+          (pe.ledger_closed_at AT TIME ZONE 'UTC' AT TIME ZONE $2)::date::text AS event_date,
+          pe.amount_underlying / 1e7 AS tokens
+        FROM parsed_events pe
+        WHERE pe.user_address = $1
+          AND pe.action_type IN ('supply', 'supply_collateral', 'withdraw', 'withdraw_collateral')
+          AND (pe.pool_id, pe.asset_address) IN (VALUES ${pairValues})
+        ORDER BY pe.ledger_closed_at
+      )
+      SELECT
+        e.pool_id,
+        e.asset_address,
+        e.action_type,
+        e.event_date,
+        e.tokens,
+        COALESCE(price_data.usd_price, NULL) AS price,
+        price_data.price_date AS price_source_date
+      FROM events e
+      LEFT JOIN LATERAL (
+        SELECT usd_price, price_date::text
+        FROM daily_token_prices
+        WHERE token_address = e.asset_address
+          AND price_date <= e.event_date::date
+        ORDER BY price_date DESC
+        LIMIT 1
+      ) price_data ON true
+      ORDER BY e.pool_id, e.asset_address, e.event_date
+      `,
+      params
+    )
+
+    // Build result map keyed by compositeKey (poolId-assetAddress)
+    const resultMap = new Map<string, {
+      deposits: Array<{
+        date: string
+        tokens: number
+        priceAtDeposit: number
+        usdValue: number
+        poolId: string
+        priceSource: 'daily_token_prices' | 'forward_fill' | 'sdk_fallback'
+      }>
+      withdrawals: Array<{
+        date: string
+        tokens: number
+        priceAtWithdrawal: number
+        usdValue: number
+        poolId: string
+        priceSource: 'daily_token_prices' | 'forward_fill' | 'sdk_fallback'
+      }>
+    }>()
+
+    // Initialize empty arrays for all pairs
+    for (const pair of poolAssetPairs) {
+      const compositeKey = `${pair.poolId}-${pair.assetAddress}`
+      resultMap.set(compositeKey, { deposits: [], withdrawals: [] })
+    }
+
+    // Process all rows
+    for (const row of result.rows) {
+      const compositeKey = `${row.pool_id}-${row.asset_address}`
+      const entry = resultMap.get(compositeKey)
+      if (!entry) continue
+
+      const tokens = parseFloat(row.tokens) || 0
+      const sdkPrice = sdkPrices[row.asset_address] || 0
+      let price = row.price ? parseFloat(row.price) : sdkPrice
+      let priceSource: 'daily_token_prices' | 'forward_fill' | 'sdk_fallback'
+
+      if (row.price !== null) {
+        if (row.price_source_date === row.event_date) {
+          priceSource = 'daily_token_prices'
+        } else {
+          priceSource = 'forward_fill'
+        }
+      } else {
+        price = sdkPrice
+        priceSource = 'sdk_fallback'
+      }
+
+      const usdValue = tokens * price
+
+      if (row.action_type === 'supply' || row.action_type === 'supply_collateral') {
+        entry.deposits.push({
+          date: row.event_date,
+          tokens,
+          priceAtDeposit: price,
+          usdValue,
+          poolId: row.pool_id,
+          priceSource,
+        })
+      } else {
+        entry.withdrawals.push({
+          date: row.event_date,
+          tokens,
+          priceAtWithdrawal: price,
+          usdValue,
+          poolId: row.pool_id,
+          priceSource,
+        })
+      }
+    }
+
+    return resultMap
+  }
 }
 
 export const eventsRepository = new EventsRepository()

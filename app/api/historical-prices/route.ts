@@ -56,8 +56,7 @@ export async function GET(request: NextRequest) {
   })
 
   try {
-    // Query all available prices for these tokens in the date range
-    const minDate = dates.reduce((a, b) => a < b ? a : b)
+    // Query all available prices for these tokens up to maxDate (for forward-fill)
     const maxDate = dates.reduce((a, b) => a > b ? a : b)
 
     const result = await pool.query(

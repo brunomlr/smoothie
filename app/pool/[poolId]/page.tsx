@@ -42,6 +42,20 @@ interface BackstopClaimData {
   last_claim_date: string | null
 }
 
+interface BalanceHistoryRecord {
+  pool_id: string
+  total_cost_basis: number | null
+  [key: string]: unknown
+}
+
+interface BalanceHistoryResult {
+  assetAddress: string
+  data: {
+    history: BalanceHistoryRecord[]
+    firstEventDate: string | null
+  }
+}
+
 const WALLETS_STORAGE_KEY = "stellar-wallet-tracked-addresses"
 const ACTIVE_WALLET_STORAGE_KEY = "stellar-wallet-active-id"
 
@@ -805,22 +819,25 @@ export default function PoolDetailsPage() {
     return [...new Set(positions.map(p => p.assetId))]
   }, [snapshot, poolId])
 
-  // Fetch balance history for each asset to get cost basis
-  const { data: balanceHistoryData } = useQuery({
-    queryKey: ["pool-balance-history", activeWallet?.publicKey, poolId, poolAssetAddresses.join(',')],
+  // Fetch balance history for all assets in a single batch request (optimization: N requests -> 1)
+  const { data: balanceHistoryData } = useQuery<BalanceHistoryResult[]>({
+    queryKey: ["pool-balance-history-batch", activeWallet?.publicKey, poolId, poolAssetAddresses.join(',')],
     enabled: !!activeWallet?.publicKey && poolAssetAddresses.length > 0,
     queryFn: async () => {
-      const results = await Promise.all(
-        poolAssetAddresses.map(async (assetAddress) => {
-          const response = await fetchWithTimeout(
-            `/api/balance-history?user=${encodeURIComponent(activeWallet!.publicKey)}&asset=${encodeURIComponent(assetAddress)}`
-          )
-          if (!response.ok) return null
-          const data = await response.json()
-          return { assetAddress, data }
-        })
-      )
-      return results.filter(r => r !== null)
+      const params = new URLSearchParams({
+        user: activeWallet!.publicKey,
+        assets: poolAssetAddresses.join(','),
+        days: '365',
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      })
+      const response = await fetchWithTimeout(`/api/balance-history-batch?${params.toString()}`)
+      if (!response.ok) return []
+      const data = await response.json()
+      // Transform batch results to match the expected format
+      return (data.results || []).map((result: { asset_address: string; history: BalanceHistoryRecord[]; firstEventDate: string | null }) => ({
+        assetAddress: result.asset_address,
+        data: { history: result.history, firstEventDate: result.firstEventDate }
+      }))
     },
     staleTime: 60_000,
   })
