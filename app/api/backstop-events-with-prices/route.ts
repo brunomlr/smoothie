@@ -1,5 +1,16 @@
-import { NextRequest, NextResponse } from 'next/server'
+/**
+ * Backstop Events with Prices API Route
+ * Returns backstop deposit/withdrawal events with historical LP prices
+ */
+
+import { NextRequest } from 'next/server'
 import { eventsRepository } from '@/lib/db/events-repository'
+import {
+  createApiHandler,
+  requireString,
+  optionalString,
+  CACHE_CONFIGS,
+} from '@/lib/api'
 
 export interface BackstopEventWithPrice {
   date: string
@@ -15,30 +26,15 @@ export interface BackstopEventsWithPricesResponse {
   withdrawals: BackstopEventWithPrice[]
 }
 
-/**
- * GET /api/backstop-events-with-prices
- *
- * Returns backstop deposit/withdrawal events with historical LP prices.
- *
- * Query params:
- * - userAddress: The user's wallet address
- * - sdkLpPrice: Current LP price from SDK (fallback)
- * - poolAddress: (optional) Filter by pool address
- */
-export async function GET(request: NextRequest) {
-  const searchParams = request.nextUrl.searchParams
-  const userAddress = searchParams.get('userAddress')
-  const sdkLpPrice = parseFloat(searchParams.get('sdkLpPrice') || '0') || 0
-  const poolAddress = searchParams.get('poolAddress') || undefined
+export const GET = createApiHandler<BackstopEventsWithPricesResponse>({
+  logPrefix: '[API backstop-events-with-prices]',
+  cache: CACHE_CONFIGS.SHORT,
 
-  if (!userAddress) {
-    return NextResponse.json(
-      { error: 'Missing required parameter: userAddress' },
-      { status: 400 }
-    )
-  }
+  async handler(_request: NextRequest, { searchParams }) {
+    const userAddress = requireString(searchParams, 'userAddress')
+    const sdkLpPrice = parseFloat(searchParams.get('sdkLpPrice') || '0') || 0
+    const poolAddress = optionalString(searchParams, 'poolAddress')
 
-  try {
     const { deposits, withdrawals } = await eventsRepository.getBackstopEventsWithPrices(
       userAddress,
       poolAddress,
@@ -46,7 +42,7 @@ export async function GET(request: NextRequest) {
     )
 
     // Map to response format
-    const response: BackstopEventsWithPricesResponse = {
+    return {
       deposits: deposits.map(d => ({
         date: d.date,
         lpTokens: d.lpTokens,
@@ -64,17 +60,5 @@ export async function GET(request: NextRequest) {
         priceSource: w.priceSource,
       })),
     }
-
-    return NextResponse.json(response, {
-      headers: {
-        'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120',
-      },
-    })
-  } catch (error) {
-    console.error('[API backstop-events-with-prices] Error:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch backstop events with prices' },
-      { status: 500 }
-    )
-  }
-}
+  },
+})

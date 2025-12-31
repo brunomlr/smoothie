@@ -3,47 +3,47 @@
  * Fetches user action history from the database (parsed_events)
  */
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { eventsRepository } from '@/lib/db/events-repository'
-import { getAnalyticsUserIdFromRequest, captureServerEvent, hashWalletAddress } from '@/lib/analytics-server'
+import {
+  createApiHandler,
+  requireString,
+  optionalString,
+  optionalInt,
+  parseList,
+  CACHE_CONFIGS,
+} from '@/lib/api'
 
-export async function GET(request: NextRequest) {
-  try {
-    const searchParams = request.nextUrl.searchParams
-    const user = searchParams.get('user')
-    const limit = parseInt(searchParams.get('limit') || '50', 10)
-    const offset = parseInt(searchParams.get('offset') || '0', 10)
-    const poolId = searchParams.get('pool') || undefined
-    const assetAddress = searchParams.get('asset') || undefined
-    const actionTypesParam = searchParams.get('actionTypes')
-    const actionTypes = actionTypesParam ? actionTypesParam.split(',') : undefined
-    const startDate = searchParams.get('startDate') || undefined
-    const endDate = searchParams.get('endDate') || undefined
+interface UserActionsResponse {
+  user_address: string
+  count: number
+  limit: number
+  offset: number
+  actions: unknown[]
+}
 
-    // Get analytics user ID from request header
-    const analyticsUserId = getAnalyticsUserIdFromRequest(request)
+export const GET = createApiHandler<UserActionsResponse>({
+  logPrefix: '[User Actions API]',
+  cache: CACHE_CONFIGS.SHORT,
 
-    // Validate required parameters
-    if (!user) {
-      return NextResponse.json(
-        {
-          error: 'Missing required parameter',
-          message: 'user parameter is required',
-        },
-        { status: 400 },
-      )
-    }
+  analytics: {
+    event: 'user_actions_fetched',
+    getUserAddress: (request) => request.nextUrl.searchParams.get('user') || undefined,
+    getProperties: (result, userAddress) => ({
+      action_count: result.count,
+      has_filters: result.count !== result.actions.length,
+    }),
+  },
 
-    // Validate limit
-    if (isNaN(limit) || limit < 1 || limit > 1000) {
-      return NextResponse.json(
-        {
-          error: 'Invalid limit parameter',
-          message: 'limit must be between 1 and 1000',
-        },
-        { status: 400 },
-      )
-    }
+  async handler(_request: NextRequest, { searchParams }) {
+    const user = requireString(searchParams, 'user')
+    const limit = optionalInt(searchParams, 'limit', 50, { min: 1, max: 1000 })
+    const offset = optionalInt(searchParams, 'offset', 0, { min: 0 })
+    const poolId = optionalString(searchParams, 'pool')
+    const assetAddress = optionalString(searchParams, 'asset')
+    const actionTypes = parseList(searchParams, 'actionTypes')
+    const startDate = optionalString(searchParams, 'startDate')
+    const endDate = optionalString(searchParams, 'endDate')
 
     const actions = await eventsRepository.getUserActions(user, {
       limit,
@@ -55,43 +55,12 @@ export async function GET(request: NextRequest) {
       endDate,
     })
 
-    // Capture server-side event with hashed wallet address for privacy
-    const hashedAddress = hashWalletAddress(user)
-    captureServerEvent(analyticsUserId, {
-      event: 'user_actions_fetched',
-      properties: {
-        wallet_address_hash: hashedAddress,
-        action_count: actions.length,
-        has_filters: !!(poolId || assetAddress || actionTypes || startDate || endDate),
-      },
-      $set: {
-        last_wallet_address_hash: hashedAddress,
-        last_action_count: actions.length,
-      },
-    })
-
-    const response = {
+    return {
       user_address: user,
       count: actions.length,
       limit,
       offset,
       actions,
     }
-
-    return NextResponse.json(response, {
-      headers: {
-        'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120', // 1 min cache
-      },
-    })
-  } catch (error) {
-    console.error('[User Actions API] Error:', error)
-
-    return NextResponse.json(
-      {
-        error: 'Internal server error',
-        message: error instanceof Error ? error.message : 'Unknown error',
-      },
-      { status: 500 },
-    )
-  }
-}
+  },
+})

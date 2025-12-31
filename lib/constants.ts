@@ -1,9 +1,14 @@
-export const WALLETS_STORAGE_KEY = "stellar-wallet-tracked-addresses"
-export const ACTIVE_WALLET_STORAGE_KEY = "stellar-wallet-active-id"
+/**
+ * Constants
+ *
+ * This file re-exports from @/lib/config for backwards compatibility.
+ * New code should import from '@/lib/config' directly.
+ */
 
-// Stellar token addresses
-export const LP_TOKEN_ADDRESS = 'CAS3FL6TLZKDGGSISDBWGGPXT3NRR4DYTZD7YOD3HMYO6LTJUVGRVEAM'
-export const BLND_TOKEN_ADDRESS = 'CD25MNVTZDL4Y3XBCPCJXGXATV5WUHHOWMYFF4YBEGU5FCPGMYTVG5JY'
-
-// Conversion constants
-export const STROOPS_PER_UNIT = 1e7
+export {
+  WALLETS_STORAGE_KEY,
+  ACTIVE_WALLET_STORAGE_KEY,
+  LP_TOKEN_ADDRESS,
+  BLND_TOKEN_ADDRESS,
+  STROOPS_PER_UNIT,
+} from './config'

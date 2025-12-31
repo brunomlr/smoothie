@@ -1,6 +1,14 @@
-import { NextRequest, NextResponse } from 'next/server'
+/**
+ * Claimed BLND API Route
+ * Fetches BLND claims with historical pricing data
+ */
+
+import { NextRequest } from 'next/server'
 import { eventsRepository } from '@/lib/db/events-repository'
-import { getAnalyticsUserIdFromRequest, captureServerEvent, hashWalletAddress } from '@/lib/analytics-server'
+import {
+  createApiHandler,
+  requireString,
+} from '@/lib/api'
 
 export interface BlndClaimWithPrice {
   date: string
@@ -20,20 +28,23 @@ export interface ClaimedBlndResponse {
   total_claimed_blnd_usd_historical?: number
 }
 
-export async function GET(request: NextRequest) {
-  const searchParams = request.nextUrl.searchParams
-  const userAddress = searchParams.get('user')
-  const sdkBlndPrice = parseFloat(searchParams.get('sdkBlndPrice') || '0') || 0
-  const analyticsUserId = getAnalyticsUserIdFromRequest(request)
+export const GET = createApiHandler<ClaimedBlndResponse>({
+  logPrefix: '[API claimed-blnd]',
+  cache: null, // No caching for this endpoint
 
-  if (!userAddress) {
-    return NextResponse.json(
-      { error: 'Missing user address parameter' },
-      { status: 400 }
-    )
-  }
+  analytics: {
+    event: 'claimed_blnd_fetched',
+    getUserAddress: (request) => request.nextUrl.searchParams.get('user') || undefined,
+    getProperties: (result) => ({
+      pool_claims_count: result.pool_claims.length,
+      backstop_claims_count: result.backstop_claims.length,
+    }),
+  },
 
-  try {
+  async handler(_request: NextRequest, { searchParams }) {
+    const userAddress = requireString(searchParams, 'user')
+    const sdkBlndPrice = parseFloat(searchParams.get('sdkBlndPrice') || '0') || 0
+
     // Fetch pool claims, backstop claims, and historical pricing in parallel
     const [poolClaims, backstopClaims, poolClaimsWithPrices] = await Promise.all([
       eventsRepository.getClaimedBlndFromPools(userAddress),
@@ -47,21 +58,7 @@ export async function GET(request: NextRequest) {
       0
     )
 
-    // Capture server-side event with hashed wallet address for privacy
-    const hashedAddress = hashWalletAddress(userAddress)
-    captureServerEvent(analyticsUserId, {
-      event: 'claimed_blnd_fetched',
-      properties: {
-        wallet_address_hash: hashedAddress,
-        pool_claims_count: poolClaims.length,
-        backstop_claims_count: backstopClaims.length,
-      },
-      $set: {
-        last_wallet_address_hash: hashedAddress,
-      },
-    })
-
-    return NextResponse.json({
+    return {
       // BLND claimed from supply/borrow positions (actual BLND tokens)
       pool_claims: poolClaims,
       // LP tokens received from claiming backstop emissions
@@ -72,12 +69,6 @@ export async function GET(request: NextRequest) {
       pool_claims_with_prices: poolClaimsWithPrices,
       // Total USD value at historical prices
       total_claimed_blnd_usd_historical: totalClaimedBlndUsdHistorical,
-    } as ClaimedBlndResponse)
-  } catch (error) {
-    console.error('[API claimed-blnd] Error:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch claimed BLND data' },
-      { status: 500 }
-    )
-  }
-}
+    }
+  },
+})

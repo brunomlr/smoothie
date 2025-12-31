@@ -176,17 +176,7 @@ export interface EarningsStats {
 }
 
 /**
- * Pool name mapping
+ * Pool name and color mappings
+ * Re-exported from @/lib/config for backwards compatibility
  */
-export const POOL_NAMES: Record<string, string> = {
-  'CCCCIQSDILITHMM7PBSLVDT5MISSY7R26MNZXCX4H7J5JQ5FPIYOGYFS': 'YieldBlox',
-  'CAJJZSGMMM3PD7N33TAPHGBUGTB43OC73HVIK2L2G6BNGGGYOSSYBXBD': 'Blend Pool',
-}
-
-/**
- * Pool color mapping for charts
- */
-export const POOL_COLORS: Record<string, string> = {
-  'CCCCIQSDILITHMM7PBSLVDT5MISSY7R26MNZXCX4H7J5JQ5FPIYOGYFS': '#9333ea', // YieldBlox - Purple
-  'CAJJZSGMMM3PD7N33TAPHGBUGTB43OC73HVIK2L2G6BNGGGYOSSYBXBD': '#0ea5e9', // Blend Pool - Cyan
-}
+export { POOL_NAMES, POOL_COLORS } from '@/lib/config'

@@ -3,12 +3,26 @@
  * Fetches daily b_rates and calculates historical APY from rate changes
  */
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { eventsRepository } from '@/lib/db/events-repository'
+import {
+  createApiHandler,
+  requireString,
+  optionalInt,
+  CACHE_CONFIGS,
+} from '@/lib/api'
 
 export interface ApyDataPoint {
   date: string
   apy: number
+}
+
+interface ApyHistoryResponse {
+  pool_id: string
+  asset_address: string
+  days: number
+  count: number
+  history: ApyDataPoint[]
 }
 
 /**
@@ -51,36 +65,14 @@ function calculateApyFromRates(
   return result
 }
 
-export async function GET(request: NextRequest) {
-  try {
-    const searchParams = request.nextUrl.searchParams
-    const poolId = searchParams.get('pool')
-    const asset = searchParams.get('asset')
-    const daysParam = searchParams.get('days') || '180' // Default to 6 months
+export const GET = createApiHandler<ApyHistoryResponse>({
+  logPrefix: '[APY History API]',
+  cache: CACHE_CONFIGS.LONG,
 
-    const days = parseInt(daysParam, 10)
-
-    // Validate required parameters
-    if (!poolId || !asset) {
-      return NextResponse.json(
-        {
-          error: 'Missing required parameters',
-          message: 'pool and asset parameters are required',
-        },
-        { status: 400 }
-      )
-    }
-
-    // Validate days parameter
-    if (isNaN(days) || days < 1) {
-      return NextResponse.json(
-        {
-          error: 'Invalid days parameter',
-          message: 'days must be a positive number',
-        },
-        { status: 400 }
-      )
-    }
+  async handler(_request: NextRequest, { searchParams }) {
+    const poolId = requireString(searchParams, 'pool')
+    const asset = requireString(searchParams, 'asset')
+    const days = optionalInt(searchParams, 'days', 180, { min: 1 })
 
     // Fetch daily rates - add 1 extra day to calculate first day's APY
     const rates = await eventsRepository.getDailyRates(asset, poolId, days + 1)
@@ -88,29 +80,12 @@ export async function GET(request: NextRequest) {
     // Calculate APY from b_rate changes
     const apyHistory = calculateApyFromRates(rates)
 
-    return NextResponse.json(
-      {
-        pool_id: poolId,
-        asset_address: asset,
-        days,
-        count: apyHistory.length,
-        history: apyHistory,
-      },
-      {
-        headers: {
-          'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=7200', // 1 hour cache
-        },
-      }
-    )
-  } catch (error) {
-    console.error('[APY History API] Error:', error)
-
-    return NextResponse.json(
-      {
-        error: 'Internal server error',
-        message: error instanceof Error ? error.message : 'Unknown error',
-      },
-      { status: 500 }
-    )
-  }
-}
+    return {
+      pool_id: poolId,
+      asset_address: asset,
+      days,
+      count: apyHistory.length,
+      history: apyHistory,
+    }
+  },
+})

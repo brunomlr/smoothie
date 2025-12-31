@@ -3,57 +3,57 @@
  * Fetches backstop LP token balance history for a user (all pools combined)
  */
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { eventsRepository } from '@/lib/db/events-repository'
-import { getAnalyticsUserIdFromRequest, captureServerEvent, hashWalletAddress } from '@/lib/analytics-server'
+import {
+  createApiHandler,
+  requireString,
+  optionalInt,
+  getTimezone,
+  CACHE_CONFIGS,
+} from '@/lib/api'
 
-export async function GET(request: NextRequest) {
-  try {
-    const searchParams = request.nextUrl.searchParams
-    const user = searchParams.get('user')
-    const daysParam = searchParams.get('days') || '365'
-    const days = parseInt(daysParam, 10)
-    // Get timezone from query param, default to UTC
-    // Frontend should pass IANA timezone name (e.g., 'America/New_York')
-    const timezone = searchParams.get('timezone') || 'UTC'
-    const analyticsUserId = getAnalyticsUserIdFromRequest(request)
+interface BackstopBalanceHistoryResponse {
+  user_address: string
+  days: number
+  count?: number
+  history: Array<{
+    date: string
+    lp_tokens: number
+    pools: Array<{ poolAddress: string; lpTokens: number }>
+  }>
+  firstEventDate: string | null
+}
 
-    // Validate required parameters
-    if (!user) {
-      return NextResponse.json(
-        {
-          error: 'Missing required parameter',
-          message: 'user parameter is required',
-        },
-        { status: 400 },
-      )
-    }
+export const GET = createApiHandler<BackstopBalanceHistoryResponse>({
+  logPrefix: '[Backstop Balance History API]',
+  cache: CACHE_CONFIGS.MEDIUM,
 
-    // Validate days parameter
-    if (isNaN(days) || days < 1) {
-      return NextResponse.json(
-        {
-          error: 'Invalid days parameter',
-          message: 'days must be a positive number',
-        },
-        { status: 400 },
-      )
-    }
+  analytics: {
+    event: 'backstop_balance_history_fetched',
+    getUserAddress: (request) => request.nextUrl.searchParams.get('user') || undefined,
+    getProperties: (result) => ({
+      days: result.days,
+      pool_count: result.history.length > 0 ? result.history[0].pools.length : 0,
+      data_points: result.count || result.history.length,
+    }),
+  },
+
+  async handler(_request: NextRequest, { searchParams }) {
+    const user = requireString(searchParams, 'user')
+    const days = optionalInt(searchParams, 'days', 365, { min: 1 })
+    const timezone = getTimezone(searchParams)
 
     // Get all backstop cost bases to find which pools the user has positions in
     const costBases = await eventsRepository.getAllBackstopCostBases(user)
 
     if (costBases.length === 0) {
-      return NextResponse.json({
+      return {
         user_address: user,
         days,
         history: [],
         firstEventDate: null,
-      }, {
-        headers: {
-          'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
-        },
-      })
+      }
     }
 
     // Fetch balance history for all pools in a single query
@@ -97,38 +97,12 @@ export async function GET(request: NextRequest) {
       return cb.first_deposit_date < earliest ? cb.first_deposit_date : earliest
     }, null as string | null)
 
-    const hashedAddress = hashWalletAddress(user)
-    captureServerEvent(analyticsUserId, {
-      event: 'backstop_balance_history_fetched',
-      properties: {
-        wallet_address_hash: hashedAddress,
-        days,
-        pool_count: costBases.length,
-        data_points: history.length,
-      },
-      $set: { last_wallet_address_hash: hashedAddress },
-    })
-
-    return NextResponse.json({
+    return {
       user_address: user,
       days,
       count: history.length,
       history,
       firstEventDate,
-    }, {
-      headers: {
-        'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
-      },
-    })
-  } catch (error) {
-    console.error('[Backstop Balance History API] Error:', error)
-
-    return NextResponse.json(
-      {
-        error: 'Internal server error',
-        message: error instanceof Error ? error.message : 'Unknown error',
-      },
-      { status: 500 },
-    )
-  }
-}
+    }
+  },
+})

@@ -3,9 +3,15 @@
  * Fetches balance history from database (parsed_events + daily_rates)
  */
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { eventsRepository } from '@/lib/db/events-repository'
-import { getAnalyticsUserIdFromRequest, captureServerEvent, hashWalletAddress } from '@/lib/analytics-server'
+import {
+  createApiHandler,
+  requireString,
+  optionalInt,
+  getTimezone,
+  CACHE_CONFIGS,
+} from '@/lib/api'
 
 // Track when daily_rates was last refreshed (in-memory cache)
 let lastRatesRefresh: number = 0
@@ -23,41 +29,34 @@ async function ensureFreshRates(): Promise<void> {
   }
 }
 
-export async function GET(request: NextRequest) {
-  try {
-    const searchParams = request.nextUrl.searchParams
-    const user = searchParams.get('user')
-    const asset = searchParams.get('asset')
-    const daysParam = searchParams.get('days') || '30'
-    const days = parseInt(daysParam, 10)
-    // Get timezone from query param, default to UTC
-    // Frontend should pass IANA timezone name (e.g., 'America/New_York')
-    const timezone = searchParams.get('timezone') || 'UTC'
+interface BalanceHistoryResponse {
+  user_address: string
+  asset_address: string
+  days: number
+  count: number
+  history: unknown[]
+  firstEventDate: string | null
+  source: string
+}
 
-    // Get analytics user ID from request header
-    const analyticsUserId = getAnalyticsUserIdFromRequest(request)
+export const GET = createApiHandler<BalanceHistoryResponse>({
+  logPrefix: '[Balance History API]',
+  cache: CACHE_CONFIGS.MEDIUM,
 
-    // Validate required parameters
-    if (!user || !asset) {
-      return NextResponse.json(
-        {
-          error: 'Missing required parameters',
-          message: 'user and asset parameters are required',
-        },
-        { status: 400 },
-      )
-    }
+  analytics: {
+    event: 'balance_history_fetched',
+    getUserAddress: (request) => request.nextUrl.searchParams.get('user') || undefined,
+    getProperties: (result) => ({
+      days: result.days,
+      data_points: result.count,
+    }),
+  },
 
-    // Validate days parameter
-    if (isNaN(days) || days < 1) {
-      return NextResponse.json(
-        {
-          error: 'Invalid days parameter',
-          message: 'days must be a positive number',
-        },
-        { status: 400 },
-      )
-    }
+  async handler(_request: NextRequest, { searchParams }) {
+    const user = requireString(searchParams, 'user')
+    const asset = requireString(searchParams, 'asset')
+    const days = optionalInt(searchParams, 'days', 30, { min: 1 })
+    const timezone = getTimezone(searchParams)
 
     // Ensure daily_rates is fresh (refresh if stale)
     await ensureFreshRates()
@@ -69,21 +68,7 @@ export async function GET(request: NextRequest) {
       timezone,
     )
 
-    // Capture server-side event with hashed wallet address for privacy
-    const hashedAddress = hashWalletAddress(user)
-    captureServerEvent(analyticsUserId, {
-      event: 'balance_history_fetched',
-      properties: {
-        wallet_address_hash: hashedAddress,
-        days,
-        data_points: history.length,
-      },
-      $set: {
-        last_wallet_address_hash: hashedAddress,
-      },
-    })
-
-    const response = {
+    return {
       user_address: user,
       asset_address: asset,
       days,
@@ -92,21 +77,5 @@ export async function GET(request: NextRequest) {
       firstEventDate,
       source: 'database',
     }
-
-    return NextResponse.json(response, {
-      headers: {
-        'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600', // 5 min cache
-      },
-    })
-  } catch (error) {
-    console.error('[Balance History API] Error:', error)
-
-    return NextResponse.json(
-      {
-        error: 'Internal server error',
-        message: error instanceof Error ? error.message : 'Unknown error',
-      },
-      { status: 500 },
-    )
-  }
-}
+  },
+})
