@@ -322,9 +322,9 @@ function RealizedYieldContent() {
       onConnectWallet={handleConnectWallet}
       onDisconnect={handleDisconnect}
     >
-      <div className="space-y-6">
+      <div className="space-y-4 sm:space-y-6">
         {/* Header */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           <Link href="/">
             <Button variant="ghost" size="icon" className="h-8 w-8">
               <ArrowLeft className="h-4 w-4" />
@@ -386,8 +386,8 @@ function RealizedYieldContent() {
                             tooltip="(Current Balance + Withdrawn) - Deposited. Your total profit from Blend protocol."
                           />
                         </p>
-                        <div className="flex items-baseline gap-3">
-                          <p className={`text-3xl font-bold tabular-nums ${totalPnlPositive ? "text-green-500" : "text-red-500"}`}>
+                        <div className="flex items-baseline gap-2 sm:gap-3 flex-wrap">
+                          <p className={`text-2xl sm:text-3xl font-bold tabular-nums ${totalPnlPositive ? "text-green-500" : "text-red-500"}`}>
                             {totalPnlPositive ? "+" : ""}{formatUsd(unrealizedData.totalPnl)}
                           </p>
                           {data.totalDepositedUsd > 0 && (
@@ -406,24 +406,24 @@ function RealizedYieldContent() {
                       </div>
                     </div>
                     <Separator className="my-4" />
-                    <div className="grid grid-cols-3 gap-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
                       <div>
                         <p className="text-xs text-muted-foreground mb-0.5">
                           <InfoLabel label="Deposited" tooltip="Total USD value of all deposits at the time each deposit was made." />
                         </p>
-                        <p className="text-base font-semibold tabular-nums">{formatUsd(data.totalDepositedUsd)}</p>
+                        <p className="text-sm sm:text-base font-semibold tabular-nums">{formatUsd(data.totalDepositedUsd)}</p>
                       </div>
                       <div>
                         <p className="text-xs text-muted-foreground mb-0.5">
                           <InfoLabel label="Withdrawn" tooltip="Total USD value of all withdrawals and claims at the time they were made." />
                         </p>
-                        <p className="text-base font-semibold tabular-nums">{formatUsd(data.totalWithdrawnUsd)}</p>
+                        <p className="text-sm sm:text-base font-semibold tabular-nums">{formatUsd(data.totalWithdrawnUsd)}</p>
                       </div>
-                      <div>
+                      <div className="col-span-2 sm:col-span-1">
                         <p className="text-xs text-muted-foreground mb-0.5">
                           <InfoLabel label="Current Value" tooltip="Current market value of your positions in Blend protocol." />
                         </p>
-                        <p className="text-base font-semibold tabular-nums">{formatUsd(unrealizedData.totalCurrentUsd)}</p>
+                        <p className="text-sm sm:text-base font-semibold tabular-nums">{formatUsd(unrealizedData.totalCurrentUsd)}</p>
                       </div>
                     </div>
                   </>
@@ -435,7 +435,7 @@ function RealizedYieldContent() {
                         <p className="text-sm font-medium text-muted-foreground mb-1">
                           {data.realizedPnl >= 0 ? "Realized Profits" : "Net Cash Flow"}
                         </p>
-                        <p className={`text-3xl font-bold tabular-nums ${data.realizedPnl >= 0 ? "text-green-500" : "text-red-500"}`}>
+                        <p className={`text-2xl sm:text-3xl font-bold tabular-nums ${data.realizedPnl >= 0 ? "text-green-500" : "text-red-500"}`}>
                           {data.realizedPnl >= 0 ? "+" : ""}{formatUsd(data.realizedPnl)}
                         </p>
                       </div>
@@ -465,7 +465,7 @@ function RealizedYieldContent() {
 
             {/* Strategy Performance Stats */}
             {data.firstActivityDate && (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
                 <Card>
                   <CardContent className="pt-4 pb-4">
                     <div className="flex items-center gap-2 mb-1">
@@ -553,8 +553,8 @@ function RealizedYieldContent() {
                           }
                           return `${value < 0 ? "-" : ""}$${formatNumber(absValue, 0)}`
                         }}
-                        tick={{ fontSize: 10 }}
-                        width={55}
+                        tick={{ fontSize: 9 }}
+                        width={45}
                       />
                       <ChartTooltip
                         content={({ active, payload }) => {
@@ -594,10 +594,10 @@ function RealizedYieldContent() {
 
             {/* Breakdown by Source */}
             <Card>
-              <CardHeader className="pb-3">
+              <CardHeader className="pb-2 sm:pb-3">
                 <CardTitle className="text-sm font-medium">Breakdown by Source</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3">
+              <CardContent className="space-y-2 sm:space-y-3">
                 {/* Pools */}
                 {(data.pools.deposited > 0 || data.pools.withdrawn > 0) && (
                   <div className="p-3 rounded-lg bg-muted/50 space-y-2">
@@ -755,31 +755,31 @@ function RealizedYieldContent() {
             {/* Per-Pool Breakdown */}
             {perPoolBreakdown.length > 1 && (
               <Card>
-                <CardHeader className="pb-3">
+                <CardHeader className="pb-2 sm:pb-3">
                   <CardTitle className="text-sm font-medium">Activity by Pool</CardTitle>
                   <CardDescription className="text-xs">
                     Deposits and withdrawals per pool
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-2">
+                <CardContent className="space-y-1.5 sm:space-y-2">
                   {perPoolBreakdown.map((poolData) => {
                     return (
                       <div
                         key={`${poolData.poolId}-${poolData.source}`}
-                        className="flex items-center justify-between p-2.5 rounded-lg bg-muted/30 text-sm"
+                        className="flex items-center justify-between p-2 sm:p-2.5 rounded-lg bg-muted/30 text-sm"
                       >
                         <div className="flex items-center gap-2 min-w-0">
                           <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${poolData.source === 'pool' ? 'bg-blue-500' : 'bg-purple-500'}`} />
                           <div className="min-w-0">
-                            <p className="font-medium truncate">
+                            <p className="font-medium truncate text-xs sm:text-sm">
                               {poolData.poolName || poolData.poolId.slice(0, 8) + '...'}
                             </p>
-                            <p className="text-xs text-muted-foreground capitalize">
+                            <p className="text-[10px] sm:text-xs text-muted-foreground capitalize">
                               {poolData.source}
                             </p>
                           </div>
                         </div>
-                        <div className="text-right flex-shrink-0 ml-2 text-xs">
+                        <div className="text-right flex-shrink-0 ml-2 text-[10px] sm:text-xs">
                           <p className="tabular-nums">
                             <span className="text-muted-foreground">In:</span> {formatUsd(poolData.deposited)}
                           </p>
@@ -797,7 +797,7 @@ function RealizedYieldContent() {
             {/* Transaction History */}
             <Card>
               <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
                     <CardTitle className="text-sm font-medium">Transaction History</CardTitle>
                     <CardDescription className="text-xs">
@@ -806,7 +806,7 @@ function RealizedYieldContent() {
                   </div>
                   <div className="flex items-center gap-2">
                     <Select value={typeFilter} onValueChange={setTypeFilter}>
-                      <SelectTrigger className="w-24 h-7 text-xs">
+                      <SelectTrigger className="w-[5.5rem] h-7 text-xs">
                         <SelectValue placeholder="Type" />
                       </SelectTrigger>
                       <SelectContent>
@@ -817,7 +817,7 @@ function RealizedYieldContent() {
                       </SelectContent>
                     </Select>
                     <Select value={sourceFilter} onValueChange={setSourceFilter}>
-                      <SelectTrigger className="w-24 h-7 text-xs">
+                      <SelectTrigger className="w-[5.5rem] h-7 text-xs">
                         <SelectValue placeholder="Source" />
                       </SelectTrigger>
                       <SelectContent>
@@ -842,18 +842,19 @@ function RealizedYieldContent() {
                 </div>
               </CardHeader>
               <CardContent className="px-0 pb-0">
-                <div className="border-t">
+                <div className="border-t overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow className="hover:bg-transparent">
-                        <TableHead className="text-xs h-9 pl-6">Date</TableHead>
+                        <TableHead className="text-xs h-9 pl-4 sm:pl-6">Date</TableHead>
                         <TableHead className="text-xs h-9">Type</TableHead>
-                        <TableHead className="text-xs h-9">Asset</TableHead>
-                        <TableHead className="text-xs h-9 text-right">Amount</TableHead>
-                        <TableHead className="text-xs h-9 text-right">Price</TableHead>
+                        <TableHead className="text-xs h-9 hidden sm:table-cell">Asset</TableHead>
+                        <TableHead className="text-xs h-9 text-right hidden md:table-cell">Amount</TableHead>
+                        <TableHead className="text-xs h-9 text-right hidden md:table-cell">Price</TableHead>
                         <TableHead className="text-xs h-9 text-right">Value</TableHead>
-                        <TableHead className="text-xs h-9 text-right pr-6">
-                          <InfoLabel label="Running Net" tooltip="Cumulative Withdrawn minus Deposited at each point in time." />
+                        <TableHead className="text-xs h-9 text-right pr-4 sm:pr-6">
+                          <span className="hidden sm:inline"><InfoLabel label="Running Net" tooltip="Cumulative Withdrawn minus Deposited at each point in time." /></span>
+                          <span className="sm:hidden">Net</span>
                         </TableHead>
                       </TableRow>
                     </TableHeader>
@@ -867,7 +868,7 @@ function RealizedYieldContent() {
                       ) : (
                         transactionsWithRunningNet.slice(0, 50).map((tx, i) => (
                           <TableRow key={`${tx.txHash}-${i}`} className="text-xs">
-                            <TableCell className="pl-6 py-2">{formatShortDate(tx.date)}</TableCell>
+                            <TableCell className="pl-4 sm:pl-6 py-2">{formatShortDate(tx.date)}</TableCell>
                             <TableCell className="py-2">
                               <Badge
                                 variant="outline"
@@ -882,20 +883,20 @@ function RealizedYieldContent() {
                                 {tx.type}
                               </Badge>
                             </TableCell>
-                            <TableCell className="py-2">
+                            <TableCell className="py-2 hidden sm:table-cell">
                               <span>{tx.asset}</span>
                               <span className="text-muted-foreground ml-1">({tx.source})</span>
                             </TableCell>
-                            <TableCell className="text-right tabular-nums py-2">
+                            <TableCell className="text-right tabular-nums py-2 hidden md:table-cell">
                               {formatNumber(tx.amount, tx.asset === "BLND" ? 0 : 2)}
                             </TableCell>
-                            <TableCell className="text-right tabular-nums py-2 text-muted-foreground">
+                            <TableCell className="text-right tabular-nums py-2 text-muted-foreground hidden md:table-cell">
                               ${formatNumber(tx.priceUsd, tx.priceUsd < 0.01 ? 4 : 2)}
                             </TableCell>
                             <TableCell className={`text-right tabular-nums py-2 font-medium ${tx.type === "deposit" ? "" : "text-green-500"}`}>
                               {tx.type === "deposit" ? "-" : "+"}{formatUsd(tx.valueUsd)}
                             </TableCell>
-                            <TableCell className={`text-right tabular-nums py-2 pr-6 ${tx.runningNet >= 0 ? "text-green-500" : "text-red-500"}`}>
+                            <TableCell className={`text-right tabular-nums py-2 pr-4 sm:pr-6 ${tx.runningNet >= 0 ? "text-green-500" : "text-red-500"}`}>
                               {tx.runningNet >= 0 ? "+" : ""}{formatUsd(tx.runningNet)}
                             </TableCell>
                           </TableRow>
