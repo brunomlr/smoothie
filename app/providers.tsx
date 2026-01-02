@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { ThemeProvider as NextThemesProvider } from "next-themes"
 import { CurrencyProvider } from "@/contexts/currency-context"
 import { DisplayPreferencesProvider } from "@/contexts/display-preferences-context"
+import { WalletProvider } from "@/contexts/wallet-context"
 import { NavigationWrapper } from "@/components/navigation-wrapper"
 import posthog from "posthog-js"
 
@@ -43,11 +44,13 @@ export function Providers({ children }: { children: React.ReactNode }) {
       >
         <CurrencyProvider>
           <DisplayPreferencesProvider>
-            <React.Suspense fallback={<div className="min-h-screen bg-background" />}>
-              <NavigationWrapper>
-                {children}
-              </NavigationWrapper>
-            </React.Suspense>
+            <WalletProvider>
+              <React.Suspense fallback={<div className="min-h-screen bg-background" />}>
+                <NavigationWrapper>
+                  {children}
+                </NavigationWrapper>
+              </React.Suspense>
+            </WalletProvider>
           </DisplayPreferencesProvider>
         </CurrencyProvider>
       </NextThemesProvider>

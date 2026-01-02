@@ -31,7 +31,7 @@ export function DashboardLayout({
   isHydrated = true,
 }: DashboardLayoutProps) {
   const mainContent = (
-    <main className="py-3 sm:py-4">
+    <main className="container max-w-4xl mx-auto px-4 py-3 sm:py-4">
       <div className="space-y-6">
         {error && (
           <div className="bg-destructive/10 border border-destructive/20 rounded-md p-4">
@@ -78,14 +78,12 @@ export function DashboardLayout({
       <div className="md:hidden h-[52px]" />
 
       {/* Main content with optional pull-to-refresh */}
-      <div className="px-4 flex-1">
-        <div className="max-w-4xl mx-auto">
-          {onRefresh ? (
-            <PullToRefresh onRefresh={onRefresh}>{mainContent}</PullToRefresh>
-          ) : (
-            mainContent
-          )}
-        </div>
+      <div className="flex-1">
+        {onRefresh ? (
+          <PullToRefresh onRefresh={onRefresh}>{mainContent}</PullToRefresh>
+        ) : (
+          mainContent
+        )}
       </div>
 
       <Footer />

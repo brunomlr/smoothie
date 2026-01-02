@@ -1073,9 +1073,51 @@ function RealizedYieldContent() {
   )
 }
 
+function PerformanceSkeleton() {
+  return (
+    <div className="min-h-screen bg-background">
+      {/* Header skeleton */}
+      <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="container flex h-14 items-center justify-between px-4">
+          <Skeleton className="h-8 w-24" />
+          <Skeleton className="h-9 w-32 rounded-full" />
+        </div>
+      </header>
+
+      <main className="container mx-auto px-4 py-6 space-y-6">
+        {/* Page title skeleton */}
+        <Skeleton className="h-8 w-40" />
+
+        {/* Summary card skeleton */}
+        <div className="rounded-xl border bg-card p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-8 w-40" />
+            </div>
+            <Skeleton className="h-10 w-10 rounded-full" />
+          </div>
+          <div className="flex gap-6">
+            <Skeleton className="h-5 w-20" />
+            <Skeleton className="h-5 w-20" />
+            <Skeleton className="h-5 w-20" />
+          </div>
+        </div>
+
+        {/* Breakdown card skeleton */}
+        <div className="rounded-xl border bg-card p-6 space-y-3">
+          <Skeleton className="h-5 w-36" />
+          <Skeleton className="h-24 w-full rounded-lg" />
+          <Skeleton className="h-24 w-full rounded-lg" />
+        </div>
+      </main>
+    </div>
+  )
+}
+
 export default function RealizedYieldPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-background" />}>
+    <Suspense fallback={<PerformanceSkeleton />}>
       <RealizedYieldContent />
     </Suspense>
   )
