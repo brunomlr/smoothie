@@ -1,0 +1,15 @@
+# Smoothie - Blend Protocol Position Tracker
+# https://smoothie.capital
+
+User-agent: *
+Allow: /
+
+# Sitemaps
+Sitemap: https://smoothie.capital/sitemap.xml
+
+# Disallow API routes and private pages
+Disallow: /api/
+Disallow: /settings
+Disallow: /history
+Disallow: /performance
+Disallow: /pool/

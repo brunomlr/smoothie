@@ -20,15 +20,55 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_BASE_URL || "https://smoothie.capital"),
-  title: "Smoothie – Track Your Stellar Blend DeFi Positions",
-  description: "Track your Stellar Blend DeFi positions, monitor your yields, and stay on top of your lending and borrowing portfolio.",
-  keywords: ["Stellar", "Blend", "DeFi", "yield", "lending", "borrowing", "crypto", "wallet", "BLND"],
+  title: {
+    default: "Smoothie – Track Your Stellar Blend DeFi Positions",
+    template: "%s | Smoothie",
+  },
+  description: "Track your Stellar Blend DeFi positions, monitor your yields, and stay on top of your lending and borrowing portfolio. Real-time analytics for BLND emissions, supply APY, and backstop rewards.",
+  keywords: [
+    "Stellar",
+    "Blend Protocol",
+    "DeFi",
+    "yield tracking",
+    "lending",
+    "borrowing",
+    "crypto",
+    "BLND",
+    "BLND token",
+    "Stellar DeFi",
+    "yield farming",
+    "backstop",
+    "liquidity pool",
+    "APY",
+    "portfolio tracker",
+    "XLM",
+    "USDC",
+  ],
   authors: [{ name: "Smoothie" }],
+  creator: "Smoothie",
+  publisher: "Smoothie",
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
+  },
+  alternates: {
+    canonical: "/",
+  },
+  category: "finance",
   openGraph: {
     title: "Smoothie – Track Your Stellar Blend DeFi Positions",
-    description: "Track your Stellar Blend DeFi positions, monitor your yields, and stay on top of your lending and borrowing portfolio.",
+    description: "Track your Stellar Blend DeFi positions, monitor your yields, and stay on top of your lending and borrowing portfolio. Real-time analytics for BLND emissions and backstop rewards.",
     type: "website",
     siteName: "Smoothie",
+    locale: "en_US",
+    url: "/",
     images: [
       {
         url: "/share.png",
@@ -41,7 +81,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "Smoothie – Track Your Stellar Blend DeFi Positions",
-    description: "Track your Stellar Blend DeFi positions, monitor your yields, and stay on top of your lending and borrowing portfolio.",
+    description: "Track your Stellar Blend DeFi positions, monitor yields, and maximize your BLND rewards on Stellar.",
     images: ["/share.png"],
   },
   icons: {
