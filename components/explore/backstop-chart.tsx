@@ -117,7 +117,7 @@ export function BackstopChart({ items, isLoading }: BackstopChartProps) {
     <div>
       <h2 className="text-lg font-semibold mb-3">Top Backstops</h2>
       {/* Percentage labels row */}
-      <div className="flex justify-around px-4">
+      <div className="flex px-4">
         {chartData.map((item) => (
           <div key={item.name} className="flex-1 text-center">
             <span className="text-xs font-semibold">{item.total.toFixed(1)}%</span>
@@ -173,9 +173,9 @@ export function BackstopChart({ items, isLoading }: BackstopChartProps) {
       </div>
 
       {/* Pool icons row */}
-      <div className="flex justify-around mt-2 px-4">
+      <div className="flex mt-2 px-4">
         {chartData.map((item) => (
-          <div key={item.name} className="flex flex-col items-center">
+          <div key={item.name} className="flex-1 flex flex-col items-center">
             <div className="h-8 w-8 rounded-full bg-purple-500/10 flex items-center justify-center">
               <Shield className="h-4 w-4 text-purple-500" />
             </div>

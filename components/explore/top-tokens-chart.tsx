@@ -157,7 +157,7 @@ export function TopTokensChart({ items, isLoading, sortBy }: TopTokensChartProps
     <div>
       <h2 className="text-lg font-semibold mb-3">Top Pools</h2>
       {/* Percentage labels row */}
-      <div className="flex justify-around px-4">
+      <div className="flex px-4">
         {chartData.map((item) => {
           const displayValue = sortBy === "apy" ? item.apy : sortBy === "blnd" ? item.blnd : item.total
           return (
@@ -222,9 +222,9 @@ export function TopTokensChart({ items, isLoading, sortBy }: TopTokensChartProps
       </div>
 
       {/* Token icons row */}
-      <div className="flex justify-around mt-2 px-4">
+      <div className="flex mt-2 px-4">
         {chartData.map((item) => (
-          <div key={item.name} className="flex flex-col items-center">
+          <div key={item.name} className="flex-1 flex flex-col items-center">
             <TokenLogo
               src={item.logoUrl}
               symbol={item.symbol}
