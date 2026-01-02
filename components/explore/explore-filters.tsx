@@ -10,7 +10,7 @@ interface ExploreFiltersProps {
 }
 
 const PERIOD_OPTIONS: { value: ApyPeriod; label: string }[] = [
-  { value: "current", label: "Current" },
+  { value: "current", label: "Today" },
   { value: "7d", label: "7d" },
   { value: "30d", label: "30d" },
   { value: "90d", label: "3mo" },

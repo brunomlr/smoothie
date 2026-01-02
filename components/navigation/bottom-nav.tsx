@@ -22,14 +22,17 @@ export function BottomNav() {
               className={cn(
                 "flex flex-col items-center justify-center gap-0.5 flex-1 pb-1 transition-colors",
                 isActive
-                  ? "text-primary"
+                  ? "text-pink-400"
                   : "text-muted-foreground"
               )}
             >
-              <item.icon className={cn("h-5 w-5", isActive && "text-primary")} />
+              <item.icon
+                key={isActive ? `${item.href}-active` : item.href}
+                className={cn("h-5 w-5", isActive && "text-pink-400 animate-icon-bounce")}
+              />
               <span className={cn(
                 "text-[10px] font-medium",
-                isActive ? "text-primary" : "text-muted-foreground"
+                isActive ? "text-pink-400" : "text-muted-foreground"
               )}>
                 {item.title}
               </span>
