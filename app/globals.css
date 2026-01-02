@@ -134,16 +134,17 @@
 /* Subtle bounce animation for nav icons */
 @keyframes icon-bounce {
   0% {
-    transform: scale(1);
+    transform: translate3d(0, 0, 0);
   }
   50% {
-    transform: scale(1.15);
+    transform: translate3d(0, -3px, 0);
   }
   100% {
-    transform: scale(1);
+    transform: translate3d(0, 0, 0);
   }
 }
 
 .animate-icon-bounce {
-  animation: icon-bounce 0.25s ease-out;
+  animation: icon-bounce 0.2s ease-out;
+  will-change: transform;
 }
