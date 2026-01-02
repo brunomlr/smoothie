@@ -87,31 +87,40 @@ function BackstopRowSkeleton() {
 export function BackstopResults({ items, isLoading }: BackstopResultsProps) {
   if (isLoading) {
     return (
-      <Card className="py-0">
-        <CardContent className="p-0">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <BackstopRowSkeleton key={i} />
-          ))}
-        </CardContent>
-      </Card>
+      <div>
+        <h2 className="text-lg font-semibold mb-3">All Backstops</h2>
+        <Card className="py-0">
+          <CardContent className="p-0">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <BackstopRowSkeleton key={i} />
+            ))}
+          </CardContent>
+        </Card>
+      </div>
     )
   }
 
   if (items.length === 0) {
     return (
-      <div className="text-center py-12 text-muted-foreground">
-        No backstop positions found
+      <div>
+        <h2 className="text-lg font-semibold mb-3">All Backstops</h2>
+        <div className="text-center py-12 text-muted-foreground">
+          No backstop positions found
+        </div>
       </div>
     )
   }
 
   return (
-    <Card className="py-0">
-      <CardContent className="p-0">
-        {items.map((item) => (
-          <BackstopRow key={item.poolId} item={item} />
-        ))}
-      </CardContent>
-    </Card>
+    <div>
+      <h2 className="text-lg font-semibold mb-3">All Backstops</h2>
+      <Card className="py-0">
+        <CardContent className="p-0">
+          {items.map((item) => (
+            <BackstopRow key={item.poolId} item={item} />
+          ))}
+        </CardContent>
+      </Card>
+    </div>
   )
 }

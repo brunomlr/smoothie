@@ -100,16 +100,13 @@ export function BackstopChart({ items, isLoading }: BackstopChartProps) {
     return Math.max(...chartData.map((d) => d.total), 1) * 1.1
   }, [chartData])
 
-  const hasAnyApr = useMemo(() => {
-    return chartData.some((d) => d.apr > 0)
-  }, [chartData])
-
-  const hasAnyBlnd = useMemo(() => {
-    return chartData.some((d) => d.blnd > 0)
-  }, [chartData])
-
   if (isLoading) {
-    return <Skeleton className="h-48 w-full" />
+    return (
+      <div>
+        <h2 className="text-lg font-semibold mb-3">Top Backstops</h2>
+        <Skeleton className="h-48 w-full" />
+      </div>
+    )
   }
 
   if (chartData.length === 0) {
@@ -118,12 +115,21 @@ export function BackstopChart({ items, isLoading }: BackstopChartProps) {
 
   return (
     <div>
+      <h2 className="text-lg font-semibold mb-3">Top Backstops</h2>
+      {/* Percentage labels row */}
+      <div className="flex justify-around px-4">
+        {chartData.map((item) => (
+          <div key={item.name} className="flex-1 text-center">
+            <span className="text-xs font-semibold">{item.total.toFixed(1)}%</span>
+          </div>
+        ))}
+      </div>
       {/* Bar chart */}
-      <div className="h-32 w-full">
+      <div className="h-24 w-full">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={chartData}
-            margin={{ top: 8, right: 16, left: 16, bottom: 4 }}
+            margin={{ top: 4, right: 16, left: 16, bottom: 4 }}
             barCategoryGap="20%"
           >
             <defs>
@@ -180,21 +186,6 @@ export function BackstopChart({ items, isLoading }: BackstopChartProps) {
         ))}
       </div>
 
-      {/* Legend */}
-      <div className="flex justify-center gap-4 mt-2 text-xs">
-        {hasAnyApr && (
-          <div className="flex items-center gap-1.5">
-            <div className="w-2.5 h-2.5 rounded-sm bg-emerald-500" />
-            <span className="text-muted-foreground">APR</span>
-          </div>
-        )}
-        {hasAnyBlnd && (
-          <div className="flex items-center gap-1.5">
-            <div className="w-2.5 h-2.5 rounded-sm bg-purple-500" />
-            <span className="text-muted-foreground">BLND</span>
-          </div>
-        )}
-      </div>
     </div>
   )
 }

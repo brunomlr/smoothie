@@ -53,7 +53,7 @@ function sortItems(items: SupplyExploreItem[], sortBy: SortBy): SupplyExploreIte
   })
 }
 
-function SupplyRow({ item }: { item: SupplyExploreItem }) {
+function SupplyRow({ item, sortBy }: { item: SupplyExploreItem; sortBy: SortBy }) {
   const blendUrl = `https://mainnet.blend.capital/supply/?poolId=${item.poolId}&assetId=${item.assetAddress}`
   const logoUrl = resolveAssetLogo(item.tokenSymbol)
 
@@ -81,18 +81,27 @@ function SupplyRow({ item }: { item: SupplyExploreItem }) {
 
       {/* Right side: APY badges */}
       <div className="flex flex-col gap-1 items-end shrink-0">
-        <Badge variant="outline" className="text-xs font-medium">
+        <Badge
+          variant="secondary"
+          className={`text-xs font-medium ${sortBy === "total" ? "bg-white/20" : ""}`}
+        >
           {formatApy(getTotalApy(item))} Total
         </Badge>
         <div className="flex gap-1">
           {item.supplyApy !== null && (
-            <Badge variant="secondary" className="text-xs">
+            <Badge
+              variant="secondary"
+              className={`text-xs ${sortBy === "apy" ? "bg-white/20" : ""}`}
+            >
               <TrendingUp className="mr-1 h-3 w-3" />
               {formatApy(item.supplyApy)}
             </Badge>
           )}
           {item.blndApy !== null && item.blndApy > 0.005 && (
-            <Badge variant="secondary" className="text-xs">
+            <Badge
+              variant="secondary"
+              className={`text-xs ${sortBy === "blnd" ? "bg-white/20" : ""}`}
+            >
               <Flame className="mr-1 h-3 w-3" />
               {formatApy(item.blndApy)}
             </Badge>
@@ -159,6 +168,7 @@ export function SupplyResults({ items, isLoading, sortBy }: SupplyResultsProps) 
             <SupplyRow
               key={`${item.poolId}-${item.assetAddress}`}
               item={item}
+              sortBy={sortBy}
             />
           ))}
         </CardContent>

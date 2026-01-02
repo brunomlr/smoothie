@@ -363,6 +363,31 @@ function RealizedYieldContent() {
     }
   }, [data, blendSnapshot, totalBackstopUsd])
 
+  // Calculate actual per-pool balances from SDK positions (not proportional estimates)
+  const perPoolCurrentBalances = useMemo(() => {
+    const balances = new Map<string, { lending: number; backstop: number }>()
+
+    // Aggregate lending positions by poolId
+    if (blendSnapshot?.positions) {
+      for (const pos of blendSnapshot.positions) {
+        const existing = balances.get(pos.poolId) || { lending: 0, backstop: 0 }
+        existing.lending += pos.supplyUsdValue || 0
+        balances.set(pos.poolId, existing)
+      }
+    }
+
+    // Add backstop positions by poolId
+    if (backstopPositions) {
+      for (const bp of backstopPositions) {
+        const existing = balances.get(bp.poolId) || { lending: 0, backstop: 0 }
+        existing.backstop += bp.lpTokensUsd || 0
+        balances.set(bp.poolId, existing)
+      }
+    }
+
+    return balances
+  }, [blendSnapshot?.positions, backstopPositions])
+
   // Calculate unclaimed emissions (pending BLND that can still be claimed)
   const unclaimedEmissions = useMemo(() => {
     // Unclaimed BLND from lending pools (in USD)
@@ -512,13 +537,22 @@ function RealizedYieldContent() {
     if (adjustedChartData.length === 0) return []
 
     // Calculate ratios for splitting between pools and backstop
-    const totalUnrealized = displayPnl.totalUnrealized || 1
-    const poolsUnrealizedRatio = totalUnrealized !== 0 ? displayPnl.poolsUnrealized / totalUnrealized : 0.5
-    const backstopUnrealizedRatio = totalUnrealized !== 0 ? displayPnl.backstopUnrealized / totalUnrealized : 0.5
+    // Use actual current balance ratios as fallback when totals are near zero
+    const totalCurrentBalance = unrealizedData.poolsCurrentUsd + unrealizedData.backstopCurrentUsd
+    const defaultPoolsRatio = totalCurrentBalance > 0
+      ? unrealizedData.poolsCurrentUsd / totalCurrentBalance
+      : 0.5
+    const defaultBackstopRatio = totalCurrentBalance > 0
+      ? unrealizedData.backstopCurrentUsd / totalCurrentBalance
+      : 0.5
 
-    const totalRealized = displayPnl.realizedFromWithdrawals || 1
-    const poolsRealizedRatio = totalRealized !== 0 ? emissionsBySource.pools.usd / totalRealized : 0.5
-    const backstopRealizedRatio = totalRealized !== 0 ? emissionsBySource.backstop.usd / totalRealized : 0.5
+    const totalUnrealized = Math.abs(displayPnl.totalUnrealized) > 0.01 ? displayPnl.totalUnrealized : 0
+    const poolsUnrealizedRatio = totalUnrealized !== 0 ? displayPnl.poolsUnrealized / totalUnrealized : defaultPoolsRatio
+    const backstopUnrealizedRatio = totalUnrealized !== 0 ? displayPnl.backstopUnrealized / totalUnrealized : defaultBackstopRatio
+
+    const totalRealized = emissionsBySource.pools.usd + emissionsBySource.backstop.usd
+    const poolsRealizedRatio = totalRealized > 0 ? emissionsBySource.pools.usd / totalRealized : defaultPoolsRatio
+    const backstopRealizedRatio = totalRealized > 0 ? emissionsBySource.backstop.usd / totalRealized : defaultBackstopRatio
 
     return adjustedChartData.map(point => {
       const poolsUnrealized = point.unrealizedPnl * poolsUnrealizedRatio
@@ -536,7 +570,7 @@ function RealizedYieldContent() {
         backstopTotal: backstopUnrealized + backstopRealized,
       }
     })
-  }, [adjustedChartData, displayPnl, emissionsBySource])
+  }, [adjustedChartData, displayPnl, emissionsBySource, unrealizedData])
 
   // Build per-pool chart data from adjustedChartData
   const perPoolChartData = useMemo(() => {
@@ -628,7 +662,7 @@ function RealizedYieldContent() {
       isHydrated={isHydrated}
     >
       <div>
-        <PageTitle>Performance</PageTitle>
+        <PageTitle badge="Beta">Performance</PageTitle>
 
         <div className="space-y-4 sm:space-y-6">
         {(isLoading || !sdkReady) ? (
@@ -1372,19 +1406,16 @@ function RealizedYieldContent() {
                     const totalDeposited = poolData.lending.deposited + poolData.backstop.deposited
                     const totalEmissions = poolData.lending.emissionsClaimed + poolData.backstop.emissionsClaimed
 
-                    // Estimate per-pool current balance and unrealized based on proportion of deposits
-                    const lendingCurrentBalance = data.pools.deposited > 0
-                      ? (poolData.lending.deposited / data.pools.deposited) * unrealizedData.poolsCurrentUsd
-                      : 0
-                    const lendingUnrealized = data.pools.deposited > 0
-                      ? (poolData.lending.deposited / data.pools.deposited) * displayPnl.poolsUnrealized
-                      : 0
-                    const backstopCurrentBalance = data.backstop.deposited > 0
-                      ? (poolData.backstop.deposited / data.backstop.deposited) * unrealizedData.backstopCurrentUsd
-                      : 0
-                    const backstopUnrealized = data.backstop.deposited > 0
-                      ? (poolData.backstop.deposited / data.backstop.deposited) * displayPnl.backstopUnrealized
-                      : 0
+                    // Get actual per-pool current balances from SDK positions
+                    const poolBalances = perPoolCurrentBalances.get(poolData.poolId)
+                    const lendingCurrentBalance = poolBalances?.lending ?? 0
+                    const backstopCurrentBalance = poolBalances?.backstop ?? 0
+
+                    // Calculate per-pool cost basis and unrealized P&L
+                    const lendingCostBasis = poolData.lending.deposited - poolData.lending.withdrawn
+                    const lendingUnrealized = lendingCurrentBalance - lendingCostBasis
+                    const backstopCostBasis = poolData.backstop.deposited - poolData.backstop.withdrawn
+                    const backstopUnrealized = backstopCurrentBalance - backstopCostBasis
 
                     // Total P&L for each source in this pool
                     const lendingTotalPnl = lendingUnrealized + poolData.lending.emissionsClaimed

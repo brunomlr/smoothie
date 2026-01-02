@@ -135,8 +135,10 @@ export function TopTokensChart({ items, isLoading, sortBy }: TopTokensChartProps
 
   const maxValue = useMemo(() => {
     if (chartData.length === 0) return 10
-    return Math.max(...chartData.map((d) => d.total), 1) * 1.1
-  }, [chartData])
+    const getValue = (d: ChartDataPoint) =>
+      sortBy === "apy" ? d.apy : sortBy === "blnd" ? d.blnd : d.total
+    return Math.max(...chartData.map(getValue), 1) * 1.1
+  }, [chartData, sortBy])
 
   if (isLoading) {
     return (
@@ -155,12 +157,15 @@ export function TopTokensChart({ items, isLoading, sortBy }: TopTokensChartProps
     <div>
       <h2 className="text-lg font-semibold mb-3">Top Pools</h2>
       {/* Percentage labels row */}
-      <div className="flex justify-around px-4 mb-1">
-        {chartData.map((item) => (
-          <div key={item.name} className="flex-1 text-center">
-            <span className="text-xs font-semibold">{item.total.toFixed(1)}%</span>
-          </div>
-        ))}
+      <div className="flex justify-around px-4">
+        {chartData.map((item) => {
+          const displayValue = sortBy === "apy" ? item.apy : sortBy === "blnd" ? item.blnd : item.total
+          return (
+            <div key={item.name} className="flex-1 text-center">
+              <span className="text-xs font-semibold">{displayValue.toFixed(1)}%</span>
+            </div>
+          )
+        })}
       </div>
       {/* Bar chart */}
       <div className="h-24 w-full">
@@ -184,22 +189,28 @@ export function TopTokensChart({ items, isLoading, sortBy }: TopTokensChartProps
             <XAxis dataKey="name" hide />
             <YAxis hide domain={[0, maxValue]} />
 
-            <Bar
-              dataKey="apy"
-              stackId="stack"
-              fill="url(#supplyApyGradient)"
-              shape={ApyBarShape}
-              maxBarSize={48}
-              isAnimationActive={false}
-            />
-            <Bar
-              dataKey="blnd"
-              stackId="stack"
-              fill="url(#supplyBlndGradient)"
-              shape={BlndBarShape}
-              maxBarSize={48}
-              isAnimationActive={false}
-            />
+            {(sortBy === "total" || sortBy === "apy") && (
+              <Bar
+                dataKey="apy"
+                stackId={sortBy === "total" ? "stack" : undefined}
+                fill="url(#supplyApyGradient)"
+                shape={sortBy === "total" ? ApyBarShape : undefined}
+                radius={sortBy === "apy" ? [4, 4, 4, 4] : undefined}
+                maxBarSize={48}
+                isAnimationActive={false}
+              />
+            )}
+            {(sortBy === "total" || sortBy === "blnd") && (
+              <Bar
+                dataKey="blnd"
+                stackId={sortBy === "total" ? "stack" : undefined}
+                fill="url(#supplyBlndGradient)"
+                shape={sortBy === "total" ? BlndBarShape : undefined}
+                radius={sortBy === "blnd" ? [4, 4, 4, 4] : undefined}
+                maxBarSize={48}
+                isAnimationActive={false}
+              />
+            )}
 
             <Tooltip
               content={<CustomTooltip />}
