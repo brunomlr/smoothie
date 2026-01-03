@@ -1,6 +1,6 @@
 "use client"
 
-import { TrendingUp, Flame } from "lucide-react"
+import { TrendingUp, Flame, ArrowUpRight, ArrowDownLeft } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -99,16 +99,22 @@ function SupplyRow({ item, sortBy }: { item: SupplyExploreItem; sortBy: SortBy }
             {item.poolName}
           </p>
           {(item.totalSupplied !== null || item.totalBorrowed !== null) && (
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-muted-foreground flex items-center gap-1">
               {item.totalSupplied !== null && (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <span className="cursor-help border-b border-dotted border-muted-foreground/50">
-                      {formatUsdCompact(item.totalSupplied)} supplied
+                    <span
+                      className="cursor-help inline-flex items-center gap-0.5"
+                      onClick={(e) => e.preventDefault()}
+                      onTouchStart={(e) => e.stopPropagation()}
+                    >
+                      <ArrowUpRight className="h-3 w-3 text-green-500" />
+                      {formatUsdCompact(item.totalSupplied)}
                     </span>
                   </TooltipTrigger>
                   <TooltipContent>
                     <div className="text-xs">
+                      <p className="font-medium">Supplied</p>
                       <p>{formatUsdFull(item.totalSupplied)}</p>
                       <p className="text-muted-foreground">{formatTokens(item.totalSuppliedTokens)} {item.tokenSymbol}</p>
                     </div>
@@ -119,12 +125,18 @@ function SupplyRow({ item, sortBy }: { item: SupplyExploreItem; sortBy: SortBy }
               {item.totalBorrowed !== null && item.totalBorrowed > 0 && (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <span className="cursor-help border-b border-dotted border-muted-foreground/50">
-                      {formatUsdCompact(item.totalBorrowed)} borrowed
+                    <span
+                      className="cursor-help inline-flex items-center gap-0.5"
+                      onClick={(e) => e.preventDefault()}
+                      onTouchStart={(e) => e.stopPropagation()}
+                    >
+                      <ArrowDownLeft className="h-3 w-3 text-orange-500" />
+                      {formatUsdCompact(item.totalBorrowed)}
                     </span>
                   </TooltipTrigger>
                   <TooltipContent>
                     <div className="text-xs">
+                      <p className="font-medium">Borrowed</p>
                       <p>{formatUsdFull(item.totalBorrowed)}</p>
                       <p className="text-muted-foreground">{formatTokens(item.totalBorrowedTokens)} {item.tokenSymbol}</p>
                     </div>

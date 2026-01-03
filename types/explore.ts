@@ -26,6 +26,9 @@ export interface BackstopExploreItem {
   interestApr: number
   emissionApy: number
   totalApy: number
+  totalDeposited: number | null
+  totalQ4w: number | null
+  q4wPercent: number | null
 }
 
 export type SortBy = 'apy' | 'blnd' | 'total'

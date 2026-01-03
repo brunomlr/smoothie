@@ -1,9 +1,10 @@
 "use client"
 
-import { TrendingUp, Flame, Shield } from "lucide-react"
+import { TrendingUp, Flame, Shield, ArrowUpRight, Clock } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import type { BackstopExploreItem, SortBy } from "@/types/explore"
 
 interface BackstopResultsProps {
@@ -14,6 +15,22 @@ interface BackstopResultsProps {
 
 function formatApy(value: number): string {
   return `${value.toFixed(2)}%`
+}
+
+function formatUsdCompact(value: number | null): string {
+  if (value === null || !Number.isFinite(value)) return "—"
+  if (value >= 1_000_000) {
+    return `$${(value / 1_000_000).toFixed(2)}M`
+  }
+  if (value >= 1_000) {
+    return `$${(value / 1_000).toFixed(2)}K`
+  }
+  return `$${value.toFixed(2)}`
+}
+
+function formatUsdFull(value: number | null): string {
+  if (value === null || !Number.isFinite(value)) return "—"
+  return `$${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
 function sortItems(items: BackstopExploreItem[], sortBy: SortBy): BackstopExploreItem[] {
@@ -56,37 +73,80 @@ function BackstopRow({ item, sortBy }: { item: BackstopExploreItem; sortBy: Sort
         <div className="min-w-0 flex-1">
           <p className="font-medium truncate">{item.poolName}</p>
           <p className="text-sm text-muted-foreground">Backstop</p>
+          {(item.totalDeposited !== null || item.q4wPercent !== null) && (
+            <p className="text-xs text-muted-foreground flex items-center gap-1">
+              {item.totalDeposited !== null && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span
+                      className="cursor-help inline-flex items-center gap-0.5"
+                      onClick={(e) => e.preventDefault()}
+                      onTouchStart={(e) => e.stopPropagation()}
+                    >
+                      <ArrowUpRight className="h-3 w-3 text-green-500" />
+                      {formatUsdCompact(item.totalDeposited)}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <div className="text-xs">
+                      <p className="font-medium">Deposited</p>
+                      <p>{formatUsdFull(item.totalDeposited)}</p>
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+              )}
+              {item.totalDeposited !== null && item.q4wPercent !== null && " · "}
+              {item.q4wPercent !== null && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span
+                      className="cursor-help inline-flex items-center gap-0.5"
+                      onClick={(e) => e.preventDefault()}
+                      onTouchStart={(e) => e.stopPropagation()}
+                    >
+                      <Clock className="h-3 w-3 text-purple-500" />
+                      {item.q4wPercent.toFixed(1)}%
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <div className="text-xs">
+                      <p className="font-medium">Q4W</p>
+                      <p>{item.q4wPercent.toFixed(2)}% · {formatUsdFull(item.totalQ4w)}</p>
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+              )}
+            </p>
+          )}
         </div>
       </div>
 
-      {/* Right side: APY badges */}
+      {/* Right side: APY badges - stacked vertically with equal width */}
       <div className="flex flex-col gap-1 items-end shrink-0">
         <Badge
           variant="secondary"
-          className={`text-xs font-medium ${sortBy === "total" ? "bg-white/20" : ""}`}
+          className={`text-xs font-medium min-w-[90px] justify-center ${sortBy === "total" ? "bg-white/20" : ""}`}
         >
           {formatApy(item.totalApy)} Total
         </Badge>
-        <div className="flex gap-1">
-          {item.interestApr > 0.005 && (
-            <Badge
-              variant="secondary"
-              className={`text-xs ${sortBy === "apy" ? "bg-white/20" : ""}`}
-            >
-              <TrendingUp className="mr-1 h-3 w-3" />
-              {formatApy(item.interestApr)}
-            </Badge>
-          )}
-          {item.emissionApy > 0.005 && (
-            <Badge
-              variant="secondary"
-              className={`text-xs ${sortBy === "blnd" ? "bg-white/20" : ""}`}
-            >
-              <Flame className="mr-1 h-3 w-3" />
-              {formatApy(item.emissionApy)}
-            </Badge>
-          )}
-        </div>
+        {item.interestApr > 0.005 && (
+          <Badge
+            variant="secondary"
+            className={`text-xs min-w-[90px] justify-center ${sortBy === "apy" ? "bg-white/20" : ""}`}
+          >
+            <TrendingUp className="mr-1 h-3 w-3" />
+            {formatApy(item.interestApr)}
+          </Badge>
+        )}
+        {item.emissionApy > 0.005 && (
+          <Badge
+            variant="secondary"
+            className={`text-xs min-w-[90px] justify-center ${sortBy === "blnd" ? "bg-white/20" : ""}`}
+          >
+            <Flame className="mr-1 h-3 w-3" />
+            {formatApy(item.emissionApy)}
+          </Badge>
+        )}
       </div>
     </a>
   )
@@ -98,13 +158,15 @@ function BackstopRowSkeleton() {
       <div className="flex items-center gap-3">
         <Skeleton className="w-9 h-9 rounded-full" />
         <div className="space-y-1.5">
-          <Skeleton className="h-4 w-20" />
-          <Skeleton className="h-3 w-16" />
+          <Skeleton className="h-4 w-16" />
+          <Skeleton className="h-3 w-24" />
+          <Skeleton className="h-3 w-20" />
         </div>
       </div>
       <div className="flex flex-col gap-1 items-end">
-        <Skeleton className="h-5 w-20" />
-        <Skeleton className="h-5 w-20" />
+        <Skeleton className="h-5 w-[90px]" />
+        <Skeleton className="h-5 w-[90px]" />
+        <Skeleton className="h-5 w-[90px]" />
       </div>
     </div>
   )

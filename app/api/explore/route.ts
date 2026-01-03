@@ -255,14 +255,21 @@ function buildBackstopItems(snapshots: PoolSnapshot[]): BackstopExploreItem[] {
         emissionApy = (emissionValueUsd / lpTokenPrice) * 100
       }
 
+      // Build backstop pool estimate for totals
+      const backstopPoolEst = BackstopPoolEst.build(
+        snapshot.backstop.backstopToken,
+        snapshot.backstopPool.poolBalance
+      )
+
+      // Total deposited (totalSpotValue) and Q4W amounts
+      const totalDeposited = backstopPoolEst.totalSpotValue
+      const q4wPercent = backstopPoolEst.q4wPercentage * 100 // Convert to percentage
+      const totalQ4w = backstopPoolEst.totalSpotValue * backstopPoolEst.q4wPercentage
+
       // Calculate interest APR
       let interestApr = 0
       try {
         const poolEst = PoolEstimate.build(snapshot.pool.reserves, snapshot.oracle)
-        const backstopPoolEst = BackstopPoolEst.build(
-          snapshot.backstop.backstopToken,
-          snapshot.backstopPool.poolBalance
-        )
 
         // backstopRate from pool metadata (stored as fixed-point with 7 decimals)
         const backstopRateFloat = FixedMath.toFloat(BigInt(snapshot.metadata.backstopRate), 7)
@@ -286,6 +293,9 @@ function buildBackstopItems(snapshots: PoolSnapshot[]): BackstopExploreItem[] {
         interestApr: Number.isFinite(interestApr) ? interestApr : 0,
         emissionApy: Number.isFinite(emissionApy) ? emissionApy : 0,
         totalApy: Number.isFinite(totalApy) ? totalApy : 0,
+        totalDeposited: Number.isFinite(totalDeposited) ? totalDeposited : null,
+        totalQ4w: Number.isFinite(totalQ4w) && totalQ4w > 0 ? totalQ4w : null,
+        q4wPercent: Number.isFinite(q4wPercent) && q4wPercent > 0 ? q4wPercent : null,
       })
     } catch (error) {
       console.error(`[Explore API] Failed to build backstop item for ${snapshot.poolId}:`, error)
