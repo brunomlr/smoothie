@@ -13,6 +13,10 @@ export interface SupplyExploreItem {
   iconUrl: string | null
   supplyApy: number | null
   blndApy: number | null
+  totalSupplied: number | null
+  totalBorrowed: number | null
+  totalSuppliedTokens: number | null
+  totalBorrowedTokens: number | null
 }
 
 export interface BackstopExploreItem {

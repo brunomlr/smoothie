@@ -4,6 +4,7 @@ import { TrendingUp, Flame } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { TokenLogo } from "@/components/token-logo"
 import type { SupplyExploreItem, SortBy } from "@/types/explore"
 
@@ -33,6 +34,27 @@ function resolveAssetLogo(symbol: string): string {
 function formatApy(value: number | null): string {
   if (value === null) return "—"
   return `${value.toFixed(2)}%`
+}
+
+function formatUsdCompact(value: number | null): string {
+  if (value === null || !Number.isFinite(value)) return "—"
+  if (value >= 1_000_000) {
+    return `$${(value / 1_000_000).toFixed(2)}M`
+  }
+  if (value >= 1_000) {
+    return `$${(value / 1_000).toFixed(2)}K`
+  }
+  return `$${value.toFixed(2)}`
+}
+
+function formatUsdFull(value: number | null): string {
+  if (value === null || !Number.isFinite(value)) return "—"
+  return `$${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+
+function formatTokens(value: number | null): string {
+  if (value === null || !Number.isFinite(value)) return "—"
+  return value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
 function getTotalApy(item: SupplyExploreItem): number {
@@ -76,37 +98,70 @@ function SupplyRow({ item, sortBy }: { item: SupplyExploreItem; sortBy: SortBy }
           <p className="text-sm text-muted-foreground truncate">
             {item.poolName}
           </p>
+          {(item.totalSupplied !== null || item.totalBorrowed !== null) && (
+            <p className="text-xs text-muted-foreground">
+              {item.totalSupplied !== null && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="cursor-help border-b border-dotted border-muted-foreground/50">
+                      {formatUsdCompact(item.totalSupplied)} supplied
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <div className="text-xs">
+                      <p>{formatUsdFull(item.totalSupplied)}</p>
+                      <p className="text-muted-foreground">{formatTokens(item.totalSuppliedTokens)} {item.tokenSymbol}</p>
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+              )}
+              {item.totalSupplied !== null && item.totalBorrowed !== null && item.totalBorrowed > 0 && " · "}
+              {item.totalBorrowed !== null && item.totalBorrowed > 0 && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="cursor-help border-b border-dotted border-muted-foreground/50">
+                      {formatUsdCompact(item.totalBorrowed)} borrowed
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <div className="text-xs">
+                      <p>{formatUsdFull(item.totalBorrowed)}</p>
+                      <p className="text-muted-foreground">{formatTokens(item.totalBorrowedTokens)} {item.tokenSymbol}</p>
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+              )}
+            </p>
+          )}
         </div>
       </div>
 
-      {/* Right side: APY badges */}
+      {/* Right side: APY badges - stacked vertically with equal width */}
       <div className="flex flex-col gap-1 items-end shrink-0">
         <Badge
           variant="secondary"
-          className={`text-xs font-medium ${sortBy === "total" ? "bg-white/20" : ""}`}
+          className={`text-xs font-medium min-w-[90px] justify-center ${sortBy === "total" ? "bg-white/20" : ""}`}
         >
           {formatApy(getTotalApy(item))} Total
         </Badge>
-        <div className="flex gap-1">
-          {item.supplyApy !== null && (
-            <Badge
-              variant="secondary"
-              className={`text-xs ${sortBy === "apy" ? "bg-white/20" : ""}`}
-            >
-              <TrendingUp className="mr-1 h-3 w-3" />
-              {formatApy(item.supplyApy)}
-            </Badge>
-          )}
-          {item.blndApy !== null && item.blndApy > 0.005 && (
-            <Badge
-              variant="secondary"
-              className={`text-xs ${sortBy === "blnd" ? "bg-white/20" : ""}`}
-            >
-              <Flame className="mr-1 h-3 w-3" />
-              {formatApy(item.blndApy)}
-            </Badge>
-          )}
-        </div>
+        {item.supplyApy !== null && (
+          <Badge
+            variant="secondary"
+            className={`text-xs min-w-[90px] justify-center ${sortBy === "apy" ? "bg-white/20" : ""}`}
+          >
+            <TrendingUp className="mr-1 h-3 w-3" />
+            {formatApy(item.supplyApy)}
+          </Badge>
+        )}
+        {item.blndApy !== null && item.blndApy > 0.005 && (
+          <Badge
+            variant="secondary"
+            className={`text-xs min-w-[90px] justify-center ${sortBy === "blnd" ? "bg-white/20" : ""}`}
+          >
+            <Flame className="mr-1 h-3 w-3" />
+            {formatApy(item.blndApy)}
+          </Badge>
+        )}
       </div>
     </a>
   )
@@ -120,11 +175,13 @@ function SupplyRowSkeleton() {
         <div className="space-y-1.5">
           <Skeleton className="h-4 w-16" />
           <Skeleton className="h-3 w-24" />
+          <Skeleton className="h-3 w-20" />
         </div>
       </div>
       <div className="flex flex-col gap-1 items-end">
-        <Skeleton className="h-5 w-20" />
-        <Skeleton className="h-5 w-20" />
+        <Skeleton className="h-5 w-[90px]" />
+        <Skeleton className="h-5 w-[90px]" />
+        <Skeleton className="h-5 w-[90px]" />
       </div>
     </div>
   )

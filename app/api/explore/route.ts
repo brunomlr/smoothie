@@ -18,8 +18,6 @@ import {
   TokenMetadata,
   FixedMath,
   Version,
-  getOraclePrice,
-  getOracleDecimals,
 } from '@blend-capital/blend-sdk'
 import { metadataRepository } from '@/lib/db/repositories/metadata-repository'
 import { ratesRepository } from '@/lib/db/repositories/rates-repository'
@@ -197,6 +195,23 @@ async function buildSupplyItems(
         }
       }
 
+      // Calculate total supplied and borrowed in USD and tokens (oracle prices are already loaded)
+      let totalSupplied: number | null = null
+      let totalBorrowed: number | null = null
+      let totalSuppliedTokens: number | null = null
+      let totalBorrowedTokens: number | null = null
+      try {
+        totalSuppliedTokens = reserve.totalSupplyFloat()
+        totalBorrowedTokens = reserve.totalLiabilitiesFloat()
+        if (snapshot.oracle) {
+          const priceFloat = snapshot.oracle.getPriceFloat(assetId) ?? 1
+          totalSupplied = totalSuppliedTokens * priceFloat
+          totalBorrowed = totalBorrowedTokens * priceFloat
+        }
+      } catch {
+        // Total supplied/borrowed calculation failed
+      }
+
       items.push({
         poolId: snapshot.poolId,
         poolName: snapshot.poolName,
@@ -206,6 +221,10 @@ async function buildSupplyItems(
         iconUrl,
         supplyApy,
         blndApy,
+        totalSupplied,
+        totalBorrowed,
+        totalSuppliedTokens,
+        totalBorrowedTokens,
       })
     }
   }
