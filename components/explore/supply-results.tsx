@@ -104,7 +104,7 @@ function SupplyRow({ item, sortBy }: { item: SupplyExploreItem; sortBy: SortBy }
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <span
-                      className="cursor-help inline-flex items-center gap-0.5"
+                      className="inline-flex items-center gap-0.5"
                       onClick={(e) => e.preventDefault()}
                       onTouchStart={(e) => e.stopPropagation()}
                     >
@@ -126,7 +126,7 @@ function SupplyRow({ item, sortBy }: { item: SupplyExploreItem; sortBy: SortBy }
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <span
-                      className="cursor-help inline-flex items-center gap-0.5"
+                      className="inline-flex items-center gap-0.5"
                       onClick={(e) => e.preventDefault()}
                       onTouchStart={(e) => e.stopPropagation()}
                     >

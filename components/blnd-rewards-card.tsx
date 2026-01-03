@@ -458,7 +458,7 @@ export function BlndRewardsCard({
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger>
-                          <span className="font-semibold tabular-nums cursor-help border-b border-dotted border-muted-foreground/50">
+                          <span className="font-semibold tabular-nums border-b border-dotted border-muted-foreground/50">
                             {formatNumber(totalPendingBlnd + totalClaimedBlnd, 2)} ({formatUsd(
                               (totalPendingBlnd * blndPrice) + poolClaimedUsdDisplay + (backstopClaimedBlnd * blndPrice)
                             )})

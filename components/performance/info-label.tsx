@@ -21,7 +21,7 @@ export function InfoLabel({ label, tooltip, className = "" }: InfoLabelProps) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <span className={`inline-flex items-center gap-1 cursor-help ${className}`}>
+        <span className={`inline-flex items-center gap-1 ${className}`}>
           {label}
           <Info className="h-3 w-3 text-muted-foreground/60" />
         </span>

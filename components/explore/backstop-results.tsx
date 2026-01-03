@@ -79,7 +79,7 @@ function BackstopRow({ item, sortBy }: { item: BackstopExploreItem; sortBy: Sort
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <span
-                      className="cursor-help inline-flex items-center gap-0.5"
+                      className="inline-flex items-center gap-0.5"
                       onClick={(e) => e.preventDefault()}
                       onTouchStart={(e) => e.stopPropagation()}
                     >
@@ -100,7 +100,7 @@ function BackstopRow({ item, sortBy }: { item: BackstopExploreItem; sortBy: Sort
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <span
-                      className="cursor-help inline-flex items-center gap-0.5"
+                      className="inline-flex items-center gap-0.5"
                       onClick={(e) => e.preventDefault()}
                       onTouchStart={(e) => e.stopPropagation()}
                     >
