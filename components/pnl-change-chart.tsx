@@ -402,7 +402,7 @@ export const PnlChangeChart = memo(function PnlChangeChart({
       ) : (
         <div className="space-y-1">
           <div className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide px-1">
-            Yield Earnings
+            Yield Earnings (Approx.)
           </div>
           <div className="aspect-[3/1] md:aspect-[4/1] w-full select-none">
             <ResponsiveContainer width="100%" height="100%">
