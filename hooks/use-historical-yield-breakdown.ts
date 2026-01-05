@@ -6,6 +6,7 @@ import {
   calculateHistoricalYieldBreakdown,
   HistoricalYieldBreakdown,
 } from "@/lib/balance-history-utils"
+import { fetchWithTimeout } from "@/lib/fetch-utils"
 import type { CostBasisHistoricalResponse } from "@/app/api/cost-basis-historical/route"
 
 interface BlendPosition {
@@ -62,7 +63,7 @@ async function fetchHistoricalCostBasis(
     sdkPrices: JSON.stringify(sdkPrices),
   })
 
-  const response = await fetch(`/api/cost-basis-historical?${params}`)
+  const response = await fetchWithTimeout(`/api/cost-basis-historical?${params}`)
   if (!response.ok) {
     throw new Error('Failed to fetch historical cost basis')
   }
@@ -86,7 +87,7 @@ async function fetchBackstopHistoricalCostBasis(
   deposits: BackstopEventWithPrice[]
   withdrawals: BackstopEventWithPrice[]
 }> {
-  const response = await fetch(`/api/backstop-events-with-prices?userAddress=${userAddress}&sdkLpPrice=${sdkLpPrice}`)
+  const response = await fetchWithTimeout(`/api/backstop-events-with-prices?userAddress=${userAddress}&sdkLpPrice=${sdkLpPrice}`)
   if (!response.ok) {
     return { deposits: [], withdrawals: [] }
   }

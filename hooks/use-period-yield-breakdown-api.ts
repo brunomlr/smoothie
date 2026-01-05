@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query"
 import { useMemo } from "react"
+import { fetchWithTimeout } from "@/lib/fetch-utils"
 import type { PeriodYieldBreakdownResponse, PeriodType } from "@/app/api/period-yield-breakdown/route"
 
 interface BlendPosition {
@@ -62,7 +63,7 @@ async function fetchPeriodYieldBreakdown(
     timezone, // Pass user's timezone for consistent date handling with chart
   })
 
-  const response = await fetch(`/api/period-yield-breakdown?${params}`)
+  const response = await fetchWithTimeout(`/api/period-yield-breakdown?${params}`)
   if (!response.ok) {
     throw new Error('Failed to fetch period yield breakdown')
   }

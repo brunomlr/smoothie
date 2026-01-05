@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query"
 import { useMemo } from "react"
 import { useBlendPositions } from "./use-blend-positions"
 import { useDisplayPreferences } from "@/contexts/display-preferences-context"
+import { fetchWithTimeout } from "@/lib/fetch-utils"
 import type { PnlChangeChartResponse, PnlChangeDataPoint, PnlPeriodType } from "@/app/api/pnl-change-chart/route"
 
 export type { PnlChangeDataPoint, PnlPeriodType }
@@ -48,7 +49,7 @@ async function fetchPnlChangeChart(params: {
     backstopBlndApy: params.backstopBlndApy.toString(),
   })
 
-  const response = await fetch(`/api/pnl-change-chart?${queryParams}`)
+  const response = await fetchWithTimeout(`/api/pnl-change-chart?${queryParams}`)
 
   if (!response.ok) {
     throw new Error('Failed to fetch P&L change chart data')

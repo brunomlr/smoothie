@@ -494,7 +494,8 @@ export async function GET(request: NextRequest) {
       currentTotalPnl: lastEntry?.totalPnl || 0,
     } as PerformanceHistoryResponse, {
       headers: {
-        'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120',
+        // 5 minute cache - historical data changes infrequently
+        'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
       },
     })
   } catch (error) {

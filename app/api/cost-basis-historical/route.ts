@@ -161,7 +161,8 @@ export async function GET(request: NextRequest) {
       totalEarnedUsd,
     } as CostBasisHistoricalResponse, {
       headers: {
-        'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120',
+        // 5 minute cache - cost basis only changes when user performs actions
+        'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
       },
     })
   } catch (error) {
