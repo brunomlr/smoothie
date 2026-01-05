@@ -59,6 +59,11 @@ const ASSET_LOGO_MAP: Record<string, string> = {
   USDGLO: "/tokens/usdglo.png",
   USTRY: "/tokens/ustry.png",
   BLND: "/tokens/blnd.png",
+  EURX: "/tokens/eurx.png",
+  GBPX: "/tokens/gbpx.png",
+  OUSD: "/tokens/ousd.png",
+  PYUSD: "/tokens/pyusd.png",
+  USDX: "/tokens/usdx.png",
 }
 
 function resolveAssetLogo(symbol: string | undefined): string {
@@ -66,7 +71,8 @@ function resolveAssetLogo(symbol: string | undefined): string {
     return "/tokens/xlm.png"
   }
   const normalized = symbol.toUpperCase()
-  return ASSET_LOGO_MAP[normalized] ?? "/tokens/xlm.png"
+  // First check explicit map, then try lowercase filename convention, finally fallback to XLM
+  return ASSET_LOGO_MAP[normalized] ?? `/tokens/${symbol.toLowerCase()}.png`
 }
 
 function buildBalanceData(snapshot: BlendWalletSnapshot | undefined): BalanceData {

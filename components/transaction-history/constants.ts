@@ -32,6 +32,11 @@ export const ASSET_LOGO_MAP: Record<string, string> = {
   USDGLO: "/tokens/usdglo.png",
   USTRY: "/tokens/ustry.png",
   BLND: "/tokens/blnd.png",
+  EURX: "/tokens/eurx.png",
+  GBPX: "/tokens/gbpx.png",
+  OUSD: "/tokens/ousd.png",
+  PYUSD: "/tokens/pyusd.png",
+  USDX: "/tokens/usdx.png",
 }
 
 // All available action types for filtering

@@ -84,6 +84,9 @@ export async function GET(request: NextRequest) {
       sdkPrices
     )
 
+    // Get today's date in YYYY-MM-DD format to filter same-day deposits
+    const today = new Date().toISOString().split('T')[0]
+
     // Calculate breakdown for each pool-asset pair
     for (const { poolId, assetAddress } of poolAssetPairs) {
       const compositeKey = `${poolId}-${assetAddress}`
@@ -98,10 +101,25 @@ export async function GET(request: NextRequest) {
       // Skip if no events
       if (deposits.length === 0 && withdrawals.length === 0) continue
 
+      // Adjust same-day deposits to use SDK price for cost basis
+      // This avoids misleading P&L from intraday price fluctuations
+      // (we only have daily price data, so same-day P&L would be noise)
+      const adjustedDeposits = deposits.map(d => {
+        if (d.date === today) {
+          // Same-day deposit: use current SDK price for cost basis
+          return {
+            ...d,
+            priceAtDeposit: sdkPrice,
+            usdValue: d.tokens * sdkPrice,
+          }
+        }
+        return d
+      })
+
       // Calculate using AVERAGE COST METHOD
       // This ensures the weighted average price reflects actual prices paid
-      const totalDepositedUsd = deposits.reduce((sum, d) => sum + d.usdValue, 0)
-      const totalDepositedTokens = deposits.reduce((sum, d) => sum + d.tokens, 0)
+      const totalDepositedUsd = adjustedDeposits.reduce((sum, d) => sum + d.usdValue, 0)
+      const totalDepositedTokens = adjustedDeposits.reduce((sum, d) => sum + d.tokens, 0)
       const totalWithdrawnTokens = withdrawals.reduce((sum, w) => sum + w.tokens, 0)
       const netDepositedTokens = totalDepositedTokens - totalWithdrawnTokens
 

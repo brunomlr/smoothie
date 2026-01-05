@@ -23,6 +23,11 @@ const TOKEN_COLORS: Record<string, string> = {
   USDGLO: "#F59E0B", // Yellow for USDGLO
   USTRY: "#EF4444",  // Red for USTRY
   USDT: "#26A17B",   // Tether green
+  EURX: "#1E3A8A",   // Dark blue for EURx
+  GBPX: "#1D4ED8",   // British blue for GBPx
+  OUSD: "#141414",   // Origin black for OUSD
+  PYUSD: "#0066CC",  // PayPal blue for PYUSD
+  USDX: "#3B82F6",   // Blue for USDx
 }
 
 function getTokenColor(symbol: string): string {

@@ -59,6 +59,10 @@ export interface HistoricalYieldBreakdown {
  * the actual price they paid, rather than inflated values caused by
  * withdrawals at different market prices.
  *
+ * Same-day deposits are treated specially: they use current SDK price for cost basis
+ * to avoid showing misleading P&L from intraday price fluctuations (we only have
+ * daily price data, so same-day P&L would be noise).
+ *
  * @param currentBalance Current token balance from SDK
  * @param currentPrice Current token price from SDK (ALWAYS use SDK, not DB)
  * @param deposits All deposits with historical prices from daily_token_prices
@@ -70,9 +74,28 @@ export function calculateHistoricalYieldBreakdown(
   deposits: DepositEvent[],
   withdrawals: DepositEvent[],
 ): HistoricalYieldBreakdown {
+  // Get today's date in YYYY-MM-DD format (same format as deposit dates)
+  const today = new Date().toISOString().split('T')[0]
+
+  // Separate same-day deposits from historical deposits
+  // Same-day deposits use current price for cost basis to avoid misleading P&L
+  const historicalDeposits = deposits.filter(d => d.date !== today)
+  const sameDayDeposits = deposits.filter(d => d.date === today)
+
+  // For same-day deposits, recalculate USD value using current price
+  // This ensures cost basis = current value, resulting in $0 price change
+  const sameDayDepositsAdjusted = sameDayDeposits.map(d => ({
+    ...d,
+    priceAtDeposit: currentPrice,
+    usdValue: d.tokens * currentPrice,
+  }))
+
+  // Combine historical and adjusted same-day deposits
+  const adjustedDeposits = [...historicalDeposits, ...sameDayDepositsAdjusted]
+
   // 1. Calculate totals
-  const totalDepositedUsd = deposits.reduce((sum, d) => sum + d.usdValue, 0)
-  const totalDepositedTokens = deposits.reduce((sum, d) => sum + d.tokens, 0)
+  const totalDepositedUsd = adjustedDeposits.reduce((sum, d) => sum + d.usdValue, 0)
+  const totalDepositedTokens = adjustedDeposits.reduce((sum, d) => sum + d.tokens, 0)
   const totalWithdrawnTokens = withdrawals.reduce((sum, w) => sum + w.tokens, 0)
   const netDepositedTokens = totalDepositedTokens - totalWithdrawnTokens
 
