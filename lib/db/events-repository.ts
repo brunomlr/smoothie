@@ -1359,6 +1359,118 @@ export class EventsRepository {
   }
 
   /**
+   * Get backstop LP claims with historical prices.
+   * Returns total LP tokens claimed and the total USD value at historical prices.
+   * Uses forward-fill for price lookup (most recent price on or before claim date).
+   */
+  async getBackstopClaimsWithPrices(
+    userAddress: string,
+    sdkLpPrice: number = 0
+  ): Promise<{
+    total_claimed_lp: number
+    total_claimed_usd_historical: number
+    claims: Array<{
+      date: string
+      lpAmount: number
+      priceAtClaim: number
+      usdValueAtClaim: number
+      poolAddress: string
+      priceSource: 'daily_token_prices' | 'forward_fill' | 'sdk_fallback'
+    }>
+  }> {
+    if (!pool) {
+      throw new Error('Database pool not initialized')
+    }
+
+    const result = await pool.query(
+      `
+      WITH claim_events AS (
+        SELECT
+          COALESCE(
+            NULLIF(b.pool_address, ''),
+            (SELECT pool_address FROM backstop_events
+             WHERE transaction_hash = b.transaction_hash
+               AND action_type = 'deposit'
+               AND pool_address IS NOT NULL
+               AND pool_address != ''
+             LIMIT 1)
+          ) AS pool_address,
+          b.transaction_hash,
+          (b.ledger_closed_at AT TIME ZONE 'UTC')::date::text AS claim_date,
+          b.ledger_closed_at,
+          COALESCE(b.lp_tokens, b.emissions_shares)::numeric / 1e7 AS lp_tokens
+        FROM backstop_events b
+        WHERE b.user_address = $1
+          AND b.action_type IN ('claim', 'gulp_emissions')
+      )
+      SELECT
+        c.pool_address,
+        c.claim_date,
+        c.lp_tokens,
+        COALESCE(price_data.usd_price, NULL) AS price,
+        price_data.price_date AS price_source_date
+      FROM claim_events c
+      LEFT JOIN LATERAL (
+        SELECT usd_price, price_date::text
+        FROM daily_token_prices
+        WHERE token_address = $2
+          AND price_date <= c.claim_date::date
+        ORDER BY price_date DESC
+        LIMIT 1
+      ) price_data ON true
+      WHERE c.pool_address IS NOT NULL
+      ORDER BY c.ledger_closed_at
+      `,
+      [userAddress, LP_TOKEN_ADDRESS]
+    )
+
+    let totalClaimedLp = 0
+    let totalClaimedUsdHistorical = 0
+    const claims: Array<{
+      date: string
+      lpAmount: number
+      priceAtClaim: number
+      usdValueAtClaim: number
+      poolAddress: string
+      priceSource: 'daily_token_prices' | 'forward_fill' | 'sdk_fallback'
+    }> = []
+
+    for (const row of result.rows) {
+      const lpAmount = parseFloat(row.lp_tokens) || 0
+      const historicalPrice = row.price ? parseFloat(row.price) : null
+      const priceAtClaim = historicalPrice ?? sdkLpPrice
+      const usdValueAtClaim = lpAmount * priceAtClaim
+
+      totalClaimedLp += lpAmount
+      totalClaimedUsdHistorical += usdValueAtClaim
+
+      // Determine price source
+      let priceSource: 'daily_token_prices' | 'forward_fill' | 'sdk_fallback'
+      if (historicalPrice !== null) {
+        // Check if it's an exact match or forward-fill
+        priceSource = row.price_source_date === row.claim_date ? 'daily_token_prices' : 'forward_fill'
+      } else {
+        priceSource = 'sdk_fallback'
+      }
+
+      claims.push({
+        date: row.claim_date,
+        lpAmount,
+        priceAtClaim,
+        usdValueAtClaim,
+        poolAddress: row.pool_address,
+        priceSource,
+      })
+    }
+
+    return {
+      total_claimed_lp: totalClaimedLp,
+      total_claimed_usd_historical: totalClaimedUsdHistorical,
+      claims,
+    }
+  }
+
+  /**
    * Get total claimed BLND from pool claims for a user.
    * This queries the user_action_history view for 'claim' actions.
    * Note: claim_amount is computed in the view from amount_underlying for claim actions.

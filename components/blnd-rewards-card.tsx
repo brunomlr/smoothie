@@ -31,6 +31,7 @@ interface BlndRewardsCardProps {
   pendingBorrowEmissions?: number // Claimable BLND from borrows
   backstopClaimableBlnd?: number // Backstop claimable BLND from SDK (usually 0 - SDK doesn't estimate)
   blndPrice: number | null
+  lpTokenPrice?: number | null // LP token price for historical pricing fallback
   blndPerLpToken?: number // For converting backstop LP to BLND
   blndApy?: number
   totalPositionUsd?: number // Total USD value of positions earning BLND (for yield projection)
@@ -58,6 +59,7 @@ export function BlndRewardsCard({
   pendingBorrowEmissions = 0,
   backstopClaimableBlnd = 0,
   blndPrice,
+  lpTokenPrice,
   blndPerLpToken = 0,
   blndApy = 0,
   totalPositionUsd = 0,
@@ -95,15 +97,16 @@ export function BlndRewardsCard({
 
   // Fetch backstop claimed LP data (also includes last_claim_date for estimating pending)
   const { data: backstopClaimsData, isLoading: backstopClaimsLoading } = useQuery({
-    queryKey: ["claimed-blnd-backstop", publicKey, blndPrice],
+    queryKey: ["claimed-blnd-backstop", publicKey, blndPrice, lpTokenPrice],
     enabled: !!publicKey,
     queryFn: async () => {
       const params = new URLSearchParams({
         user: publicKey,
         ...(blndPrice ? { sdkBlndPrice: blndPrice.toString() } : {}),
+        ...(lpTokenPrice ? { sdkLpPrice: lpTokenPrice.toString() } : {}),
       })
       const response = await fetchWithTimeout(`/api/claimed-blnd?${params}`)
-      if (!response.ok) return { backstop_claims: [], pool_claims: [], pool_claims_with_prices: [], total_claimed_blnd_usd_historical: 0 }
+      if (!response.ok) return { backstop_claims: [], pool_claims: [], pool_claims_with_prices: [], total_claimed_blnd_usd_historical: 0, total_backstop_claimed_usd_historical: 0 }
       const data = await response.json()
       return data
     },
@@ -124,6 +127,9 @@ export function BlndRewardsCard({
 
   // Get historical USD value for pool claims from API
   const poolClaimedUsdHistorical = backstopClaimsData?.total_claimed_blnd_usd_historical || 0
+
+  // Get historical USD value for backstop claims from API
+  const backstopClaimedUsdHistorical = backstopClaimsData?.total_backstop_claimed_usd_historical || 0
 
   // Calculate pool claimed USD based on preference (historical vs current price)
   const poolClaimedUsdDisplay = useMemo(() => {
@@ -146,6 +152,16 @@ export function BlndRewardsCard({
     )
     return totalLpClaimed * blndPerLpToken
   }, [backstopClaimsData, blndPerLpToken])
+
+  // Calculate backstop claimed USD based on preference (historical vs current price)
+  const backstopClaimedUsdDisplay = useMemo(() => {
+    if (displayPreferences.useHistoricalBlndPrices) {
+      // Use historical LP token prices from API
+      return backstopClaimedUsdHistorical
+    }
+    // Use current price: convert LP to BLND equivalent, then use current BLND price
+    return backstopClaimedBlnd * (blndPrice || 0)
+  }, [displayPreferences.useHistoricalBlndPrices, backstopClaimedUsdHistorical, backstopClaimedBlnd, blndPrice])
 
   // Backstop pending emissions
   // Note: SDK doesn't provide backstop emissions estimate, so we only use what's passed in
@@ -440,7 +456,7 @@ export function BlndRewardsCard({
                 <div className="tabular-nums">{formatNumber(totalClaimedBlnd, 2)}</div>
                 {blndPrice && totalClaimedBlnd > 0 && (
                   <div className="text-xs font-normal">
-                    {formatUsd(poolClaimedUsdDisplay + (backstopClaimedBlnd * blndPrice))}
+                    {formatUsd(poolClaimedUsdDisplay + backstopClaimedUsdDisplay)}
                   </div>
                 )}
               </div>
@@ -460,7 +476,7 @@ export function BlndRewardsCard({
                         <TooltipTrigger>
                           <span className="font-semibold tabular-nums border-b border-dotted border-muted-foreground/50">
                             {formatNumber(totalPendingBlnd + totalClaimedBlnd, 2)} ({formatUsd(
-                              (totalPendingBlnd * blndPrice) + poolClaimedUsdDisplay + (backstopClaimedBlnd * blndPrice)
+                              (totalPendingBlnd * blndPrice) + poolClaimedUsdDisplay + backstopClaimedUsdDisplay
                             )})
                           </span>
                         </TooltipTrigger>
@@ -479,13 +495,13 @@ export function BlndRewardsCard({
                             {backstopClaimedBlnd > 0 && (
                               <div className="flex justify-between gap-4">
                                 <span className="text-zinc-400">Claimed - Backstop (~{formatNumber(backstopClaimedBlnd, 2)} BLND)</span>
-                                <span className="text-zinc-200">{formatUsd(backstopClaimedBlnd * blndPrice)}</span>
+                                <span className="text-zinc-200">{formatUsd(backstopClaimedUsdDisplay)}</span>
                               </div>
                             )}
                             <div className="border-t border-zinc-700 pt-1 mt-1 text-[10px] text-zinc-500">
                               {displayPreferences.useHistoricalBlndPrices
-                                ? "Pool claims valued at price when claimed"
-                                : "All BLND valued at current price"}
+                                ? "Claims valued at price when claimed"
+                                : "All emissions valued at current price"}
                             </div>
                           </div>
                         </TooltipContent>

@@ -368,6 +368,7 @@ export function HomeContent() {
               pendingBorrowEmissions={blendSnapshot?.totalBorrowEmissions}
               backstopClaimableBlnd={backstopPositions.reduce((sum, bp) => sum + (bp.claimableBlnd || 0), 0)}
               blndPrice={blndPrice}
+              lpTokenPrice={lpTokenPrice}
               blndPerLpToken={backstopPositions[0]?.blndAmount && backstopPositions[0]?.lpTokens
                 ? backstopPositions[0].blndAmount / backstopPositions[0].lpTokens
                 : 0}

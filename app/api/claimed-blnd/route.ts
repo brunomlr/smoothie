@@ -19,13 +19,26 @@ export interface BlndClaimWithPrice {
   priceSource: 'daily_token_prices' | 'forward_fill' | 'sdk_fallback'
 }
 
+export interface BackstopClaimWithPrice {
+  date: string
+  lpAmount: number
+  priceAtClaim: number
+  usdValueAtClaim: number
+  poolAddress: string
+  priceSource: 'daily_token_prices' | 'forward_fill' | 'sdk_fallback'
+}
+
 export interface ClaimedBlndResponse {
   pool_claims: Array<{ pool_id: string; total_claimed_blnd: number }>
   backstop_claims: Array<{ pool_address: string; total_claimed_lp: number }>
   // Historical pricing data for pool claims
   pool_claims_with_prices?: BlndClaimWithPrice[]
+  // Historical pricing data for backstop claims
+  backstop_claims_with_prices?: BackstopClaimWithPrice[]
   // Totals calculated with historical prices
   total_claimed_blnd_usd_historical?: number
+  // Total backstop LP USD value at historical prices
+  total_backstop_claimed_usd_historical?: number
 }
 
 export const GET = createApiHandler<ClaimedBlndResponse>({
@@ -44,12 +57,14 @@ export const GET = createApiHandler<ClaimedBlndResponse>({
   async handler(_request: NextRequest, { searchParams }) {
     const userAddress = requireString(searchParams, 'user')
     const sdkBlndPrice = parseFloat(searchParams.get('sdkBlndPrice') || '0') || 0
+    const sdkLpPrice = parseFloat(searchParams.get('sdkLpPrice') || '0') || 0
 
     // Fetch pool claims, backstop claims, and historical pricing in parallel
-    const [poolClaims, backstopClaims, poolClaimsWithPrices] = await Promise.all([
+    const [poolClaims, backstopClaims, poolClaimsWithPrices, backstopClaimsWithPrices] = await Promise.all([
       eventsRepository.getClaimedBlndFromPools(userAddress),
       eventsRepository.getClaimedEmissionsPerPool(userAddress),
       eventsRepository.getBlndClaimsWithPrices(userAddress, sdkBlndPrice),
+      eventsRepository.getBackstopClaimsWithPrices(userAddress, sdkLpPrice),
     ])
 
     // Calculate total USD value at historical prices
@@ -67,8 +82,12 @@ export const GET = createApiHandler<ClaimedBlndResponse>({
       backstop_claims: backstopClaims,
       // Historical pricing data for pool claims
       pool_claims_with_prices: poolClaimsWithPrices,
+      // Historical pricing data for backstop claims
+      backstop_claims_with_prices: backstopClaimsWithPrices.claims,
       // Total USD value at historical prices
       total_claimed_blnd_usd_historical: totalClaimedBlndUsdHistorical,
+      // Total backstop LP USD value at historical prices
+      total_backstop_claimed_usd_historical: backstopClaimsWithPrices.total_claimed_usd_historical,
     }
   },
 })
