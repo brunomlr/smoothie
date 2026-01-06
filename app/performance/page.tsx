@@ -18,6 +18,7 @@ import { AuthenticatedPage } from "@/components/authenticated-page"
 import { PageTitle } from "@/components/page-title"
 import { useWalletState } from "@/hooks/use-wallet-state"
 import { InfoLabel } from "@/components/performance"
+import { PoolLogo } from "@/components/pool-logo"
 import { PnlChangeChart } from "@/components/pnl-change-chart"
 import { usePnlChangeChart, type PnlPeriodType } from "@/hooks/use-pnl-change-chart"
 
@@ -658,7 +659,10 @@ function RealizedYieldContent() {
                 <CardContent className="space-y-4 pt-4">
                   {/* Pool Item */}
                   <div className="space-y-3">
-                    <Skeleton className="h-4 w-28" />
+                    <div className="flex items-center gap-2">
+                      <Skeleton className="h-5 w-5 rounded-full" />
+                      <Skeleton className="h-4 w-28" />
+                    </div>
                     <div className="flex items-center gap-2">
                       <Skeleton className="h-7 w-7 rounded-full" />
                       <Skeleton className="h-4 w-16" />
@@ -914,7 +918,7 @@ function RealizedYieldContent() {
                               )}
                             </div>
                           </div>
-                          <div className="flex justify-between items-center font-medium pt-1 border-t border-border/50">
+                          <div className="flex justify-between items-center font-semibold text-base pt-2 border-t border-border/50">
                             <span>
                               <InfoLabel label="P&L" tooltip="Profit from lending yield. Pool emissions shown in summary below." />
                             </span>
@@ -937,6 +941,8 @@ function RealizedYieldContent() {
 
                 {/* Backstop */}
                 {(data.backstop.deposited > 0 || data.backstop.withdrawn > 0) && (
+                  <>
+                  {(data.pools.deposited > 0 || data.pools.withdrawn > 0) && <Separator className="my-2" />}
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
                       <div className="p-1.5 rounded-full bg-purple-500/10">
@@ -1028,7 +1034,7 @@ function RealizedYieldContent() {
                               )}
                             </div>
                           </div>
-                          <div className="flex justify-between items-center font-medium pt-1 border-t border-border/50">
+                          <div className="flex justify-between items-center font-semibold text-base pt-2 border-t border-border/50">
                             <span>
                               <InfoLabel label="P&L" tooltip="Total profit: Unrealized P&L + Realized P&L" />
                             </span>
@@ -1047,10 +1053,13 @@ function RealizedYieldContent() {
                       )}
                     </div>
                   </div>
+                  </>
                 )}
 
                 {/* Borrow Positions (Costs) */}
                 {hasBorrows && (
+                  <>
+                  {((data.pools.deposited > 0 || data.pools.withdrawn > 0) || (data.backstop.deposited > 0 || data.backstop.withdrawn > 0)) && <Separator className="my-2" />}
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
                       <div className="p-1.5 rounded-full bg-orange-500/10">
@@ -1088,7 +1097,7 @@ function RealizedYieldContent() {
                           </span>
                         </div>
                       )}
-                      <div className="flex justify-between items-center font-medium pt-1 border-t border-border/50">
+                      <div className="flex justify-between items-center font-semibold text-base pt-2 border-t border-border/50">
                         <span>
                           <InfoLabel label="Borrow Cost" tooltip="Total cost of borrowing: Interest + Price Impact (negative = cost to you)" />
                         </span>
@@ -1105,6 +1114,7 @@ function RealizedYieldContent() {
                       </div>
                     </div>
                   </div>
+                  </>
                 )}
 
                 <Separator />
@@ -1148,7 +1158,7 @@ function RealizedYieldContent() {
                         </div>
                       )}
                       <Separator />
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between bg-muted/50 -mx-4 px-4 py-2 rounded-md">
                         <p className="font-semibold">
                           <InfoLabel
                             label="Total P&L"
@@ -1166,7 +1176,7 @@ function RealizedYieldContent() {
                   {unrealizedData.totalCurrentUsd === 0 && (
                     <>
                       <Separator />
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between bg-muted/50 -mx-4 px-4 py-2 rounded-md">
                         <p className="font-semibold">{data.realizedPnl >= 0 ? "Realized Profit" : "Net Cash Flow"}</p>
                         <p className={`text-lg font-bold tabular-nums ${data.realizedPnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
                           {data.realizedPnl >= 0 ? "+" : ""}{formatUsd(data.realizedPnl)}
@@ -1242,9 +1252,12 @@ function RealizedYieldContent() {
                       >
                         {poolIndex > 0 && <Separator />}
                         {/* Pool Header */}
-                        <p className="font-semibold text-sm">
-                          {poolData.poolName || poolData.poolId.slice(0, 8) + '...'}
-                        </p>
+                        <div className="flex items-center gap-2">
+                          <PoolLogo poolName={poolData.poolName || poolData.poolId} size={20} />
+                          <p className="font-semibold text-sm">
+                            {poolData.poolName || poolData.poolId.slice(0, 8) + '...'}
+                          </p>
+                        </div>
 
                         {/* Lending Position */}
                         {poolData.lending.deposited > 0 && (
@@ -1297,7 +1310,7 @@ function RealizedYieldContent() {
                                 </div>
                               )}
                               {/* P&L Section */}
-                              <div className="flex justify-between items-center font-medium pt-1 border-t border-border/50">
+                              <div className="flex justify-between items-center font-semibold text-base pt-2 border-t border-border/50">
                                 <span>
                                   <InfoLabel label="P&L" tooltip="Profit from lending yield. Pool emissions shown separately below." />
                                 </span>
@@ -1318,6 +1331,8 @@ function RealizedYieldContent() {
 
                         {/* Backstop Position */}
                         {poolData.backstop.deposited > 0 && (
+                          <>
+                          {poolData.lending.deposited > 0 && <Separator className="my-2" />}
                           <div className="space-y-2">
                             <div className="flex items-center gap-2">
                               <div className="p-1.5 rounded-full bg-purple-500/10">
@@ -1375,7 +1390,7 @@ function RealizedYieldContent() {
                                 </div>
                               )}
                               {/* P&L Section */}
-                              <div className="flex justify-between items-center font-medium pt-1 border-t border-border/50">
+                              <div className="flex justify-between items-center font-semibold text-base pt-2 border-t border-border/50">
                                 <span>
                                   <InfoLabel label="P&L" tooltip="Total profit: Yield + Emissions" />
                                 </span>
@@ -1392,10 +1407,13 @@ function RealizedYieldContent() {
                               </div>
                             </div>
                           </div>
+                          </>
                         )}
 
                         {/* Borrows Position */}
                         {poolBorrow && poolBorrow.currentDebtUsd > 0 && (
+                          <>
+                          {(poolData.lending.deposited > 0 || poolData.backstop.deposited > 0) && <Separator className="my-2" />}
                           <div className="space-y-2">
                             <div className="flex items-center gap-2">
                               <div className="p-1.5 rounded-full bg-orange-500/10">
@@ -1433,7 +1451,7 @@ function RealizedYieldContent() {
                                 </div>
                               )}
                               {/* Borrow Cost Section */}
-                              <div className="flex justify-between items-center font-medium pt-1 border-t border-border/50">
+                              <div className="flex justify-between items-center font-semibold text-base pt-2 border-t border-border/50">
                                 <span>
                                   <InfoLabel label="Borrow Cost" tooltip="Total cost of borrowing: Interest + Price Impact" />
                                 </span>
@@ -1450,6 +1468,7 @@ function RealizedYieldContent() {
                               </div>
                             </div>
                           </div>
+                          </>
                         )}
 
                         {/* Pool Summary */}
@@ -1481,7 +1500,7 @@ function RealizedYieldContent() {
                             </div>
                           )}
                           <Separator className="my-1" />
-                          <div className="flex justify-between items-center">
+                          <div className="flex justify-between items-center bg-muted/50 -mx-4 px-4 py-2 rounded-md">
                             <span className="font-semibold">{poolBorrow && poolBorrow.currentDebtUsd > 0 ? "Net P&L" : "Total P&L"}</span>
                             <p className={`text-lg font-bold tabular-nums ${poolTotalPnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
                               {poolTotalPnl >= 0 ? "+" : ""}{formatUsd(poolTotalPnl)}

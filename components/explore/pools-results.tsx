@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { TokenLogo } from "@/components/token-logo"
+import { PoolLogo } from "@/components/pool-logo"
 import type { PoolExploreItem, PoolTokenItem } from "@/types/explore"
 
 interface PoolsResultsProps {
@@ -100,6 +101,7 @@ function PoolRow({ item }: { item: PoolExploreItem }) {
       >
         {/* Left side: Pool info */}
         <div className="flex items-center gap-2 min-w-0 flex-1">
+          <PoolLogo poolName={item.poolName} size={24} />
           <div className="min-w-0 flex-1 text-left">
             <p className="font-medium truncate text-sm sm:text-base">{item.poolName}</p>
           </div>
@@ -167,7 +169,10 @@ function PoolRow({ item }: { item: PoolExploreItem }) {
 function PoolRowSkeleton() {
   return (
     <div className="flex items-center justify-between py-3 px-3 sm:px-4 border-b border-border/50 last:border-b-0">
-      <Skeleton className="h-4 w-24" />
+      <div className="flex items-center gap-2">
+        <Skeleton className="h-6 w-6 rounded-full" />
+        <Skeleton className="h-4 w-24" />
+      </div>
       <div className="flex items-center gap-2 sm:gap-4">
         <Skeleton className="h-8 w-20" />
         <Skeleton className="h-8 w-20" />

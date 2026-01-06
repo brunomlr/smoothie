@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { InfoLabel } from "./info-label"
+import { PoolLogo } from "@/components/pool-logo"
 
 interface PoolData {
   poolId: string
@@ -88,9 +89,12 @@ export function PoolBreakdown({
               <div key={poolData.poolId} className="space-y-4">
                 {poolIndex > 0 && <Separator />}
                 {/* Pool Header */}
-                <p className="font-semibold text-sm">
-                  {poolData.poolName || poolData.poolId.slice(0, 8) + '...'}
-                </p>
+                <div className="flex items-center gap-2">
+                  <PoolLogo poolName={poolData.poolName || poolData.poolId} size={20} />
+                  <p className="font-semibold text-sm">
+                    {poolData.poolName || poolData.poolId.slice(0, 8) + '...'}
+                  </p>
+                </div>
 
                 {/* Lending Position */}
                 {poolData.lending.deposited > 0 && (
