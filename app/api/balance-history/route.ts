@@ -12,18 +12,17 @@ import {
   getTimezone,
   CACHE_CONFIGS,
 } from '@/lib/api'
-
-// Track when daily_rates was last refreshed (in-memory cache)
-let lastRatesRefresh: number = 0
-const RATES_REFRESH_INTERVAL_MS = 15 * 60 * 1000 // 15 minutes
+import { cacheKey, CACHE_TTL, shouldRefreshRates, markRatesRefreshed, releaseRatesLock } from '@/lib/redis'
 
 async function ensureFreshRates(): Promise<void> {
-  const now = Date.now()
-  if (now - lastRatesRefresh > RATES_REFRESH_INTERVAL_MS) {
+  // Use Redis-based coordination to avoid redundant refreshes across instances
+  if (await shouldRefreshRates()) {
     try {
       await eventsRepository.refreshDailyRates()
-      lastRatesRefresh = now
+      await markRatesRefreshed()
     } catch {
+      // Release the lock so other instances can try
+      await releaseRatesLock()
       // Don't throw - continue with stale data rather than failing
     }
   }
@@ -42,6 +41,19 @@ interface BalanceHistoryResponse {
 export const GET = createApiHandler<BalanceHistoryResponse>({
   logPrefix: '[Balance History API]',
   cache: CACHE_CONFIGS.MEDIUM,
+
+  redisCache: {
+    ttl: CACHE_TTL.MEDIUM,
+    getKey: (request) => {
+      const params = request.nextUrl.searchParams
+      return cacheKey(
+        'balance-history',
+        params.get('user') || '',
+        params.get('asset') || '',
+        params.get('days') || '30'
+      )
+    },
+  },
 
   analytics: {
     event: 'balance_history_fetched',

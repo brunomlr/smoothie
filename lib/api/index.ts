@@ -15,6 +15,7 @@ export {
   createPostApiHandler,
   type ApiHandlerConfig,
   type HandlerContext,
+  type RedisCacheConfig,
 } from './create-api-handler'
 
 // Error types

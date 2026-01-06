@@ -8,7 +8,9 @@ import { eventsRepository } from '@/lib/db/events-repository'
 import {
   createApiHandler,
   requireString,
+  CACHE_CONFIGS,
 } from '@/lib/api'
+import { cacheKey, CACHE_TTL } from '@/lib/redis'
 
 export interface BlndClaimWithPrice {
   date: string
@@ -43,7 +45,15 @@ export interface ClaimedBlndResponse {
 
 export const GET = createApiHandler<ClaimedBlndResponse>({
   logPrefix: '[API claimed-blnd]',
-  cache: null, // No caching for this endpoint
+  cache: CACHE_CONFIGS.SHORT,
+
+  redisCache: {
+    ttl: CACHE_TTL.MEDIUM, // 5 minutes - claim data doesn't change frequently
+    getKey: (request) => {
+      const params = request.nextUrl.searchParams
+      return cacheKey('claimed-blnd', params.get('user') || '')
+    },
+  },
 
   analytics: {
     event: 'claimed_blnd_fetched',

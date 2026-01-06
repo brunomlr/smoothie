@@ -10,6 +10,7 @@ import {
   parseList,
   CACHE_CONFIGS,
 } from '@/lib/api'
+import { cacheKey, CACHE_TTL } from '@/lib/redis'
 
 // Price data types
 interface TokenPrice {
@@ -35,6 +36,15 @@ const MOCK_PRICES: Record<string, number> = {
 export const GET = createApiHandler<PricesResponse>({
   logPrefix: '[Prices API]',
   cache: CACHE_CONFIGS.MEDIUM,
+
+  redisCache: {
+    ttl: CACHE_TTL.SHORT, // 1 minute - prices update frequently
+    getKey: (request) => {
+      const params = request.nextUrl.searchParams
+      const assets = params.get('assets') || 'all'
+      return cacheKey('prices', assets)
+    },
+  },
 
   async handler(_request: NextRequest, { searchParams }) {
     const requestedAssets = parseList(searchParams, 'assets')

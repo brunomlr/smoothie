@@ -12,6 +12,7 @@ import {
   getTimezone,
   CACHE_CONFIGS,
 } from '@/lib/api'
+import { cacheKey, CACHE_TTL } from '@/lib/redis'
 
 interface BackstopBalanceHistoryResponse {
   user_address: string
@@ -28,6 +29,18 @@ interface BackstopBalanceHistoryResponse {
 export const GET = createApiHandler<BackstopBalanceHistoryResponse>({
   logPrefix: '[Backstop Balance History API]',
   cache: CACHE_CONFIGS.MEDIUM,
+
+  redisCache: {
+    ttl: CACHE_TTL.MEDIUM, // 5 minutes
+    getKey: (request) => {
+      const params = request.nextUrl.searchParams
+      return cacheKey(
+        'backstop-balance-history',
+        params.get('user') || '',
+        params.get('days') || '365'
+      )
+    },
+  },
 
   analytics: {
     event: 'backstop_balance_history_fetched',

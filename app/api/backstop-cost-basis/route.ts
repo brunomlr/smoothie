@@ -11,6 +11,7 @@ import {
   optionalString,
   CACHE_CONFIGS,
 } from '@/lib/api'
+import { cacheKey, CACHE_TTL } from '@/lib/redis'
 
 interface BackstopCostBasisResponse {
   user_address: string
@@ -20,6 +21,18 @@ interface BackstopCostBasisResponse {
 export const GET = createApiHandler<BackstopCostBasisResponse>({
   logPrefix: '[Backstop Cost Basis API]',
   cache: CACHE_CONFIGS.SHORT,
+
+  redisCache: {
+    ttl: CACHE_TTL.MEDIUM, // 5 minutes
+    getKey: (request) => {
+      const params = request.nextUrl.searchParams
+      return cacheKey(
+        'backstop-cost-basis',
+        params.get('user') || '',
+        params.get('pool') || 'all'
+      )
+    },
+  },
 
   analytics: {
     event: 'backstop_cost_basis_fetched',

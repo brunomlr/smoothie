@@ -4,7 +4,7 @@
  * Creates standardized API route handlers with:
  * - Consistent error handling
  * - Parameter validation
- * - Caching configuration
+ * - Caching configuration (HTTP and Redis)
  * - Analytics integration (optional)
  */
 
@@ -15,13 +15,27 @@ import {
   captureServerEvent,
   hashWalletAddress,
 } from '@/lib/analytics-server'
+import { getOrSet } from '@/lib/redis'
+
+export interface RedisCacheConfig {
+  /** TTL in seconds */
+  ttl: number
+  /** Function to generate cache key from request */
+  getKey: (request: NextRequest) => string
+}
 
 export interface ApiHandlerConfig<TResult> {
   /** Log prefix for error messages (e.g., '[User Actions API]') */
   logPrefix: string
 
-  /** Cache configuration */
+  /** HTTP Cache configuration (Cache-Control headers) */
   cache?: CacheConfig | null
+
+  /**
+   * Redis cache configuration (optional)
+   * If provided, results will be cached in Redis before handler execution
+   */
+  redisCache?: RedisCacheConfig
 
   /** The handler function that processes the request */
   handler: (
@@ -66,7 +80,7 @@ export interface HandlerContext {
 export function createApiHandler<TResult>(
   config: ApiHandlerConfig<TResult>
 ): (request: NextRequest) => Promise<NextResponse> {
-  const { logPrefix, cache = null, handler, analytics } = config
+  const { logPrefix, cache = null, redisCache, handler, analytics } = config
 
   return async function GET(request: NextRequest): Promise<NextResponse> {
     try {
@@ -78,7 +92,18 @@ export function createApiHandler<TResult>(
         analyticsUserId,
       }
 
-      const result = await handler(request, context)
+      // Execute handler with optional Redis caching
+      let result: TResult
+      if (redisCache) {
+        const cacheKey = redisCache.getKey(request)
+        result = await getOrSet(
+          cacheKey,
+          () => handler(request, context),
+          { ttl: redisCache.ttl }
+        )
+      } else {
+        result = await handler(request, context)
+      }
 
       // Capture analytics if configured
       if (analytics) {

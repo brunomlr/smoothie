@@ -11,6 +11,7 @@ import {
   optionalInt,
   CACHE_CONFIGS,
 } from '@/lib/api'
+import { cacheKey, CACHE_TTL } from '@/lib/redis'
 
 export interface BackstopApyDataPoint {
   date: string
@@ -67,6 +68,18 @@ function calculateApyFromShareRates(
 export const GET = createApiHandler<BackstopApyHistoryResponse>({
   logPrefix: '[Backstop APY History API]',
   cache: CACHE_CONFIGS.LONG,
+
+  redisCache: {
+    ttl: CACHE_TTL.LONG, // 15 minutes - historical APY doesn't change frequently
+    getKey: (request) => {
+      const params = request.nextUrl.searchParams
+      return cacheKey(
+        'backstop-apy-history',
+        params.get('pool') || '',
+        params.get('days') || '180'
+      )
+    },
+  },
 
   async handler(_request: NextRequest, { searchParams }) {
     const poolId = requireString(searchParams, 'pool')

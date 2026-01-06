@@ -13,6 +13,7 @@ import {
   parseList,
   CACHE_CONFIGS,
 } from '@/lib/api'
+import { cacheKey, CACHE_TTL } from '@/lib/redis'
 
 interface UserActionsResponse {
   user_address: string
@@ -25,6 +26,24 @@ interface UserActionsResponse {
 export const GET = createApiHandler<UserActionsResponse>({
   logPrefix: '[User Actions API]',
   cache: CACHE_CONFIGS.SHORT,
+
+  redisCache: {
+    ttl: CACHE_TTL.MEDIUM, // 5 minutes - user actions don't change frequently
+    getKey: (request) => {
+      const params = request.nextUrl.searchParams
+      return cacheKey(
+        'user-actions',
+        params.get('user') || '',
+        params.get('limit') || '50',
+        params.get('offset') || '0',
+        params.get('pool') || '',
+        params.get('asset') || '',
+        params.get('actionTypes') || '',
+        params.get('startDate') || '',
+        params.get('endDate') || ''
+      )
+    },
+  },
 
   analytics: {
     event: 'user_actions_fetched',

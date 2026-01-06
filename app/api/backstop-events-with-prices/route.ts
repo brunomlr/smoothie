@@ -11,6 +11,7 @@ import {
   optionalString,
   CACHE_CONFIGS,
 } from '@/lib/api'
+import { cacheKey, CACHE_TTL } from '@/lib/redis'
 
 export interface BackstopEventWithPrice {
   date: string
@@ -29,6 +30,18 @@ export interface BackstopEventsWithPricesResponse {
 export const GET = createApiHandler<BackstopEventsWithPricesResponse>({
   logPrefix: '[API backstop-events-with-prices]',
   cache: CACHE_CONFIGS.SHORT,
+
+  redisCache: {
+    ttl: CACHE_TTL.MEDIUM, // 5 minutes
+    getKey: (request) => {
+      const params = request.nextUrl.searchParams
+      return cacheKey(
+        'backstop-events-prices',
+        params.get('userAddress') || '',
+        params.get('poolAddress') || 'all'
+      )
+    },
+  },
 
   async handler(_request: NextRequest, { searchParams }) {
     const userAddress = requireString(searchParams, 'userAddress')

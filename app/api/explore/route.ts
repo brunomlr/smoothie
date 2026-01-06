@@ -29,6 +29,7 @@ import {
   optionalString,
   CACHE_CONFIGS,
 } from '@/lib/api'
+import { cacheKey, CACHE_TTL } from '@/lib/redis'
 import type {
   ApyPeriod,
   SupplyExploreItem,
@@ -313,6 +314,14 @@ function buildBackstopItems(snapshots: PoolSnapshot[]): BackstopExploreItem[] {
 export const GET = createApiHandler<ExploreData>({
   logPrefix: '[Explore API]',
   cache: CACHE_CONFIGS.MEDIUM,
+
+  redisCache: {
+    ttl: CACHE_TTL.LONG, // 15 minutes - pool data changes slowly
+    getKey: (request) => {
+      const params = request.nextUrl.searchParams
+      return cacheKey('explore', params.get('period') || 'current')
+    },
+  },
 
   async handler(_request: NextRequest, { searchParams }) {
     const periodParam = optionalString(searchParams, 'period') ?? 'current'
