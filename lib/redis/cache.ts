@@ -28,6 +28,15 @@ export function cacheKey(...parts: (string | number)[]): string {
 }
 
 /**
+ * Get today's date as YYYY-MM-DD string for date-aware cache keys.
+ * This ensures cache automatically rotates daily for time-sensitive queries.
+ * @example cacheKey('balance-history', user, asset, days, todayDate())
+ */
+export function todayDate(): string {
+  return new Date().toISOString().split('T')[0]
+}
+
+/**
  * Get cached value or compute and cache it
  *
  * Falls back to computing the value if Redis is disabled or fails.

@@ -13,7 +13,7 @@ import {
   parseList,
   CACHE_CONFIGS,
 } from '@/lib/api'
-import { cacheKey, CACHE_TTL } from '@/lib/redis'
+import { cacheKey, todayDate, CACHE_TTL } from '@/lib/redis'
 
 interface UserActionsResponse {
   user_address: string
@@ -40,7 +40,8 @@ export const GET = createApiHandler<UserActionsResponse>({
         params.get('asset') || '',
         params.get('actionTypes') || '',
         params.get('startDate') || '',
-        params.get('endDate') || ''
+        params.get('endDate') || '',
+        todayDate() // Rotate cache daily for new actions
       )
     },
   },

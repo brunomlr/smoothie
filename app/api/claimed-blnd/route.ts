@@ -10,7 +10,7 @@ import {
   requireString,
   CACHE_CONFIGS,
 } from '@/lib/api'
-import { cacheKey, CACHE_TTL } from '@/lib/redis'
+import { cacheKey, todayDate, CACHE_TTL } from '@/lib/redis'
 
 export interface BlndClaimWithPrice {
   date: string
@@ -51,7 +51,7 @@ export const GET = createApiHandler<ClaimedBlndResponse>({
     ttl: CACHE_TTL.MEDIUM, // 5 minutes - claim data doesn't change frequently
     getKey: (request) => {
       const params = request.nextUrl.searchParams
-      return cacheKey('claimed-blnd', params.get('user') || '')
+      return cacheKey('claimed-blnd', params.get('user') || '', todayDate())
     },
   },
 

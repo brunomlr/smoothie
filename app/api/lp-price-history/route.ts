@@ -10,7 +10,7 @@ import {
   optionalInt,
   CACHE_CONFIGS,
 } from '@/lib/api'
-import { cacheKey, CACHE_TTL } from '@/lib/redis'
+import { cacheKey, todayDate, CACHE_TTL } from '@/lib/redis'
 import { LP_TOKEN_ADDRESS } from '@/lib/constants'
 
 export interface LpPriceDataPoint {
@@ -30,10 +30,10 @@ export const GET = createApiHandler<LpPriceHistoryResponse>({
   cache: CACHE_CONFIGS.LONG,
 
   redisCache: {
-    ttl: CACHE_TTL.LONG, // 15 minutes - LP prices are shared data
+    ttl: CACHE_TTL.VERY_LONG, // 1 hour - historical data only changes once per day
     getKey: (request) => {
       const params = request.nextUrl.searchParams
-      return cacheKey('lp-price-history', params.get('days') || '180')
+      return cacheKey('lp-price-history', params.get('days') || '180', todayDate())
     },
   },
 

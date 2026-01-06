@@ -4,6 +4,7 @@ export {
   get,
   set,
   cacheKey,
+  todayDate,
   invalidate,
   invalidatePattern,
   CACHE_TTL,

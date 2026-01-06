@@ -11,7 +11,7 @@ import {
   optionalInt,
   CACHE_CONFIGS,
 } from '@/lib/api'
-import { cacheKey, CACHE_TTL } from '@/lib/redis'
+import { cacheKey, todayDate, CACHE_TTL } from '@/lib/redis'
 
 export interface ApyDataPoint {
   date: string
@@ -71,14 +71,15 @@ export const GET = createApiHandler<ApyHistoryResponse>({
   cache: CACHE_CONFIGS.LONG,
 
   redisCache: {
-    ttl: CACHE_TTL.LONG, // 15 minutes - historical APY doesn't change frequently
+    ttl: CACHE_TTL.VERY_LONG, // 1 hour - historical data only changes once per day
     getKey: (request) => {
       const params = request.nextUrl.searchParams
       return cacheKey(
         'apy-history',
         params.get('pool') || '',
         params.get('asset') || '',
-        params.get('days') || '180'
+        params.get('days') || '180',
+        todayDate()
       )
     },
   },

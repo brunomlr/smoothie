@@ -12,7 +12,7 @@ import {
   getTimezone,
   CACHE_CONFIGS,
 } from '@/lib/api'
-import { cacheKey, CACHE_TTL, shouldRefreshRates, markRatesRefreshed, releaseRatesLock } from '@/lib/redis'
+import { cacheKey, todayDate, CACHE_TTL, shouldRefreshRates, markRatesRefreshed, releaseRatesLock } from '@/lib/redis'
 
 async function ensureFreshRates(): Promise<void> {
   // Use Redis-based coordination to avoid redundant refreshes across instances
@@ -50,7 +50,8 @@ export const GET = createApiHandler<BalanceHistoryResponse>({
         'balance-history',
         params.get('user') || '',
         params.get('asset') || '',
-        params.get('days') || '30'
+        params.get('days') || '30',
+        todayDate() // Include date so cache rotates daily
       )
     },
   },

@@ -29,7 +29,7 @@ import {
   optionalString,
   CACHE_CONFIGS,
 } from '@/lib/api'
-import { cacheKey, CACHE_TTL } from '@/lib/redis'
+import { cacheKey, todayDate, CACHE_TTL } from '@/lib/redis'
 import type {
   ApyPeriod,
   SupplyExploreItem,
@@ -319,7 +319,7 @@ export const GET = createApiHandler<ExploreData>({
     ttl: CACHE_TTL.LONG, // 15 minutes - pool data changes slowly
     getKey: (request) => {
       const params = request.nextUrl.searchParams
-      return cacheKey('explore', params.get('period') || 'current')
+      return cacheKey('explore', params.get('period') || 'current', todayDate())
     },
   },
 
