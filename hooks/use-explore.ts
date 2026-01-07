@@ -78,7 +78,8 @@ export function useExplore(filters: ExploreFilters) {
   const query = useQuery({
     queryKey: ["explore", filters.period],
     queryFn: ({ signal }) => fetchExploreData(filters.period, signal),
-    staleTime: 30_000, // 30 seconds
+    staleTime: 60_000, // 1 minute - pool TVL data changes slowly
+    gcTime: 10 * 60 * 1000, // 10 minutes
     refetchOnWindowFocus: false,
     retry: 2,
   })

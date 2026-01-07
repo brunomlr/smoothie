@@ -134,8 +134,11 @@ export function useBalanceHistoryData(
     return Array.from(addresses)
   }, [assetCards, blendSnapshot?.positions])
 
-  // Create stable assets key for caching
-  const assetsKey = uniqueAssetAddresses.join(',')
+  // Create stable assets key for caching (sorted for consistent cache key)
+  const assetsKey = useMemo(
+    () => [...uniqueAssetAddresses].sort().join(','),
+    [uniqueAssetAddresses]
+  )
 
   // Get cached data for instant display on repeat visits
   const cachedData = useMemo(

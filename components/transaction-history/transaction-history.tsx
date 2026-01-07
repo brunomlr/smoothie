@@ -266,11 +266,43 @@ export function TransactionHistory({
         )}
         <Card className="py-0">
           <CardContent className="p-0">
-            {[...Array(5)].map((_, i) => (
-              <div key={i} className="py-3 px-4 border-b border-border/50 last:border-b-0">
-                <div className="h-14 rounded bg-muted animate-pulse" />
-              </div>
-            ))}
+            {/* Mobile view skeleton */}
+            <div className="md:hidden">
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="py-3 px-4 space-y-3 border-b border-border/50 last:border-b-0">
+                  <div className="flex justify-between items-center">
+                    <div className="h-4 w-20 rounded bg-muted animate-pulse" />
+                    <div className="h-3 w-28 rounded bg-muted animate-pulse" />
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <div className="h-6 w-16 rounded-full bg-muted animate-pulse" />
+                    <div className="text-right space-y-1">
+                      <div className="h-4 w-24 rounded bg-muted animate-pulse ml-auto" />
+                      <div className="h-3 w-16 rounded bg-muted animate-pulse ml-auto" />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop table view skeleton */}
+            <div className="hidden md:block">
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="flex items-center py-3 px-4 border-b border-border/50 last:border-b-0 gap-4">
+                  <div className="h-4 w-24 rounded bg-muted animate-pulse" />
+                  <div className="h-6 w-20 rounded-full bg-muted animate-pulse" />
+                  <div className="flex-1">
+                    <div className="h-4 w-32 rounded bg-muted animate-pulse" />
+                    <div className="h-3 w-16 rounded bg-muted animate-pulse mt-1" />
+                  </div>
+                  <div className="text-right">
+                    <div className="h-4 w-20 rounded bg-muted animate-pulse" />
+                    <div className="h-3 w-12 rounded bg-muted animate-pulse mt-1 ml-auto" />
+                  </div>
+                  <div className="h-3 w-20 rounded bg-muted animate-pulse" />
+                </div>
+              ))}
+            </div>
           </CardContent>
         </Card>
       </>

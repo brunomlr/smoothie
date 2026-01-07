@@ -73,7 +73,8 @@ export function useRealizedYield({
       return response.json() as Promise<RealizedYieldResponse>
     },
     enabled: enabled && !!publicKey,
-    staleTime: 60 * 1000, // 1 minute
+    staleTime: 5 * 60 * 1000, // 5 minutes - historical yield data changes slowly
+    gcTime: 15 * 60 * 1000, // 15 minutes
     refetchOnWindowFocus: false,
     retry: 2,
   })

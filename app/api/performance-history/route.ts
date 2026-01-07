@@ -94,7 +94,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Step 2: Get balance history for each asset
+    // Step 2: Get balance history for each asset IN PARALLEL
     const balanceHistoryByAsset = new Map<string, Array<{
       snapshot_date: string
       supply_balance: number
@@ -104,19 +104,26 @@ export async function GET(request: NextRequest) {
 
     let earliestBalanceDate: string | null = null
 
-    for (const assetAddress of uniqueAssets) {
-      const { history, firstEventDate } = await eventsRepository.getBalanceHistoryFromEvents(
+    // Fetch all asset histories in parallel for better performance
+    const balanceHistoryPromises = Array.from(uniqueAssets).map(async (assetAddress) => {
+      const { history } = await eventsRepository.getBalanceHistoryFromEvents(
         userAddress,
         assetAddress,
         days,
         timezone
       )
-      balanceHistoryByAsset.set(assetAddress, history as Array<{
+      return { assetAddress, history: history as Array<{
         snapshot_date: string
         supply_balance: number
         collateral_balance: number
         pool_id: string
-      }>)
+      }> }
+    })
+
+    const balanceHistoryResults = await Promise.all(balanceHistoryPromises)
+
+    for (const { assetAddress, history } of balanceHistoryResults) {
+      balanceHistoryByAsset.set(assetAddress, history)
 
       // Find the actual earliest date with balance data (not just event date)
       for (const record of history) {

@@ -70,8 +70,8 @@ export function useChartHistoricalPrices({
     queryKey,
     queryFn: () => fetchHistoricalPrices(tokenAddresses, dates, sdkPricesObj),
     enabled: enabled && tokenAddresses.length > 0 && dates.length > 0,
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    gcTime: 15 * 60 * 1000, // 15 minutes
+    staleTime: 30 * 60 * 1000, // 30 minutes - historical prices rarely change
+    gcTime: 60 * 60 * 1000, // 1 hour
   })
 
   // Build the prices map

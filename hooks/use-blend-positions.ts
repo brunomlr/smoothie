@@ -204,7 +204,7 @@ export function useBlendPositions(walletPublicKey: string | undefined, totalCost
     staleTime: 5 * 60_000, // Data considered stale after 5 minutes - positions change infrequently
     refetchInterval: 10 * 60_000, // Refetch every 10 minutes in background
     refetchIntervalInBackground: false,
-    refetchOnWindowFocus: true, // Refetch when user returns to tab
+    refetchOnWindowFocus: false, // Disabled - refetchInterval handles updates
     placeholderData: cachedData, // Show cached data instantly while fetching
   })
 

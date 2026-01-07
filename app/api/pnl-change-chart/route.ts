@@ -539,39 +539,43 @@ export async function GET(request: NextRequest) {
     // PostgreSQL handles the timezone conversion correctly in the query
     const eventBasedRates = new Map<string, { b_rate: number | null; d_rate: number | null }>()
 
-    // Fetch event-based rates for all pool/asset pairs (supply positions)
-    for (const [compositeKey, { poolId, assetAddress }] of poolAssetPairs) {
+    // Collect all unique pool/asset pairs (from both supply and borrow)
+    const allPoolAssetPairs = new Map(poolAssetPairs)
+    for (const [compositeKey, value] of borrowPoolAssetPairs) {
+      if (!allPoolAssetPairs.has(compositeKey)) {
+        allPoolAssetPairs.set(compositeKey, value)
+      }
+    }
+
+    // Fetch all event-based rates IN PARALLEL for better performance
+    const ratePromises = Array.from(allPoolAssetPairs).map(async ([compositeKey, { poolId, assetAddress }]) => {
       const rates = await eventsRepository.getRateAtStartOfDay(
         poolId,
         assetAddress,
         todayStr,
         timezone
       )
+      return { compositeKey, rates }
+    })
+
+    const rateResults = await Promise.all(ratePromises)
+    for (const { compositeKey, rates } of rateResults) {
       eventBasedRates.set(compositeKey, rates)
     }
 
-    // Also fetch event-based rates for borrow positions (for d_rate)
-    for (const [compositeKey, { poolId, assetAddress }] of borrowPoolAssetPairs) {
-      // Only fetch if not already fetched (some positions might be in both supply and borrow)
-      if (!eventBasedRates.has(compositeKey)) {
-        const rates = await eventsRepository.getRateAtStartOfDay(
-          poolId,
-          assetAddress,
-          todayStr,
-          timezone
-        )
-        eventBasedRates.set(compositeKey, rates)
-      }
-    }
-
-    // Fetch event-based backstop share rates for live bar
+    // Fetch event-based backstop share rates IN PARALLEL for live bar
     const eventBasedBackstopRates = new Map<string, number | null>()
-    for (const poolAddress of backstopPoolAddresses) {
+    const backstopRatePromises = backstopPoolAddresses.map(async (poolAddress) => {
       const shareRate = await eventsRepository.getBackstopShareRateAtStartOfDay(
         poolAddress,
         todayStr,
         timezone
       )
+      return { poolAddress, shareRate }
+    })
+
+    const backstopRateResults = await Promise.all(backstopRatePromises)
+    for (const { poolAddress, shareRate } of backstopRateResults) {
       eventBasedBackstopRates.set(poolAddress, shareRate)
     }
 
@@ -1093,7 +1097,7 @@ export async function GET(request: NextRequest) {
       granularity,
     } as PnlChangeChartResponse, {
       headers: {
-        'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120',
+        'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
       },
     })
   } catch (error) {

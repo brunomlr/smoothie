@@ -61,25 +61,47 @@ function HistoryLoading() {
         </div>
 
         {/* Transaction list skeleton */}
-        <div className="rounded-xl border bg-card">
-          {[1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="p-4 border-b border-border/50 last:border-b-0">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <Skeleton className="h-10 w-10 rounded-full" />
-                  <div className="space-y-1">
-                    <Skeleton className="h-4 w-24" />
-                    <Skeleton className="h-3 w-16" />
+        <Card className="py-0">
+          <CardContent className="p-0">
+            {/* Mobile view skeleton */}
+            <div className="md:hidden">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="py-3 px-4 space-y-3 border-b border-border/50 last:border-b-0">
+                  <div className="flex justify-between items-center">
+                    <Skeleton className="h-4 w-20" />
+                    <Skeleton className="h-3 w-28" />
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <Skeleton className="h-6 w-16 rounded-full" />
+                    <div className="text-right space-y-1">
+                      <Skeleton className="h-4 w-24 ml-auto" />
+                      <Skeleton className="h-3 w-16 ml-auto" />
+                    </div>
                   </div>
                 </div>
-                <div className="text-right space-y-1">
-                  <Skeleton className="h-5 w-20 ml-auto" />
-                  <Skeleton className="h-3 w-16 ml-auto" />
-                </div>
-              </div>
+              ))}
             </div>
-          ))}
-        </div>
+
+            {/* Desktop table view skeleton */}
+            <div className="hidden md:block">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="flex items-center py-3 px-4 border-b border-border/50 last:border-b-0 gap-4">
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-6 w-20 rounded-full" />
+                  <div className="flex-1">
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-3 w-16 mt-1" />
+                  </div>
+                  <div className="text-right">
+                    <Skeleton className="h-4 w-20" />
+                    <Skeleton className="h-3 w-12 mt-1 ml-auto" />
+                  </div>
+                  <Skeleton className="h-3 w-20" />
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       </main>
     </div>
   )

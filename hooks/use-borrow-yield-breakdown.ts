@@ -107,8 +107,8 @@ export function useBorrowYieldBreakdown(
     queryKey: ['borrow-cost-basis', userAddress, Object.keys(sdkPrices).sort().join(',')],
     queryFn: () => fetchBorrowCostBasis(userAddress!, sdkPrices),
     enabled: !!userAddress && Object.keys(sdkPrices).length > 0,
-    staleTime: 60 * 1000, // 1 minute
-    gcTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 5 * 60 * 1000, // 5 minutes - historical cost basis changes slowly
+    gcTime: 15 * 60 * 1000, // 15 minutes
   })
 
   // Calculate full borrow breakdowns using SDK current debts + historical cost basis

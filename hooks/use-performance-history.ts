@@ -61,7 +61,8 @@ export function usePerformanceHistory({
       return response.json() as Promise<PerformanceHistoryResponse>
     },
     enabled: enabled && !!publicKey,
-    staleTime: 60 * 1000, // 1 minute
+    staleTime: 5 * 60 * 1000, // 5 minutes - historical data changes slowly
+    gcTime: 15 * 60 * 1000, // 15 minutes
     refetchOnWindowFocus: false,
     retry: 2,
   })

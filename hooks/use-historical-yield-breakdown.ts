@@ -137,8 +137,8 @@ export function useHistoricalYieldBreakdown(
     queryKey: ['historical-cost-basis', userAddress, Object.keys(sdkPrices).sort().join(',')],
     queryFn: () => fetchHistoricalCostBasis(userAddress!, sdkPrices),
     enabled: !!userAddress && Object.keys(sdkPrices).length > 0,
-    staleTime: 60 * 1000, // 1 minute
-    gcTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 5 * 60 * 1000, // 5 minutes - historical cost basis changes slowly
+    gcTime: 15 * 60 * 1000, // 15 minutes
   })
 
   // Fetch backstop events with historical LP prices
@@ -147,8 +147,8 @@ export function useHistoricalYieldBreakdown(
     queryKey: ['backstop-events-with-prices', userAddress, lpTokenPrice],
     queryFn: () => fetchBackstopHistoricalCostBasis(userAddress!, lpTokenPrice || 0),
     enabled: Boolean(userAddress) && Boolean(lpTokenPrice) && (lpTokenPrice ?? 0) > 0 && hasBackstopPositions,
-    staleTime: 60 * 1000,
-    gcTime: 5 * 60 * 1000,
+    staleTime: 5 * 60 * 1000, // 5 minutes - historical events change slowly
+    gcTime: 15 * 60 * 1000, // 15 minutes
   })
 
   // Calculate full yield breakdowns using SDK current balances + historical cost basis
