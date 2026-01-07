@@ -70,6 +70,56 @@ function NegativeLabel(props: any) {
   )
 }
 
+// Custom label renderer for positive totals with Live tag
+// Note: This is a factory function that creates a renderer with access to chart data
+function createPositiveLabelRenderer(chartData: Array<{ isLive: boolean }>) {
+  return function PositiveLabel(props: any) {
+    const { x, y, width, value, index } = props
+    if (!value || value <= 0) return null
+
+    // Access isLive from the chart data using index
+    const isLive = chartData[index]?.isLive
+
+    const labelX = x + width / 2
+    const labelY = y - 6
+
+    return (
+      <g>
+        {isLive && (
+          <g>
+            <rect
+              x={labelX - 16}
+              y={labelY - 26}
+              width={32}
+              height={13}
+              rx={3}
+              fill="rgba(16, 185, 129, 0.15)"
+            />
+            <text
+              x={labelX}
+              y={labelY - 19}
+              textAnchor="middle"
+              dominantBaseline="middle"
+              style={{ fontSize: 9, fill: "#10b981", fontWeight: 600 }}
+            >
+              Live
+            </text>
+          </g>
+        )}
+        <text
+          x={labelX}
+          y={labelY}
+          textAnchor="middle"
+          dominantBaseline="auto"
+          style={{ fontSize: 9, fill: "white", fontWeight: 500 }}
+        >
+          {formatCompact(value)}
+        </text>
+      </g>
+    )
+  }
+}
+
 // Custom bar shape that applies rounding based on position in stack
 function RoundedBar(props: any) {
   const { x, y, width, height, fill, dataKey, payload } = props
@@ -473,15 +523,15 @@ export const PnlChangeChart = memo(function PnlChangeChart({
           No yield data for this period
         </div>
       ) : (
-        <div className="space-y-1">
+        <div>
           <div className="text-[10px] text-muted-foreground font-medium tracking-wide px-1">
             Yield Earnings (Approx.)
           </div>
-          <div className="aspect-[3/1] md:aspect-[4/1] w-full select-none">
+          <div className="aspect-[2/1] md:aspect-[4/1] w-full select-none">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
                 data={yieldChartData}
-                margin={{ top: 20, right: 10, left: 10, bottom: 20 }}
+                margin={{ top: 35, right: 10, left: 10, bottom: 20 }}
                 stackOffset="sign"
                 barCategoryGap={barGap}
               >
@@ -530,9 +580,7 @@ export const PnlChangeChart = memo(function PnlChangeChart({
                   {period !== "1M" && (
                     <LabelList
                       dataKey="positiveTotal"
-                      position="top"
-                      formatter={(value: number) => value > 0 ? formatCompact(value) : ""}
-                      style={{ fontSize: 9, fill: "white", fontWeight: 500 }}
+                      content={createPositiveLabelRenderer(yieldChartData)}
                     />
                   )}
                 </Bar>
@@ -555,7 +603,7 @@ export const PnlChangeChart = memo(function PnlChangeChart({
             </ResponsiveContainer>
           </div>
           {/* Yield Legend - only show items with data */}
-          <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
+          <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground -mt-3">
             {yieldChartData.some(d => d.supplyApyBar > 0) && (
               <div className="flex items-center gap-1">
                 <div className="w-2 h-2 rounded-sm bg-blue-500" />
@@ -597,7 +645,7 @@ export const PnlChangeChart = memo(function PnlChangeChart({
       )}
 
       {/* Price Change Chart */}
-      <div className="space-y-1 mt-4">
+      <div className="space-y-1 mt-8">
           <div className="text-[10px] text-muted-foreground font-medium tracking-wide px-1">
             Price Changes
           </div>
@@ -606,7 +654,7 @@ export const PnlChangeChart = memo(function PnlChangeChart({
               No price changes in this period
             </div>
           ) : (
-            <div className="aspect-[5/1] md:aspect-[6/1] w-full select-none">
+            <div className="aspect-[3/1] md:aspect-[5/1] w-full select-none">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
                   data={priceChartData}
