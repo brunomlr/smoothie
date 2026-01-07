@@ -8,6 +8,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { TokenLogo } from "@/components/token-logo"
 import { PoolLogo } from "@/components/pool-logo"
 import { PoolsChart } from "@/components/explore/pools-chart"
+import { PoolTvlHistoryChart } from "@/components/explore/pool-tvl-history-chart"
 import type { PoolExploreItem, PoolTokenItem } from "@/types/explore"
 
 interface PoolsResultsProps {
@@ -249,12 +250,13 @@ function TotalsSummary({ items, isLoading }: { items: PoolExploreItem[]; isLoadi
 
 export function PoolsResults({ items, isLoading }: PoolsResultsProps) {
   return (
-    <div>
+    <div className="space-y-8">
       <TotalsSummary items={items} isLoading={isLoading} />
 
       <PoolsChart items={items} isLoading={isLoading} />
 
-      <h2 className="text-lg font-semibold mb-3">Pools and Tokens TVL</h2>
+      <div>
+        <h2 className="text-lg font-semibold mb-3">Pools and Tokens TVL</h2>
 
       {isLoading ? (
         <Card className="py-0">
@@ -277,6 +279,9 @@ export function PoolsResults({ items, isLoading }: PoolsResultsProps) {
           </CardContent>
         </Card>
       )}
+      </div>
+
+      <PoolTvlHistoryChart />
     </div>
   )
 }

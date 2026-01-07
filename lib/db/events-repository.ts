@@ -3102,8 +3102,9 @@ export class EventsRepository {
   }
 
   /**
-   * Get 24h supply and borrow changes aggregated by pool.
+   * Get 24h supply and borrow changes aggregated by pool in USD.
    * Returns net change in supply (supply - withdraw) and borrow (borrow - repay) for each pool in the last 24 hours.
+   * Amounts are converted to USD using the latest available token prices.
    */
   async get24hPoolChanges(): Promise<Array<{
     poolId: string
@@ -3116,22 +3117,30 @@ export class EventsRepository {
 
     const result = await pool.query(
       `
+      WITH latest_prices AS (
+        SELECT DISTINCT ON (token_address)
+          token_address,
+          usd_price
+        FROM daily_token_prices
+        ORDER BY token_address, price_date DESC
+      )
       SELECT
-        pool_id,
+        e.pool_id,
         SUM(CASE
-          WHEN action_type IN ('supply', 'supply_collateral') THEN amount_underlying / 1e7
-          WHEN action_type IN ('withdraw', 'withdraw_collateral') THEN -amount_underlying / 1e7
+          WHEN e.action_type IN ('supply', 'supply_collateral') THEN (e.amount_underlying / 1e7) * COALESCE(p.usd_price, 0)
+          WHEN e.action_type IN ('withdraw', 'withdraw_collateral') THEN -(e.amount_underlying / 1e7) * COALESCE(p.usd_price, 0)
           ELSE 0
         END) AS supply_change,
         SUM(CASE
-          WHEN action_type = 'borrow' THEN amount_underlying / 1e7
-          WHEN action_type = 'repay' THEN -amount_underlying / 1e7
+          WHEN e.action_type = 'borrow' THEN (e.amount_underlying / 1e7) * COALESCE(p.usd_price, 0)
+          WHEN e.action_type = 'repay' THEN -(e.amount_underlying / 1e7) * COALESCE(p.usd_price, 0)
           ELSE 0
         END) AS borrow_change
-      FROM parsed_events
-      WHERE ledger_closed_at >= NOW() - INTERVAL '24 hours'
-        AND action_type IN ('supply', 'supply_collateral', 'withdraw', 'withdraw_collateral', 'borrow', 'repay')
-      GROUP BY pool_id
+      FROM parsed_events e
+      LEFT JOIN latest_prices p ON e.asset_address = p.token_address
+      WHERE e.ledger_closed_at >= NOW() - INTERVAL '24 hours'
+        AND e.action_type IN ('supply', 'supply_collateral', 'withdraw', 'withdraw_collateral', 'borrow', 'repay')
+      GROUP BY e.pool_id
       `
     )
 
