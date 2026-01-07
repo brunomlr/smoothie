@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { TokenLogo } from "@/components/token-logo"
 import { PoolLogo } from "@/components/pool-logo"
+import { PoolsChart } from "@/components/explore/pools-chart"
 import type { PoolExploreItem, PoolTokenItem } from "@/types/explore"
 
 interface PoolsResultsProps {
@@ -251,7 +252,9 @@ export function PoolsResults({ items, isLoading }: PoolsResultsProps) {
     <div>
       <TotalsSummary items={items} isLoading={isLoading} />
 
-      <h2 className="text-lg font-semibold mb-3">Pools by TVL</h2>
+      <PoolsChart items={items} isLoading={isLoading} />
+
+      <h2 className="text-lg font-semibold mb-3">Pools and Tokens TVL</h2>
 
       {isLoading ? (
         <Card className="py-0">
