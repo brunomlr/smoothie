@@ -679,6 +679,37 @@ export async function GET(request: NextRequest) {
       let borrowBlndApy = 0 // BLND emissions from borrow positions (positive)
       let priceChange = 0
 
+      // Calculate period days for BLND emission pro-rating
+      // For live bar, calculate elapsed fraction of today in user's timezone
+      // For historical bars, calculate full days
+      let periodDays: number
+      let periodEndDate: Date
+
+      if (isLive) {
+        // Get current time formatted in user's timezone
+        const now = new Date()
+        const timeInTz = new Intl.DateTimeFormat('en-GB', {
+          timeZone: timezone,
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: false,
+        }).format(now)
+
+        // Parse "HH:MM:SS" and calculate fraction of day elapsed since midnight
+        const [hours, minutes, seconds] = timeInTz.split(':').map(Number)
+        const elapsedSeconds = hours * 3600 + minutes * 60 + seconds
+        periodDays = Math.max(0.01, elapsedSeconds / 86400)
+        periodEndDate = now
+      } else {
+        // For historical bars, calculate full days using UTC to avoid server timezone issues
+        const periodStartDate = new Date(boundary.start + 'T00:00:00Z')
+        periodEndDate = new Date(boundary.end + 'T00:00:00Z')
+        periodEndDate.setUTCDate(periodEndDate.getUTCDate() + 1)
+        const periodMs = periodEndDate.getTime() - periodStartDate.getTime()
+        periodDays = Math.max(0.01, periodMs / (1000 * 60 * 60 * 24))
+      }
+
       // Calculate for each asset
       for (const [compositeKey, { poolId, assetAddress }] of poolAssetPairs) {
         // Get balances
@@ -763,18 +794,7 @@ export async function GET(request: NextRequest) {
         supplyApy += periodSupplyApy
 
         // Estimate BLND earned from supply using time-weighted balance
-        const periodStartDate = new Date(boundary.start + 'T00:00:00')
-        let periodEndDate: Date
-        if (isLive) {
-          // For live bar, use current time to get partial day elapsed
-          periodEndDate = new Date()
-        } else {
-          // For historical bars, add 1 day to end date since boundary.end is inclusive
-          periodEndDate = new Date(boundary.end + 'T00:00:00')
-          periodEndDate.setDate(periodEndDate.getDate() + 1)
-        }
-        const periodMs = periodEndDate.getTime() - periodStartDate.getTime()
-        const periodDays = Math.max(0.01, periodMs / (1000 * 60 * 60 * 24)) // min 0.01 to avoid division issues
+        // (periodDays and periodEndDate are calculated once per period at the start of the loop)
 
         // Get historical emission APY for this period (use period start date)
         const periodBlndApyRate = getEmissionApyForDate(boundary.start, poolId, 'lending_supply', assetAddress)
@@ -926,31 +946,20 @@ export async function GET(request: NextRequest) {
         backstopYield += lpYield * lpPriceAtEnd
 
         // Estimate backstop BLND emissions using time-weighted balance
-        const backstopPeriodStartDate = new Date(boundary.start + 'T00:00:00')
-        let backstopPeriodEndDate: Date
-        if (isLive) {
-          // For live bar, use current time to get partial day elapsed
-          backstopPeriodEndDate = new Date()
-        } else {
-          // For historical bars, add 1 day to end date since boundary.end is inclusive
-          backstopPeriodEndDate = new Date(boundary.end + 'T00:00:00')
-          backstopPeriodEndDate.setDate(backstopPeriodEndDate.getDate() + 1)
-        }
-        const backstopPeriodMs = backstopPeriodEndDate.getTime() - backstopPeriodStartDate.getTime()
-        const backstopPeriodDays = Math.max(0.01, backstopPeriodMs / (1000 * 60 * 60 * 24))
+        // (periodDays and periodEndDate are calculated once per period at the start of the loop)
 
         // Get historical backstop emission APY for this period
         const periodBackstopBlndApyRate = getEmissionApyForDate(boundary.start, poolAddress, 'backstop')
         const dailyBackstopBlndRate = periodBackstopBlndApyRate / 100 / 365
 
         // BLND on LP tokens held at start of period (earn for full period)
-        let backstopBlndEarnings = lpAtStart * lpPriceAtStart * dailyBackstopBlndRate * backstopPeriodDays
+        let backstopBlndEarnings = lpAtStart * lpPriceAtStart * dailyBackstopBlndRate * periodDays
 
         // BLND on deposits (pro-rated from deposit date to period end)
         for (const deposit of periodDeposits) {
           const depositDate = new Date(deposit.timestamp)
           const lpPriceAtDeposit = getPriceAtDate(LP_TOKEN_ADDRESS, backstopDateFormatter.format(depositDate))
-          const daysRemaining = Math.max(0, (backstopPeriodEndDate.getTime() - depositDate.getTime()) / (1000 * 60 * 60 * 24))
+          const daysRemaining = Math.max(0, (periodEndDate.getTime() - depositDate.getTime()) / (1000 * 60 * 60 * 24))
           backstopBlndEarnings += deposit.lpTokens * lpPriceAtDeposit * dailyBackstopBlndRate * daysRemaining
         }
 
@@ -958,7 +967,7 @@ export async function GET(request: NextRequest) {
         for (const withdrawal of periodWithdrawals) {
           const withdrawDate = new Date(withdrawal.timestamp)
           const lpPriceAtWithdraw = getPriceAtDate(LP_TOKEN_ADDRESS, backstopDateFormatter.format(withdrawDate))
-          const daysRemaining = Math.max(0, (backstopPeriodEndDate.getTime() - withdrawDate.getTime()) / (1000 * 60 * 60 * 24))
+          const daysRemaining = Math.max(0, (periodEndDate.getTime() - withdrawDate.getTime()) / (1000 * 60 * 60 * 24))
           backstopBlndEarnings -= withdrawal.lpTokens * lpPriceAtWithdraw * dailyBackstopBlndRate * daysRemaining
         }
 
@@ -1094,25 +1103,14 @@ export async function GET(request: NextRequest) {
         borrowInterestCost -= periodBorrowInterestCost
 
         // Calculate borrow BLND emissions using time-weighted balance
-        const borrowPeriodStartDate = new Date(boundary.start + 'T00:00:00')
-        let borrowPeriodEndDate: Date
-        if (isLive) {
-          // For live bar, use current time to get partial day elapsed
-          borrowPeriodEndDate = new Date()
-        } else {
-          // For historical bars, add 1 day to end date since boundary.end is inclusive
-          borrowPeriodEndDate = new Date(boundary.end + 'T00:00:00')
-          borrowPeriodEndDate.setDate(borrowPeriodEndDate.getDate() + 1)
-        }
-        const borrowPeriodMs = borrowPeriodEndDate.getTime() - borrowPeriodStartDate.getTime()
-        const borrowPeriodDays = Math.max(0.01, borrowPeriodMs / (1000 * 60 * 60 * 24))
+        // (periodDays and periodEndDate are calculated once per period at the start of the loop)
 
         // Get historical borrow emission APY for this period (lending_borrow type)
         const periodBorrowBlndApyRate = getEmissionApyForDate(boundary.start, poolId, 'lending_borrow', assetAddress)
         const dailyBorrowBlndRate = periodBorrowBlndApyRate / 100 / 365
 
         // BLND on debt held at start of period (earn for full period)
-        let blndFromBorrow = debtAtStart * priceAtStart * dailyBorrowBlndRate * borrowPeriodDays
+        let blndFromBorrow = debtAtStart * priceAtStart * dailyBorrowBlndRate * periodDays
 
         // BLND on borrows during period (pro-rated from borrow date to period end)
         for (const action of periodBorrowActions) {
@@ -1122,7 +1120,7 @@ export async function GET(request: NextRequest) {
           const tokens = rawAmount / Math.pow(10, decimals)
           const actionDate = new Date(action.ledger_closed_at)
           const priceAtAction = getPriceAtDate(assetAddress, dateFormatter.format(actionDate))
-          const daysRemaining = Math.max(0, (borrowPeriodEndDate.getTime() - actionDate.getTime()) / (1000 * 60 * 60 * 24))
+          const daysRemaining = Math.max(0, (periodEndDate.getTime() - actionDate.getTime()) / (1000 * 60 * 60 * 24))
 
           if (action.action_type === 'borrow') {
             // New borrows earn BLND from borrow date to period end

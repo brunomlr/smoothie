@@ -73,8 +73,10 @@ export function WalletSelector({
   const handleWalletSelect = async (wallet: SupportedWallet) => {
     try {
       const address = await connectWallet(wallet.id)
-      // Skip if address already exists
-      if (isAddressAlreadyAdded(address)) {
+      // If address already exists, select the existing wallet
+      const existingWallet = findExistingWallet(address)
+      if (existingWallet) {
+        onSelectWallet(existingWallet.id)
         setShowConnectionModal(false)
         return
       }
@@ -99,8 +101,10 @@ export function WalletSelector({
   }
 
   const handleFollowAddress = (address: string) => {
-    // Skip if address already exists
-    if (isAddressAlreadyAdded(address)) {
+    // If address already exists, select the existing wallet
+    const existingWallet = findExistingWallet(address)
+    if (existingWallet) {
+      onSelectWallet(existingWallet.id)
       setShowFollowAddressModal(false)
       return
     }
@@ -157,6 +161,9 @@ export function WalletSelector({
 
   const isAddressAlreadyAdded = (address: string) =>
     wallets.some((w) => w.publicKey.toLowerCase() === address.toLowerCase())
+
+  const findExistingWallet = (address: string) =>
+    wallets.find((w) => w.publicKey.toLowerCase() === address.toLowerCase())
 
   // Format wallet address display - show "DEMO...WLLT" for demo wallets
   const formatWalletAddress = (wallet: WalletType, charCount?: number) => {
