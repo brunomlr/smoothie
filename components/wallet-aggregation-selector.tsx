@@ -104,7 +104,8 @@ export function WalletAggregationSelector({
         <Button
           variant="outline"
           size="sm"
-          className={`h-auto py-1 px-1.5 gap-1 ${selectedWalletIds.length > 1 ? "!border-primary !bg-primary/10" : ""}`}
+          className="h-auto py-1 px-1.5 gap-1"
+          style={selectedWalletIds.length > 1 ? { borderColor: "#ec4899", backgroundColor: "rgba(236, 72, 153, 0.1)" } : undefined}
           aria-label="Combine wallets"
         >
           {/* Stacked avatars */}
