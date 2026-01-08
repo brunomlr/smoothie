@@ -7,7 +7,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { eventsRepository } from '@/lib/db/events-repository'
 import { getAnalyticsUserIdFromRequest, captureServerEvent, hashWalletAddress } from '@/lib/analytics-server'
-import { resolveWalletAddress } from '@/lib/api'
 
 // Track when daily_rates was last refreshed (in-memory cache)
 let lastRatesRefresh: number = 0
@@ -45,9 +44,6 @@ export async function GET(request: NextRequest) {
         { status: 400 },
       )
     }
-
-    // Resolve demo wallet alias to real address
-    const resolvedUser = resolveWalletAddress(user)
 
     const assets = assetsParam.split(',').filter(a => a.trim())
 
@@ -91,7 +87,7 @@ export async function GET(request: NextRequest) {
       assets.map(async (asset) => {
         try {
           const { history, firstEventDate } = await eventsRepository.getBalanceHistoryFromEvents(
-            resolvedUser,
+            user,
             asset,
             days,
             timezone,

@@ -6,7 +6,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { eventsRepository } from '@/lib/db/events-repository'
 import { generateTransactionCSV, getExportFilename } from '@/lib/export/csv-generator'
-import { resolveWalletAddress } from '@/lib/api'
 
 export async function GET(request: NextRequest) {
   try {
@@ -30,11 +29,8 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Resolve demo wallet alias to real address
-    const resolvedUser = resolveWalletAddress(user)
-
     // Fetch all actions (use high limit for export, no pagination)
-    const actions = await eventsRepository.getUserActions(resolvedUser, {
+    const actions = await eventsRepository.getUserActions(user, {
       limit: 10000, // High limit for export
       offset: 0,
       actionTypes,

@@ -48,10 +48,3 @@ export {
   getTimezone,
   type ParsedParams,
 } from './query-validators'
-
-// Wallet address resolution (for demo wallet support)
-export {
-  resolveWalletAddress,
-  resolveWalletAddresses,
-  isDemoWalletParam,
-} from './resolve-wallet'

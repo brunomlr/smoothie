@@ -77,7 +77,8 @@ function initializeWallets(): { wallets: Wallet[]; activeId: string | null } {
     } else {
       // Add new wallet
       const isContract = addressParam.startsWith("C")
-      const walletName = isContract ? "Contract" : "Watch"
+      const shortAddr = `${addressParam.slice(0, 4)}...${addressParam.slice(-4)}`
+      const walletName = isContract ? `Contract ${shortAddr}` : `Watch ${shortAddr}`
 
       const newWallet: Wallet = {
         id: `wallet-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
@@ -172,13 +173,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     setActiveWalletId(newWallet.id)
   }, [])
 
-  const handleConnectDemoWallet = React.useCallback((alias: string) => {
-    // For demo wallets, we store the alias (e.g., "demo-1") instead of the real address
-    // The backend will resolve the alias to the real address
+  const handleConnectDemoWallet = React.useCallback((address: string) => {
     const demoWallet: Wallet = {
-      id: alias, // Use alias as ID for consistency
-      publicKey: alias, // Store alias instead of real address
-      name: 'Demo Wallet',
+      id: `demo-${Date.now()}`,
+      publicKey: address,
+      name: 'Demo Account',
       isActive: true,
       isDemoWallet: true,
     }

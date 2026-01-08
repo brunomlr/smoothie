@@ -1,13 +1,12 @@
 "use client"
 
-import * as React from "react"
 import dynamic from "next/dynamic"
 import Image from "next/image"
 import { WalletSelector } from "@/components/wallet-selector"
 import { Footer } from "@/components/footer"
 import { Button } from "@/components/ui/button"
-import { fetchDemoWallets, getRandomDemoWalletAliasSync, isDemoWalletEnabledSync } from "@/lib/config/demo-wallet"
-import { useAnalytics } from "@/hooks/use-analytics"
+import { isDemoWalletEnabled, getRandomDemoWallet } from "@/lib/config/demo-wallet"
+import { useAnalytics, hashWalletAddress } from "@/hooks/use-analytics"
 import type { Wallet } from "@/types/wallet"
 
 // Dynamically import Dither to avoid SSR issues with three.js
@@ -33,21 +32,16 @@ export function LandingPage({
   isHydrated = true,
 }: LandingPageProps) {
   const { capture } = useAnalytics()
-  const [showDemoButton, setShowDemoButton] = React.useState(false)
-
-  // Fetch demo wallet data on mount
-  React.useEffect(() => {
-    fetchDemoWallets().then(() => {
-      setShowDemoButton(isDemoWalletEnabledSync())
-    })
-  }, [])
+  const showDemoButton = isDemoWalletEnabled()
 
   const handleDemoClick = () => {
-    const demoAlias = getRandomDemoWalletAliasSync()
-    if (demoAlias) {
+    const demoAddress = getRandomDemoWallet()
+    if (demoAddress) {
       capture('demo_wallet_clicked')
-      capture('demo_wallet_connected', { demo_alias: demoAlias })
-      onConnectDemoWallet(demoAlias)
+      hashWalletAddress(demoAddress).then(hash => {
+        capture('demo_wallet_connected', { address_hash: hash })
+      })
+      onConnectDemoWallet(demoAddress)
     }
   }
   return (
@@ -118,7 +112,7 @@ export function LandingPage({
                   onClick={handleDemoClick}
                   className="text-white/70 hover:text-white hover:bg-white/10"
                 >
-                  Try Demo Wallet
+                  Try Demo Account
                 </Button>
               )}
             </div>

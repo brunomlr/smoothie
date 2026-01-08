@@ -12,7 +12,6 @@ import {
   optionalInt,
   parseList,
   CACHE_CONFIGS,
-  resolveWalletAddress,
 } from '@/lib/api'
 import { cacheKey, todayDate, CACHE_TTL } from '@/lib/redis'
 
@@ -57,7 +56,7 @@ export const GET = createApiHandler<UserActionsResponse>({
   },
 
   async handler(_request: NextRequest, { searchParams }) {
-    const user = resolveWalletAddress(requireString(searchParams, 'user'))
+    const user = requireString(searchParams, 'user')
     const limit = optionalInt(searchParams, 'limit', 50, { min: 1, max: 1000 })
     const offset = optionalInt(searchParams, 'offset', 0, { min: 0 })
     const poolId = optionalString(searchParams, 'pool')

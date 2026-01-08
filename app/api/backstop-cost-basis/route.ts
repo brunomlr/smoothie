@@ -10,7 +10,6 @@ import {
   requireString,
   optionalString,
   CACHE_CONFIGS,
-  resolveWalletAddress,
 } from '@/lib/api'
 import { cacheKey, CACHE_TTL } from '@/lib/redis'
 
@@ -45,7 +44,7 @@ export const GET = createApiHandler<BackstopCostBasisResponse>({
   },
 
   async handler(_request: NextRequest, { searchParams }) {
-    const user = resolveWalletAddress(requireString(searchParams, 'user'))
+    const user = requireString(searchParams, 'user')
     const poolId = optionalString(searchParams, 'pool')
 
     // If pool is specified, get cost basis for that pool only

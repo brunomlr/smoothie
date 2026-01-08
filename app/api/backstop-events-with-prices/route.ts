@@ -10,8 +10,6 @@ import {
   requireString,
   optionalString,
   CACHE_CONFIGS,
-  resolveWalletAddress,
-  resolveWalletAddresses,
 } from '@/lib/api'
 import { cacheKey, CACHE_TTL } from '@/lib/redis'
 
@@ -46,40 +44,19 @@ export const GET = createApiHandler<BackstopEventsWithPricesResponse>({
   },
 
   async handler(_request: NextRequest, { searchParams }) {
-    // Support both single address and multiple addresses
-    const userAddress = searchParams.get('userAddress')
-    const userAddressesParam = searchParams.get('userAddresses')
-
-    let userAddresses: string[] = []
-    if (userAddressesParam) {
-      userAddresses = userAddressesParam.split(',').map(a => a.trim()).filter(a => a.length > 0)
-    } else if (userAddress) {
-      userAddresses = [userAddress]
-    }
-
-    if (userAddresses.length === 0) {
-      throw new Error('Missing required parameter: userAddress or userAddresses')
-    }
-
-    // Resolve demo wallet aliases to real addresses
-    userAddresses = userAddresses.map(addr => resolveWalletAddress(addr))
-
+    const userAddress = requireString(searchParams, 'userAddress')
     const sdkLpPrice = parseFloat(searchParams.get('sdkLpPrice') || '0') || 0
     const poolAddress = optionalString(searchParams, 'poolAddress')
 
-    // Fetch backstop events for all addresses and combine
-    const allEventsPromises = userAddresses.map(addr =>
-      eventsRepository.getBackstopEventsWithPrices(addr, poolAddress, sdkLpPrice)
+    const { deposits, withdrawals } = await eventsRepository.getBackstopEventsWithPrices(
+      userAddress,
+      poolAddress,
+      sdkLpPrice
     )
-    const allEventsArrays = await Promise.all(allEventsPromises)
-
-    // Combine deposits and withdrawals from all wallets
-    const combinedDeposits = allEventsArrays.flatMap(e => e.deposits)
-    const combinedWithdrawals = allEventsArrays.flatMap(e => e.withdrawals)
 
     // Map to response format
     return {
-      deposits: combinedDeposits.map(d => ({
+      deposits: deposits.map(d => ({
         date: d.date,
         lpTokens: d.lpTokens,
         priceAtEvent: d.priceAtDeposit,
@@ -87,7 +64,7 @@ export const GET = createApiHandler<BackstopEventsWithPricesResponse>({
         poolAddress: d.poolAddress,
         priceSource: d.priceSource,
       })),
-      withdrawals: combinedWithdrawals.map(w => ({
+      withdrawals: withdrawals.map(w => ({
         date: w.date,
         lpTokens: w.lpTokens,
         priceAtEvent: w.priceAtWithdrawal,

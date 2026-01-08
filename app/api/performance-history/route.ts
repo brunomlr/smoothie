@@ -7,7 +7,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { eventsRepository } from '@/lib/db/events-repository'
 import { LP_TOKEN_ADDRESS } from '@/lib/constants'
 import { getAllDatesBetween, getToday } from '@/lib/date-utils'
-import { resolveWalletAddress } from '@/lib/api'
 
 export interface DailyPnlDataPoint {
   date: string
@@ -65,9 +64,6 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  // Resolve demo wallet alias to real address
-  const resolvedUserAddress = resolveWalletAddress(userAddress)
-
   try {
     // Parse SDK prices
     let sdkPrices: Record<string, number> = {}
@@ -80,7 +76,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Step 1: Get all assets the user has interacted with
-    const userActions = await eventsRepository.getUserActions(resolvedUserAddress, {
+    const userActions = await eventsRepository.getUserActions(userAddress, {
       actionTypes: ['supply', 'supply_collateral', 'withdraw', 'withdraw_collateral'],
       limit: 1000,
     })
@@ -111,7 +107,7 @@ export async function GET(request: NextRequest) {
     // Fetch all asset histories in parallel for better performance
     const balanceHistoryPromises = Array.from(uniqueAssets).map(async (assetAddress) => {
       const { history } = await eventsRepository.getBalanceHistoryFromEvents(
-        resolvedUserAddress,
+        userAddress,
         assetAddress,
         days,
         timezone
@@ -138,7 +134,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Step 3: Get backstop balance history
-    const backstopCostBases = await eventsRepository.getAllBackstopCostBases(resolvedUserAddress)
+    const backstopCostBases = await eventsRepository.getAllBackstopCostBases(userAddress)
     const backstopPoolAddresses = backstopCostBases.map(cb => cb.pool_address)
 
     let backstopHistory: Array<{
@@ -149,7 +145,7 @@ export async function GET(request: NextRequest) {
 
     if (backstopPoolAddresses.length > 0) {
       backstopHistory = await eventsRepository.getBackstopUserBalanceHistoryMultiplePools(
-        resolvedUserAddress,
+        userAddress,
         backstopPoolAddresses,
         days,
         timezone
@@ -191,19 +187,19 @@ export async function GET(request: NextRequest) {
 
     // Step 5: Get deposit/withdrawal events for cost basis calculation
     const depositEventsMap = await eventsRepository.getDepositEventsWithPricesBatch(
-      resolvedUserAddress,
+      userAddress,
       Array.from(poolAssetPairs.values()),
       sdkPrices
     )
 
     // Get backstop events for cost basis
     const backstopEvents = backstopPoolAddresses.length > 0
-      ? await eventsRepository.getBackstopEventsWithPrices(resolvedUserAddress, undefined, lpTokenPrice)
+      ? await eventsRepository.getBackstopEventsWithPrices(userAddress, undefined, lpTokenPrice)
       : { deposits: [], withdrawals: [] }
 
     // Step 6: Get claim events for realized P&L
     const sdkPricesMap = new Map(Object.entries(sdkPrices))
-    const realizedYieldData = await eventsRepository.getRealizedYieldData(resolvedUserAddress, sdkPricesMap)
+    const realizedYieldData = await eventsRepository.getRealizedYieldData(userAddress, sdkPricesMap)
 
     // Step 7: Build daily P&L time series
     const allDates = earliestBalanceDate ? getAllDatesBetween(earliestBalanceDate, today) : []

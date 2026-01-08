@@ -1,6 +1,6 @@
 "use client"
 
-import { useQuery, useQueries } from "@tanstack/react-query"
+import { useQuery } from "@tanstack/react-query"
 import { useMemo } from "react"
 import {
   calculateHistoricalYieldBreakdown,
@@ -10,11 +10,10 @@ import { fetchWithTimeout } from "@/lib/fetch-utils"
 import type { CostBasisHistoricalResponse } from "@/app/api/cost-basis-historical/route"
 
 interface BlendPosition {
-  id: string
-  poolId: string  // Pool contract address
+  id: string  // Format: poolId-assetAddress
   supplyAmount: number
   price?: { usdPrice?: number } | null
-  assetId?: string  // Asset contract address
+  assetId?: string
   rawBalance?: number  // Raw token balance
 }
 
@@ -56,6 +55,23 @@ export interface TotalYieldBreakdown {
   error: Error | null
 }
 
+async function fetchHistoricalCostBasis(
+  userAddress: string,
+  sdkPrices: Record<string, number>
+): Promise<CostBasisHistoricalResponse> {
+  const params = new URLSearchParams({
+    userAddress,
+    sdkPrices: JSON.stringify(sdkPrices),
+  })
+
+  const response = await fetchWithTimeout(`/api/cost-basis-historical?${params}`)
+  if (!response.ok) {
+    throw new Error('Failed to fetch historical cost basis')
+  }
+
+  return response.json()
+}
+
 interface BackstopEventWithPrice {
   date: string
   lpTokens: number
@@ -66,65 +82,25 @@ interface BackstopEventWithPrice {
 }
 
 async function fetchBackstopHistoricalCostBasis(
-  userAddresses: string[],
+  userAddress: string,
   sdkLpPrice: number
 ): Promise<{
   deposits: BackstopEventWithPrice[]
   withdrawals: BackstopEventWithPrice[]
 }> {
-  const params = new URLSearchParams({
-    userAddresses: userAddresses.join(','),
-    sdkLpPrice: sdkLpPrice.toString(),
-  })
-  const response = await fetchWithTimeout(`/api/backstop-events-with-prices?${params}`)
+  const response = await fetchWithTimeout(`/api/backstop-events-with-prices?userAddress=${userAddress}&sdkLpPrice=${sdkLpPrice}`)
   if (!response.ok) {
     return { deposits: [], withdrawals: [] }
   }
   return response.json()
 }
 
-// Fetch cost basis for a single wallet
-async function fetchCostBasisForWallet(
-  walletAddress: string,
-  sdkPrices: Record<string, number>
-): Promise<CostBasisHistoricalResponse> {
-  const params = new URLSearchParams({
-    userAddresses: walletAddress,
-    sdkPrices: JSON.stringify(sdkPrices),
-  })
-  const response = await fetchWithTimeout(`/api/cost-basis-historical?${params}`)
-  if (!response.ok) {
-    throw new Error('Failed to fetch cost basis')
-  }
-  return response.json()
-}
-
-/**
- * Per-wallet supply amounts for accurate yield calculation.
- * Structure: compositeKey -> walletAddress -> { tokens, usdPrice }
- */
-export type PerWalletSupplyAmounts = Map<string, Map<string, { tokens: number; usdPrice: number }>>
-
 export function useHistoricalYieldBreakdown(
-  userAddresses: string | string[] | null | undefined,
+  userAddress: string | null | undefined,
   blendPositions: BlendPosition[] | null | undefined,
   backstopPositions: BackstopPosition[] | null | undefined,
   lpTokenPrice: number | null | undefined,
-  // Per-wallet supply amounts for multi-wallet yield calculation
-  perWalletSupplyAmounts?: PerWalletSupplyAmounts,
 ): TotalYieldBreakdown {
-  // Normalize addresses to array
-  const addressArray = useMemo(() => {
-    if (!userAddresses) return []
-    return Array.isArray(userAddresses) ? userAddresses : [userAddresses]
-  }, [userAddresses])
-
-  // CRITICAL FIX: Track how many positions we have
-  // This helps detect if data is partially loaded (only some wallets)
-  const positionCount = blendPositions?.length ?? 0
-
-  const addressesKey = addressArray.slice().sort().join(',')
-
   // Build SDK prices map from blend positions
   const sdkPrices = useMemo(() => {
     const prices: Record<string, number> = {}
@@ -140,84 +116,44 @@ export function useHistoricalYieldBreakdown(
   }, [blendPositions])
 
   // Build current balances map from blend positions (token amounts, not USD)
-  // For multi-wallet: SUM tokens from all wallets for the same pool-asset
-  // Key format MUST match API's compositeKey: "poolId-assetAddress"
   const currentBalances = useMemo(() => {
     const balances = new Map<string, { tokens: number; usdPrice: number }>()
     if (!blendPositions) return balances
 
     blendPositions.forEach(pos => {
-      const poolId = pos.poolId
-      if (pos.supplyAmount > 0 && pos.assetId && poolId) {
+      if (pos.supplyAmount > 0 && pos.assetId) {
         const usdPrice = pos.price?.usdPrice || 0
-        // Construct key to match API's compositeKey format: "poolId-assetAddress"
-        const compositeKey = `${poolId}-${pos.assetId}`
-        const existing = balances.get(compositeKey)
-        if (existing) {
-          // SUM tokens from multiple wallets for the same pool-asset
-          balances.set(compositeKey, {
-            tokens: existing.tokens + pos.supplyAmount,
-            usdPrice, // price should be same across wallets
-          })
-        } else {
-          balances.set(compositeKey, { tokens: pos.supplyAmount, usdPrice })
-        }
+        // supplyAmount is already in tokens (from SDK), NOT USD
+        // Use it directly as token balance
+        balances.set(pos.id, { tokens: pos.supplyAmount, usdPrice })
       }
     })
 
     return balances
-  }, [blendPositions, addressArray.length])
+  }, [blendPositions])
 
-  // MULTI-WALLET FIX: Fetch cost basis PER WALLET separately
-  // This is critical because weighted average prices don't commute with aggregation.
-  // Combined avg price != sum of per-wallet avg prices weighted by position
-  // So we must calculate yield per wallet, then sum.
-  const isMultiWallet = addressArray.length > 1 && perWalletSupplyAmounts && perWalletSupplyAmounts.size > 0
-
-  // Per-wallet queries (only used for multi-wallet)
-  const perWalletCostBasisQueries = useQueries({
-    queries: isMultiWallet ? addressArray.map(walletAddress => ({
-      queryKey: ['historical-cost-basis-wallet', walletAddress, Object.keys(sdkPrices).sort().join(',')],
-      queryFn: () => fetchCostBasisForWallet(walletAddress, sdkPrices),
-      enabled: Object.keys(sdkPrices).length > 0,
-      staleTime: 5 * 60 * 1000,
-      gcTime: 15 * 60 * 1000,
-    })) : [],
-  })
-
-  // Single query for single wallet (backward compatible - don't break existing behavior)
-  const singleWalletCostBasisQuery = useQuery({
-    queryKey: ['historical-cost-basis', addressesKey, Object.keys(sdkPrices).sort().join(','), positionCount],
-    queryFn: async () => {
-      const params = new URLSearchParams({
-        userAddresses: addressArray.join(','),
-        sdkPrices: JSON.stringify(sdkPrices),
-      })
-      const response = await fetchWithTimeout(`/api/cost-basis-historical?${params}`)
-      if (!response.ok) {
-        throw new Error('Failed to fetch historical cost basis')
-      }
-      return response.json() as Promise<CostBasisHistoricalResponse>
-    },
-    // Only enable for single wallet OR when perWalletSupplyAmounts not provided
-    enabled: addressArray.length > 0 && Object.keys(sdkPrices).length > 0 && !isMultiWallet,
-    staleTime: 5 * 60 * 1000,
-    gcTime: 15 * 60 * 1000,
+  // Fetch historical cost basis data
+  const costBasisQuery = useQuery({
+    queryKey: ['historical-cost-basis', userAddress, Object.keys(sdkPrices).sort().join(',')],
+    queryFn: () => fetchHistoricalCostBasis(userAddress!, sdkPrices),
+    enabled: !!userAddress && Object.keys(sdkPrices).length > 0,
+    staleTime: 5 * 60 * 1000, // 5 minutes - historical cost basis changes slowly
+    gcTime: 15 * 60 * 1000, // 15 minutes
   })
 
   // Fetch backstop events with historical LP prices
   const hasBackstopPositions = Boolean(backstopPositions && backstopPositions.length > 0)
   const backstopEventsQuery = useQuery({
-    queryKey: ['backstop-events-with-prices', addressesKey, lpTokenPrice],
-    queryFn: () => fetchBackstopHistoricalCostBasis(addressArray, lpTokenPrice || 0),
-    enabled: addressArray.length > 0 && Boolean(lpTokenPrice) && (lpTokenPrice ?? 0) > 0 && hasBackstopPositions,
+    queryKey: ['backstop-events-with-prices', userAddress, lpTokenPrice],
+    queryFn: () => fetchBackstopHistoricalCostBasis(userAddress!, lpTokenPrice || 0),
+    enabled: Boolean(userAddress) && Boolean(lpTokenPrice) && (lpTokenPrice ?? 0) > 0 && hasBackstopPositions,
     staleTime: 5 * 60 * 1000, // 5 minutes - historical events change slowly
     gcTime: 15 * 60 * 1000, // 15 minutes
   })
 
   // Check if prerequisites are ready for cost basis query
-  const isCostBasisQueryEnabled = addressArray.length > 0 && Object.keys(sdkPrices).length > 0
-  const isBackstopQueryEnabled = addressArray.length > 0 && Boolean(lpTokenPrice) && (lpTokenPrice ?? 0) > 0 && hasBackstopPositions
+  const isCostBasisQueryEnabled = !!userAddress && Object.keys(sdkPrices).length > 0
+  const isBackstopQueryEnabled = Boolean(userAddress) && Boolean(lpTokenPrice) && (lpTokenPrice ?? 0) > 0 && hasBackstopPositions
 
   // Calculate full yield breakdowns using SDK current balances + historical cost basis
   const yieldBreakdowns = useMemo((): TotalYieldBreakdown => {
@@ -229,122 +165,18 @@ export function useHistoricalYieldBreakdown(
     let totalEarnedUsd = 0
     let totalCurrentValueUsd = 0
 
-    if (isMultiWallet) {
-      // MULTI-WALLET: Calculate yield per wallet, then sum
-      // This is the correct approach because weighted averages don't commute with aggregation
-
-      // Build per-wallet cost basis data map
-      const perWalletCostBasis = new Map<string, CostBasisHistoricalResponse>()
-      addressArray.forEach((walletAddress, idx) => {
-        const queryResult = perWalletCostBasisQueries[idx]
-        if (queryResult?.data) {
-          perWalletCostBasis.set(walletAddress, queryResult.data)
-        }
-      })
-
-      // Get all composite keys from perWalletSupplyAmounts
-      const allCompositeKeys = new Set<string>()
-      perWalletSupplyAmounts!.forEach((_, compositeKey) => {
-        allCompositeKeys.add(compositeKey)
-      })
-
-      // For each pool-asset, calculate yield per wallet and sum
-      for (const compositeKey of allCompositeKeys) {
-        const walletAmounts = perWalletSupplyAmounts!.get(compositeKey)
-        if (!walletAmounts || walletAmounts.size === 0) continue
-
-        let assetCostBasis = 0
-        let assetProtocolYield = 0
-        let assetPriceChange = 0
-        let assetTotalEarned = 0
-        let assetCurrentValue = 0
-        let assetAddress = ''
-        let poolId = ''
-        let totalNetDeposited = 0
-        let totalWeightedAvgPrice = 0
-        let totalProtocolYieldTokens = 0
-
-        // Calculate for each wallet that has this position
-        for (const [walletAddress, { tokens: walletCurrentTokens, usdPrice }] of walletAmounts) {
-          if (walletCurrentTokens <= 0) continue
-
-          // Get this wallet's cost basis for this asset
-          const walletCostBasis = perWalletCostBasis.get(walletAddress)
-          const walletAssetData = walletCostBasis?.byAsset[compositeKey]
-
-          if (!walletAssetData) continue
-
-          assetAddress = walletAssetData.assetAddress
-          poolId = walletAssetData.poolId
-
-          // Calculate yield for THIS wallet using ITS current tokens and ITS cost basis
-          const breakdown = calculateHistoricalYieldBreakdown(
-            walletCurrentTokens,
-            usdPrice,
-            [{
-              date: '',
-              tokens: walletAssetData.netDepositedTokens,
-              priceAtDeposit: walletAssetData.weightedAvgDepositPrice,
-              usdValue: walletAssetData.costBasisHistorical
-            }],
-            []
-          )
-
-          // Sum this wallet's contribution
-          assetCostBasis += breakdown.costBasisHistorical
-          assetProtocolYield += breakdown.protocolYieldUsd
-          assetPriceChange += breakdown.priceChangeUsd
-          assetTotalEarned += breakdown.totalEarnedUsd
-          assetCurrentValue += breakdown.currentValueUsd
-          totalNetDeposited += breakdown.netDepositedTokens
-          totalProtocolYieldTokens += breakdown.protocolYieldTokens
-          totalWeightedAvgPrice += walletAssetData.weightedAvgDepositPrice * walletAssetData.costBasisHistorical
-        }
-
-        // Calculate weighted average deposit price for the combined asset
-        const combinedWeightedAvgPrice = assetCostBasis > 0
-          ? totalWeightedAvgPrice / assetCostBasis
-          : 0
-
-        if (assetAddress && poolId) {
-          const assetBreakdown: AssetYieldBreakdown = {
-            costBasisHistorical: assetCostBasis,
-            weightedAvgDepositPrice: combinedWeightedAvgPrice,
-            netDepositedTokens: totalNetDeposited,
-            protocolYieldTokens: totalProtocolYieldTokens,
-            protocolYieldUsd: assetProtocolYield,
-            priceChangeUsd: assetPriceChange,
-            priceChangePercent: assetCostBasis > 0 ? (assetPriceChange / assetCostBasis) * 100 : 0,
-            currentValueUsd: assetCurrentValue,
-            totalEarnedUsd: assetTotalEarned,
-            totalEarnedPercent: assetCostBasis > 0 ? (assetTotalEarned / assetCostBasis) * 100 : 0,
-            assetAddress,
-            poolId,
-            compositeKey,
-          }
-
-          byAsset.set(compositeKey, assetBreakdown)
-
-          totalCostBasisHistorical += assetCostBasis
-          totalProtocolYieldUsd += assetProtocolYield
-          totalPriceChangeUsd += assetPriceChange
-          totalEarnedUsd += assetTotalEarned
-          totalCurrentValueUsd += assetCurrentValue
-        }
-      }
-    } else if (singleWalletCostBasisQuery.data?.byAsset) {
-      // SINGLE WALLET: Use existing logic (don't break what works)
-      for (const [compositeKey, historicalData] of Object.entries(singleWalletCostBasisQuery.data.byAsset)) {
+    if (costBasisQuery.data?.byAsset) {
+      for (const [compositeKey, historicalData] of Object.entries(costBasisQuery.data.byAsset)) {
         const currentBalance = currentBalances.get(compositeKey)
 
-        // Skip if no current position - nothing to calculate yield for
         if (!currentBalance) {
+          // No current position, skip
           continue
         }
 
-        const currentTokens = currentBalance.tokens
-        const currentPrice = currentBalance.usdPrice
+        const { tokens: currentTokens, usdPrice: currentPrice } = currentBalance
 
+        // Calculate full breakdown using historical cost basis + current balance/price
         const breakdown = calculateHistoricalYieldBreakdown(
           currentTokens,
           currentPrice,
@@ -374,30 +206,14 @@ export function useHistoricalYieldBreakdown(
     if (backstopPositions && backstopPositions.length > 0 && lpTokenPrice && lpTokenPrice > 0) {
       const backstopEvents = backstopEventsQuery.data
 
-      // Pre-aggregate backstop positions by poolId (for multi-wallet support)
-      // This ensures we sum LP tokens from all wallets for the same pool
-      const aggregatedBackstopByPool = new Map<string, { lpTokens: number; q4wLpTokens: number; costBasisLp: number }>()
+      // Process each pool's backstop position separately
       for (const bp of backstopPositions) {
-        const existing = aggregatedBackstopByPool.get(bp.poolId)
-        if (existing) {
-          existing.lpTokens += bp.lpTokens
-          existing.q4wLpTokens += bp.q4wLpTokens || 0
-          existing.costBasisLp += bp.costBasisLp || 0
-        } else {
-          aggregatedBackstopByPool.set(bp.poolId, {
-            lpTokens: bp.lpTokens,
-            q4wLpTokens: bp.q4wLpTokens || 0,
-            costBasisLp: bp.costBasisLp || 0,
-          })
-        }
-      }
-
-      // Process each aggregated pool's backstop position
-      for (const [poolId, aggregatedBp] of aggregatedBackstopByPool) {
         // Include Q4W (queued withdrawal) LP tokens - they're still the user's tokens
         // and still earning yield, just locked for 21 days
-        const totalLpTokens = aggregatedBp.lpTokens + aggregatedBp.q4wLpTokens
+        const totalLpTokens = bp.lpTokens + (bp.q4wLpTokens || 0)
         if (totalLpTokens <= 0) continue
+
+        const poolId = bp.poolId
 
         // Filter events for this specific pool
         const poolDeposits = backstopEvents?.deposits.filter(d => d.poolAddress === poolId) || []
@@ -434,7 +250,7 @@ export function useHistoricalYieldBreakdown(
         } else {
           // Fallback: use cost basis from position (no historical prices for this pool)
           // costBasisLp represents the net deposited LP tokens (deposits - withdrawals in LP terms)
-          const costBasisLp = aggregatedBp.costBasisLp
+          const costBasisLp = bp.costBasisLp || 0
           const netDepositedLpTokens = costBasisLp > 0 ? costBasisLp : totalLpTokens
 
           // Since we don't have historical LP prices, we estimate the deposit price
@@ -479,19 +295,7 @@ export function useHistoricalYieldBreakdown(
     // isLoading is true when:
     // 1. Cost basis query is enabled but loading or has no data yet
     // 2. Backstop query is enabled but loading or has no data yet
-    let isCostBasisLoading: boolean
-    let costBasisError: Error | null = null
-
-    if (isMultiWallet) {
-      // Multi-wallet: check all per-wallet queries
-      isCostBasisLoading = perWalletCostBasisQueries.some(q => q.isLoading || q.isPending)
-      costBasisError = perWalletCostBasisQueries.find(q => q.error)?.error as Error | null
-    } else {
-      // Single wallet: check single query
-      isCostBasisLoading = isCostBasisQueryEnabled && (singleWalletCostBasisQuery.isLoading || (!singleWalletCostBasisQuery.data && singleWalletCostBasisQuery.isPending))
-      costBasisError = singleWalletCostBasisQuery.error as Error | null
-    }
-
+    const isCostBasisLoading = isCostBasisQueryEnabled && (costBasisQuery.isLoading || (!costBasisQuery.data && costBasisQuery.isPending))
     const isBackstopLoading = isBackstopQueryEnabled && (backstopEventsQuery.isLoading || (!backstopEventsQuery.data && backstopEventsQuery.isPending))
 
     return {
@@ -503,9 +307,9 @@ export function useHistoricalYieldBreakdown(
       byAsset,
       byBackstop,
       isLoading: isCostBasisLoading || isBackstopLoading,
-      error: costBasisError,
+      error: costBasisQuery.error as Error | null,
     }
-  }, [isMultiWallet, perWalletCostBasisQueries, singleWalletCostBasisQuery.data, singleWalletCostBasisQuery.isLoading, singleWalletCostBasisQuery.error, singleWalletCostBasisQuery.isPending, backstopEventsQuery.data, backstopEventsQuery.isLoading, backstopEventsQuery.isPending, currentBalances, backstopPositions, lpTokenPrice, isCostBasisQueryEnabled, isBackstopQueryEnabled, sdkPrices, addressArray, perWalletSupplyAmounts])
+  }, [costBasisQuery.data, costBasisQuery.isLoading, costBasisQuery.error, costBasisQuery.isPending, backstopEventsQuery.data, backstopEventsQuery.isLoading, backstopEventsQuery.isPending, currentBalances, backstopPositions, lpTokenPrice, isCostBasisQueryEnabled, isBackstopQueryEnabled])
 
   return yieldBreakdowns
 }
