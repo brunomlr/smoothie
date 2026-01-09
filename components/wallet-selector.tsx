@@ -315,7 +315,7 @@ export function WalletSelector({
                         <div className="flex-1 min-w-0">
                           {wallet.name && (
                             <p className="font-medium text-sm truncate">
-                              {wallet.name}
+                              {watched ? "Watch" : wallet.name}
                             </p>
                           )}
                           <p className="text-xs text-muted-foreground font-mono truncate">
