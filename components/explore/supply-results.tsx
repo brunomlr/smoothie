@@ -1,11 +1,16 @@
 "use client"
 
-import { TrendingUp, Flame, ArrowUpRight, ArrowDownLeft } from "lucide-react"
+import { useState } from "react"
+import { TrendingUp, Flame, ArrowUpRight, ArrowDownLeft, ChevronDown, ChevronUp } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { TokenLogo } from "@/components/token-logo"
+import { ApySparkline } from "@/components/apy-sparkline"
+import { BlndApySparkline } from "@/components/blnd-apy-sparkline"
+import { TokenPriceSparkline } from "@/components/token-price-sparkline"
+import { DollarSign } from "lucide-react"
 import type { SupplyExploreItem, SortBy } from "@/types/explore"
 
 interface SupplyResultsProps {
@@ -75,107 +80,180 @@ function sortItems(items: SupplyExploreItem[], sortBy: SortBy): SupplyExploreIte
   })
 }
 
+function SupplyRowCharts({ item }: { item: SupplyExploreItem }) {
+  return (
+    <div className="border-t border-border/30 bg-muted/10 px-4 py-4">
+      <div className="space-y-3">
+        {/* 6 month Supply APY */}
+        <div className="bg-background/50 rounded-lg p-3 border border-border/30">
+          <div className="flex items-center gap-1.5 mb-2">
+            <TrendingUp className="h-3 w-3 text-emerald-500" />
+            <span className="text-xs font-medium text-muted-foreground">Supply APY</span>
+          </div>
+          <ApySparkline
+            poolId={item.poolId}
+            assetAddress={item.assetAddress}
+            currentApy={item.supplyApy ?? undefined}
+            className="h-12 w-full"
+          />
+        </div>
+
+        {/* 30 days BLND APY - only show if has BLND emissions */}
+        {item.blndApy !== null && item.blndApy > 0.005 && (
+          <div className="bg-background/50 rounded-lg p-3 border border-border/30">
+            <div className="flex items-center gap-1.5 mb-2">
+              <Flame className="h-3 w-3 text-purple-500" />
+              <span className="text-xs font-medium text-muted-foreground">BLND Emissions</span>
+            </div>
+            <BlndApySparkline
+              poolId={item.poolId}
+              type="lending_supply"
+              assetAddress={item.assetAddress}
+              currentApy={item.blndApy ?? undefined}
+              className="h-12 w-full"
+            />
+          </div>
+        )}
+
+        {/* 6 month Token Price */}
+        <div className="bg-background/50 rounded-lg p-3 border border-border/30">
+          <div className="flex items-center gap-1.5 mb-2">
+            <DollarSign className="h-3 w-3 text-blue-500" />
+            <span className="text-xs font-medium text-muted-foreground">{item.tokenSymbol} Price</span>
+          </div>
+          <TokenPriceSparkline
+            tokenAddress={item.assetAddress}
+            tokenSymbol={item.tokenSymbol}
+            className="h-12 w-full"
+          />
+        </div>
+
+        {/* Link to Blend */}
+        <a
+          href={`https://mainnet.blend.capital/supply/?poolId=${item.poolId}&assetId=${item.assetAddress}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors"
+        >
+          Supply on Blend Capital
+          <ArrowUpRight className="h-3 w-3" />
+        </a>
+      </div>
+    </div>
+  )
+}
+
 function SupplyRow({ item, sortBy }: { item: SupplyExploreItem; sortBy: SortBy }) {
-  const blendUrl = `https://mainnet.blend.capital/supply/?poolId=${item.poolId}&assetId=${item.assetAddress}`
+  const [isExpanded, setIsExpanded] = useState(false)
   const logoUrl = resolveAssetLogo(item.tokenSymbol)
 
   return (
-    <a
-      href={blendUrl}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="flex items-center justify-between py-3 px-4 hover:bg-muted/50 transition-colors border-b border-border/50 last:border-b-0"
-    >
-      {/* Left side: Token info */}
-      <div className="flex items-center gap-3 min-w-0 flex-1">
-        <TokenLogo
-          src={logoUrl}
-          symbol={item.tokenSymbol}
-          size={36}
-        />
-        <div className="min-w-0 flex-1">
-          <p className="font-medium truncate">{item.tokenSymbol}</p>
-          <p className="text-sm text-muted-foreground truncate">
-            {item.poolName}
-          </p>
-          {(item.totalSupplied !== null || item.totalBorrowed !== null) && (
-            <p className="text-xs text-muted-foreground flex items-center gap-1">
-              {item.totalSupplied !== null && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span
-                      className="inline-flex items-center gap-0.5"
-                      onClick={(e) => e.preventDefault()}
-                      onTouchStart={(e) => e.stopPropagation()}
-                    >
-                      <ArrowUpRight className="h-3 w-3 text-green-500" />
-                      {formatUsdCompact(item.totalSupplied)}
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <div className="text-xs">
-                      <p className="font-medium">Supplied</p>
-                      <p>{formatUsdFull(item.totalSupplied)}</p>
-                      <p className="text-muted-foreground">{formatTokens(item.totalSuppliedTokens)} {item.tokenSymbol}</p>
-                    </div>
-                  </TooltipContent>
-                </Tooltip>
-              )}
-              {item.totalSupplied !== null && item.totalBorrowed !== null && item.totalBorrowed > 0 && " · "}
-              {item.totalBorrowed !== null && item.totalBorrowed > 0 && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span
-                      className="inline-flex items-center gap-0.5"
-                      onClick={(e) => e.preventDefault()}
-                      onTouchStart={(e) => e.stopPropagation()}
-                    >
-                      <ArrowDownLeft className="h-3 w-3 text-orange-500" />
-                      {formatUsdCompact(item.totalBorrowed)}
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <div className="text-xs">
-                      <p className="font-medium">Borrowed</p>
-                      <p>{formatUsdFull(item.totalBorrowed)}</p>
-                      <p className="text-muted-foreground">{formatTokens(item.totalBorrowedTokens)} {item.tokenSymbol}</p>
-                    </div>
-                  </TooltipContent>
-                </Tooltip>
-              )}
+    <div className="border-b border-border/50 last:border-b-0">
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="w-full flex items-center justify-between py-3 px-4 hover:bg-muted/50 transition-colors"
+      >
+        {/* Left side: Token info */}
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <TokenLogo
+            src={logoUrl}
+            symbol={item.tokenSymbol}
+            size={36}
+          />
+          <div className="min-w-0 flex-1 text-left">
+            <p className="font-medium truncate">{item.tokenSymbol}</p>
+            <p className="text-sm text-muted-foreground truncate">
+              {item.poolName}
             </p>
+            {(item.totalSupplied !== null || item.totalBorrowed !== null) && (
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                {item.totalSupplied !== null && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span
+                        className="inline-flex items-center gap-0.5"
+                        onClick={(e) => e.stopPropagation()}
+                        onTouchStart={(e) => e.stopPropagation()}
+                      >
+                        <ArrowUpRight className="h-3 w-3 text-green-500" />
+                        {formatUsdCompact(item.totalSupplied)}
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <div className="text-xs">
+                        <p className="font-medium">Supplied</p>
+                        <p>{formatUsdFull(item.totalSupplied)}</p>
+                        <p className="text-muted-foreground">{formatTokens(item.totalSuppliedTokens)} {item.tokenSymbol}</p>
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
+                )}
+                {item.totalSupplied !== null && item.totalBorrowed !== null && item.totalBorrowed > 0 && " · "}
+                {item.totalBorrowed !== null && item.totalBorrowed > 0 && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span
+                        className="inline-flex items-center gap-0.5"
+                        onClick={(e) => e.stopPropagation()}
+                        onTouchStart={(e) => e.stopPropagation()}
+                      >
+                        <ArrowDownLeft className="h-3 w-3 text-orange-500" />
+                        {formatUsdCompact(item.totalBorrowed)}
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <div className="text-xs">
+                        <p className="font-medium">Borrowed</p>
+                        <p>{formatUsdFull(item.totalBorrowed)}</p>
+                        <p className="text-muted-foreground">{formatTokens(item.totalBorrowedTokens)} {item.tokenSymbol}</p>
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
+                )}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Right side: APY badges and chevron */}
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="flex flex-col gap-1 items-end">
+            <Badge
+              variant="secondary"
+              className={`text-xs font-medium min-w-[90px] justify-center ${sortBy === "total" ? "bg-white/20" : ""}`}
+            >
+              {formatApy(getTotalApy(item))} Total
+            </Badge>
+            {item.supplyApy !== null && (
+              <Badge
+                variant="secondary"
+                className={`text-xs min-w-[90px] justify-center ${sortBy === "apy" ? "bg-white/20" : ""}`}
+              >
+                <TrendingUp className="mr-1 h-3 w-3" />
+                {formatApy(item.supplyApy)}
+              </Badge>
+            )}
+            {item.blndApy !== null && item.blndApy > 0.005 && (
+              <Badge
+                variant="secondary"
+                className={`text-xs min-w-[90px] justify-center ${sortBy === "blnd" ? "bg-white/20" : ""}`}
+              >
+                <Flame className="mr-1 h-3 w-3" />
+                {formatApy(item.blndApy)}
+              </Badge>
+            )}
+          </div>
+          {isExpanded ? (
+            <ChevronUp className="h-4 w-4 text-muted-foreground ml-1" />
+          ) : (
+            <ChevronDown className="h-4 w-4 text-muted-foreground ml-1" />
           )}
         </div>
-      </div>
+      </button>
 
-      {/* Right side: APY badges - stacked vertically with equal width */}
-      <div className="flex flex-col gap-1 items-end shrink-0">
-        <Badge
-          variant="secondary"
-          className={`text-xs font-medium min-w-[90px] justify-center ${sortBy === "total" ? "bg-white/20" : ""}`}
-        >
-          {formatApy(getTotalApy(item))} Total
-        </Badge>
-        {item.supplyApy !== null && (
-          <Badge
-            variant="secondary"
-            className={`text-xs min-w-[90px] justify-center ${sortBy === "apy" ? "bg-white/20" : ""}`}
-          >
-            <TrendingUp className="mr-1 h-3 w-3" />
-            {formatApy(item.supplyApy)}
-          </Badge>
-        )}
-        {item.blndApy !== null && item.blndApy > 0.005 && (
-          <Badge
-            variant="secondary"
-            className={`text-xs min-w-[90px] justify-center ${sortBy === "blnd" ? "bg-white/20" : ""}`}
-          >
-            <Flame className="mr-1 h-3 w-3" />
-            {formatApy(item.blndApy)}
-          </Badge>
-        )}
-      </div>
-    </a>
+      {/* Expanded charts section */}
+      {isExpanded && <SupplyRowCharts item={item} />}
+    </div>
   )
 }
 
@@ -190,10 +268,13 @@ function SupplyRowSkeleton() {
           <Skeleton className="h-3 w-20" />
         </div>
       </div>
-      <div className="flex flex-col gap-1 items-end">
-        <Skeleton className="h-5 w-[90px]" />
-        <Skeleton className="h-5 w-[90px]" />
-        <Skeleton className="h-5 w-[90px]" />
+      <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-1 items-end">
+          <Skeleton className="h-5 w-[90px]" />
+          <Skeleton className="h-5 w-[90px]" />
+          <Skeleton className="h-5 w-[90px]" />
+        </div>
+        <Skeleton className="h-4 w-4 ml-1" />
       </div>
     </div>
   )

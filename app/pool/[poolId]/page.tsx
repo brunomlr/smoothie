@@ -171,7 +171,7 @@ function AssetRow({ position, blndPrice, formatUsd, formatYield }: {
   const hasYield = position.earnedYield !== 0
 
   return (
-    <div className="py-4 border-b last:border-0">
+    <div className="py-6 border-b last:border-0 first:pt-0 last:pb-0">
       {/* Top row: Token info and APY badges */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-3">
@@ -213,134 +213,111 @@ function AssetRow({ position, blndPrice, formatUsd, formatYield }: {
         </div>
       </div>
 
-      {/* APY Sparklines - Supply APY (6mo) and BLND Emission APY (30d) */}
-      <div className="grid grid-cols-2 gap-4 mb-3">
-        <div>
-          <p className="text-xs text-muted-foreground mb-1">Supply APY (6mo)</p>
-          <ApySparkline
-            poolId={position.poolId}
-            assetAddress={position.assetId}
-            currentApy={position.supplyApy}
-            className="w-full h-10"
-          />
-        </div>
-        {position.blndApy > 0 && (
+      {/* Position details grid */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-sm my-6">
+        {/* Collateral */}
+        {hasCollateral && (
           <div>
-            <p className="text-xs text-muted-foreground mb-1">BLND Emission APY (30d)</p>
-            <BlndApySparkline
-              poolId={position.poolId}
-              type="lending_supply"
-              assetAddress={position.assetId}
-              currentApy={position.blndApy}
-              className="w-full h-10"
-            />
+            <p className="text-xs text-muted-foreground mb-1">Collateral</p>
+            <p className="font-mono text-white">{formatNumber(position.collateralAmount)}</p>
+            <p className="text-xs text-muted-foreground">{formatUsd(position.collateralUsdValue)}</p>
           </div>
         )}
-      </div>
-
-      {/* Position details grid */}
-      <div className="grid grid-cols-6 gap-4 text-sm">
-        {/* Collateral */}
-        <div>
-          <p className="text-xs text-muted-foreground mb-1">Collateral</p>
-          {hasCollateral ? (
-            <>
-              <p className="font-mono text-white">{formatNumber(position.collateralAmount)}</p>
-              <p className="text-xs text-muted-foreground">{formatUsd(position.collateralUsdValue)}</p>
-            </>
-          ) : (
-            <p className="text-muted-foreground">-</p>
-          )}
-        </div>
 
         {/* Non-Collateral */}
-        <div>
-          <p className="text-xs text-muted-foreground mb-1">Non-Collateral</p>
-          {hasNonCollateral ? (
-            <>
-              <p className="font-mono text-white">{formatNumber(position.nonCollateralAmount)}</p>
-              <p className="text-xs text-muted-foreground">{formatUsd(position.nonCollateralUsdValue)}</p>
-            </>
-          ) : (
-            <p className="text-muted-foreground">-</p>
-          )}
-        </div>
+        {hasNonCollateral && (
+          <div>
+            <p className="text-xs text-muted-foreground mb-1">Non-Collateral</p>
+            <p className="font-mono text-white">{formatNumber(position.nonCollateralAmount)}</p>
+            <p className="text-xs text-muted-foreground">{formatUsd(position.nonCollateralUsdValue)}</p>
+          </div>
+        )}
 
         {/* Borrowed */}
-        <div>
-          <p className="text-xs text-muted-foreground mb-1">Borrowed</p>
-          {hasBorrow ? (
-            <>
-              <p className="font-mono text-red-400">{formatNumber(position.borrowAmount)}</p>
-              <p className="text-xs text-red-400">{formatUsd(position.borrowUsdValue)}</p>
-            </>
-          ) : (
-            <p className="text-muted-foreground">-</p>
-          )}
-        </div>
+        {hasBorrow && (
+          <div>
+            <p className="text-xs text-muted-foreground mb-1">Borrowed</p>
+            <p className="font-mono text-red-400">{formatNumber(position.borrowAmount)}</p>
+            <p className="text-xs text-red-400">{formatUsd(position.borrowUsdValue)}</p>
+          </div>
+        )}
 
         {/* Yield Earned */}
         <div>
           <p className="text-xs text-muted-foreground mb-1">Yield Earned</p>
           {hasYield ? (
-            <>
+            <div className="flex items-center gap-2">
               <p className={`font-mono ${position.earnedYield >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                 {formatYield(position.earnedYield)}
               </p>
-              <p className={`text-xs ${position.earnedYield >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+              <Badge variant="secondary" className={`text-xs ${position.earnedYield >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                 {position.yieldPercentage >= 0 ? '+' : ''}{formatPercent(position.yieldPercentage)}
-              </p>
-            </>
+              </Badge>
+            </div>
           ) : (
             <p className="text-muted-foreground">-</p>
           )}
         </div>
 
-        {/* BLND Emissions per token - always show for visibility */}
+        {/* BLND Rewards */}
         <div>
           <p className="text-xs text-muted-foreground mb-1">BLND Rewards</p>
-          <div className="space-y-1">
-            <div>
-              <p className="font-mono text-purple-400">
-                {position.estimatedClaimableBlnd > 0
-                  ? `~${formatNumber(position.estimatedClaimableBlnd, 4)} BLND`
-                  : '0 BLND'
-                }
-              </p>
-              {position.estimatedClaimableBlnd > 0 && blndPrice && (
-                <p className="text-xs text-muted-foreground">
-                  {formatUsd(position.estimatedClaimableBlnd * blndPrice)}
-                </p>
-              )}
-              <p className="text-xs text-muted-foreground">to claim</p>
-            </div>
-            {position.estimatedClaimedBlnd > 0 && (
-              <div className="pt-1 border-t border-border/30">
-                <p className="font-mono text-sm text-muted-foreground">
-                  ~{formatNumber(position.estimatedClaimedBlnd, 2)} BLND
-                </p>
-                {blndPrice && (
-                  <p className="text-xs text-muted-foreground">
-                    {formatUsd(position.estimatedClaimedBlnd * blndPrice)}
-                  </p>
-                )}
-                <p className="text-xs text-muted-foreground">claimed</p>
-              </div>
+          <p className="font-mono text-purple-400">
+            ~{formatNumber(position.estimatedClaimableBlnd, 2)} BLND
+            {position.estimatedClaimableBlnd > 0 && blndPrice && (
+              <span className="text-xs text-muted-foreground font-sans"> ({formatUsd(position.estimatedClaimableBlnd * blndPrice)}) to claim</span>
             )}
-          </div>
+          </p>
+          {position.estimatedClaimedBlnd > 0 && (
+            <p className="text-xs text-muted-foreground mt-0.5">
+              ~{formatNumber(position.estimatedClaimedBlnd, 0)} BLND
+              {blndPrice && ` (${formatUsd(position.estimatedClaimedBlnd * blndPrice)})`} claimed
+            </p>
+          )}
         </div>
 
-        {/* Reserve Info */}
+        {/* Utilization */}
         <div>
           <p className="text-xs text-muted-foreground mb-1">Utilization</p>
           <div className="flex items-center gap-2">
-            <Progress value={position.reserveUtilization * 100} className="h-1.5 flex-1" />
-            <span className="text-xs">{formatPercent(position.reserveUtilization * 100)}</span>
+            <Progress value={position.reserveUtilization * 100} className="h-1.5 w-16" />
+            <span className="text-xs font-mono">{formatPercent(position.reserveUtilization * 100)}</span>
           </div>
-          <p className="text-xs text-muted-foreground mt-1">
+          <p className="text-xs text-muted-foreground mt-0.5">
             CF: {formatPercent(position.collateralFactor * 100)} · LF: {formatPercent(position.liabilityFactor * 100)}
           </p>
         </div>
+      </div>
+
+      {/* APY Sparklines - Supply APY (6mo) and BLND Emission APY (30d) */}
+      <div className="space-y-3">
+        <div className="bg-background/50 rounded-lg p-3 border border-border/30">
+          <div className="flex items-center gap-1.5 mb-2">
+            <TrendingUp className="h-3 w-3 text-emerald-500" />
+            <span className="text-xs font-medium text-muted-foreground">Supply APY</span>
+          </div>
+          <ApySparkline
+            poolId={position.poolId}
+            assetAddress={position.assetId}
+            currentApy={position.supplyApy}
+            className="h-12 w-full"
+          />
+        </div>
+        {position.blndApy > 0 && (
+          <div className="bg-background/50 rounded-lg p-3 border border-border/30">
+            <div className="flex items-center gap-1.5 mb-2">
+              <Flame className="h-3 w-3 text-purple-500" />
+              <span className="text-xs font-medium text-muted-foreground">BLND Emissions</span>
+            </div>
+            <BlndApySparkline
+              poolId={position.poolId}
+              type="lending_supply"
+              assetAddress={position.assetId}
+              currentApy={position.blndApy}
+              className="h-12 w-full"
+            />
+          </div>
+        )}
       </div>
     </div>
   )
@@ -359,7 +336,7 @@ function MobileAssetCard({ position, blndPrice, formatUsd, formatYield }: {
   const hasYield = position.earnedYield !== 0
 
   return (
-    <div className="py-4 border-b last:border-0">
+    <div className="py-6 border-b last:border-0 first:pt-0 last:pb-0">
       {/* Header with token info */}
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-3">
@@ -403,33 +380,8 @@ function MobileAssetCard({ position, blndPrice, formatUsd, formatYield }: {
         )}
       </div>
 
-      {/* APY Sparklines - Supply APY (6mo) and BLND Emission APY (30d) */}
-      <div className="grid grid-cols-2 gap-3 mb-3">
-        <div>
-          <p className="text-xs text-muted-foreground mb-1">Supply APY</p>
-          <ApySparkline
-            poolId={position.poolId}
-            assetAddress={position.assetId}
-            currentApy={position.supplyApy}
-            className="w-full h-8"
-          />
-        </div>
-        {position.blndApy > 0 && (
-          <div>
-            <p className="text-xs text-muted-foreground mb-1">BLND APY</p>
-            <BlndApySparkline
-              poolId={position.poolId}
-              type="lending_supply"
-              assetAddress={position.assetId}
-              currentApy={position.blndApy}
-              className="w-full h-8"
-            />
-          </div>
-        )}
-      </div>
-
       {/* Position details */}
-      <div className="grid grid-cols-2 gap-3 text-sm">
+      <div className="grid grid-cols-2 gap-3 text-sm my-6">
         {hasCollateral && (
           <div>
             <p className="text-xs text-muted-foreground mb-1">Collateral</p>
@@ -458,52 +410,37 @@ function MobileAssetCard({ position, blndPrice, formatUsd, formatYield }: {
         {hasYield && (
           <div>
             <p className="text-xs text-muted-foreground mb-1">Yield Earned</p>
-            <p className={`font-mono ${position.earnedYield >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-              {formatYield(position.earnedYield)}
-            </p>
-            <p className={`text-xs ${position.earnedYield >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-              {position.yieldPercentage >= 0 ? '+' : ''}{formatPercent(position.yieldPercentage)}
-            </p>
+            <div className="flex items-center gap-2">
+              <p className={`font-mono ${position.earnedYield >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                {formatYield(position.earnedYield)}
+              </p>
+              <Badge variant="secondary" className={`text-xs ${position.earnedYield >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                {position.yieldPercentage >= 0 ? '+' : ''}{formatPercent(position.yieldPercentage)}
+              </Badge>
+            </div>
           </div>
         )}
 
-        {/* BLND Rewards per token - always show */}
-        <div>
+        {/* BLND Rewards - full width */}
+        <div className="col-span-2">
           <p className="text-xs text-muted-foreground mb-1">BLND Rewards</p>
-          <div className="space-y-1">
-            <div>
-              <p className="font-mono text-purple-400">
-                {position.estimatedClaimableBlnd > 0
-                  ? `~${formatNumber(position.estimatedClaimableBlnd, 4)} BLND`
-                  : '0 BLND'
-                }
-              </p>
-              {position.estimatedClaimableBlnd > 0 && blndPrice && (
-                <p className="text-xs text-muted-foreground">
-                  {formatUsd(position.estimatedClaimableBlnd * blndPrice)}
-                </p>
-              )}
-              <p className="text-xs text-muted-foreground">to claim</p>
-            </div>
-            {position.estimatedClaimedBlnd > 0 && (
-              <div className="pt-1 border-t border-border/30">
-                <p className="font-mono text-sm text-muted-foreground">
-                  ~{formatNumber(position.estimatedClaimedBlnd, 2)} BLND
-                </p>
-                {blndPrice && (
-                  <p className="text-xs text-muted-foreground">
-                    {formatUsd(position.estimatedClaimedBlnd * blndPrice)}
-                  </p>
-                )}
-                <p className="text-xs text-muted-foreground">claimed</p>
-              </div>
+          <p className="font-mono text-purple-400">
+            ~{formatNumber(position.estimatedClaimableBlnd, 2)} BLND
+            {position.estimatedClaimableBlnd > 0 && blndPrice && (
+              <span className="text-xs text-muted-foreground font-sans"> ({formatUsd(position.estimatedClaimableBlnd * blndPrice)}) to claim</span>
             )}
-          </div>
+          </p>
+          {position.estimatedClaimedBlnd > 0 && (
+            <p className="text-xs text-muted-foreground mt-0.5">
+              ~{formatNumber(position.estimatedClaimedBlnd, 0)} BLND
+              {blndPrice && ` (${formatUsd(position.estimatedClaimedBlnd * blndPrice)})`} claimed
+            </p>
+          )}
         </div>
       </div>
 
       {/* Reserve info */}
-      <div className="mt-3 pt-3 border-t border-border/50">
+      <div className="mb-3 pt-3 border-t border-border/50">
         <div className="flex items-center justify-between text-xs">
           <span className="text-muted-foreground">Utilization</span>
           <div className="flex items-center gap-2">
@@ -519,6 +456,37 @@ function MobileAssetCard({ position, blndPrice, formatUsd, formatYield }: {
           <span className="text-muted-foreground">Liability Factor</span>
           <span>{formatPercent(position.liabilityFactor * 100)}</span>
         </div>
+      </div>
+
+      {/* APY Sparklines - Supply APY (6mo) and BLND Emission APY (30d) */}
+      <div className="space-y-3">
+        <div className="bg-background/50 rounded-lg p-3 border border-border/30">
+          <div className="flex items-center gap-1.5 mb-2">
+            <TrendingUp className="h-3 w-3 text-emerald-500" />
+            <span className="text-xs font-medium text-muted-foreground">Supply APY</span>
+          </div>
+          <ApySparkline
+            poolId={position.poolId}
+            assetAddress={position.assetId}
+            currentApy={position.supplyApy}
+            className="h-12 w-full"
+          />
+        </div>
+        {position.blndApy > 0 && (
+          <div className="bg-background/50 rounded-lg p-3 border border-border/30">
+            <div className="flex items-center gap-1.5 mb-2">
+              <Flame className="h-3 w-3 text-purple-500" />
+              <span className="text-xs font-medium text-muted-foreground">BLND Emissions</span>
+            </div>
+            <BlndApySparkline
+              poolId={position.poolId}
+              type="lending_supply"
+              assetAddress={position.assetId}
+              currentApy={position.blndApy}
+              className="h-12 w-full"
+            />
+          </div>
+        )}
       </div>
     </div>
   )
@@ -580,7 +548,7 @@ function BackstopSection({ position, claimedLp = 0, blndPerLpToken = 0, blndPric
       </CardHeader>
       <CardContent className="space-y-6">
         {/* Main Stats Grid */}
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-5 text-sm">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-6 text-sm">
           {/* LP Tokens */}
           <div>
             <p className="text-xs text-muted-foreground mb-1">LP Tokens</p>
@@ -608,12 +576,14 @@ function BackstopSection({ position, claimedLp = 0, blndPerLpToken = 0, blndPric
           {/* Yield Earned */}
           <div>
             <p className="text-xs text-muted-foreground mb-1">Yield Earned</p>
-            <p className={`font-mono ${position.yieldLp >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-              {formatYield(yieldUsd)}
-            </p>
-            <p className={`text-xs ${position.yieldLp >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-              {position.yieldPercent >= 0 ? '+' : ''}{formatPercent(position.yieldPercent)}
-            </p>
+            <div className="flex items-center gap-2">
+              <p className={`font-mono ${position.yieldLp >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                {formatYield(yieldUsd)}
+              </p>
+              <Badge variant="secondary" className={`text-xs ${position.yieldLp >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                {position.yieldPercent >= 0 ? '+' : ''}{formatPercent(position.yieldPercent)}
+              </Badge>
+            </div>
           </div>
 
           {/* BLND Rewards */}
@@ -621,17 +591,14 @@ function BackstopSection({ position, claimedLp = 0, blndPerLpToken = 0, blndPric
             <p className="text-xs text-muted-foreground mb-1">BLND Rewards</p>
             <p className="font-mono text-purple-400">
               {formatNumber(position.claimableBlnd, 2)} BLND
+              {position.claimableBlnd > 0 && blndPrice && (
+                <span className="text-xs text-muted-foreground font-sans"> ({formatUsd(position.claimableBlnd * blndPrice)}) to claim</span>
+              )}
             </p>
-            {position.claimableBlnd > 0 && blndPrice && (
-              <p className="text-xs text-muted-foreground">
-                {formatUsd(position.claimableBlnd * blndPrice)}
-              </p>
-            )}
-            <p className="text-xs text-muted-foreground">to claim</p>
             {claimedBlndApprox > 0 && (
-              <p className="text-xs text-muted-foreground border-t border-border/30 pt-1 mt-1">
-                ~{formatNumber(claimedBlndApprox, 0)} claimed
-                {blndPrice && ` · ${formatUsd(claimedBlndApprox * blndPrice)}`}
+              <p className="text-xs text-muted-foreground mt-0.5">
+                ~{formatNumber(claimedBlndApprox, 0)} BLND
+                {blndPrice && ` (${formatUsd(claimedBlndApprox * blndPrice)})`} claimed
               </p>
             )}
           </div>
@@ -644,29 +611,40 @@ function BackstopSection({ position, claimedLp = 0, blndPerLpToken = 0, blndPric
         </div>
 
         {/* Charts Section */}
-        <div className="grid gap-4 sm:grid-cols-3">
-          <div>
-            <p className="text-xs text-muted-foreground mb-1">Interest APR (6mo)</p>
+        <div className="space-y-3">
+          <div className="bg-background/50 rounded-lg p-3 border border-border/30">
+            <div className="flex items-center gap-1.5 mb-2">
+              <TrendingUp className="h-3 w-3 text-emerald-500" />
+              <span className="text-xs font-medium text-muted-foreground">Interest APR</span>
+            </div>
             <BackstopApySparkline
               poolId={position.poolId}
               currentApy={position.interestApr}
-              className="w-full h-10"
+              className="h-12 w-full"
             />
           </div>
-          <div>
-            <p className="text-xs text-muted-foreground mb-1">BLND Emission APY (30d)</p>
-            <BlndApySparkline
-              poolId={position.poolId}
-              type="backstop"
-              currentApy={position.emissionApy}
-              className="w-full h-10"
-            />
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground mb-1">LP Token Price (6mo)</p>
+          {position.emissionApy > 0.005 && (
+            <div className="bg-background/50 rounded-lg p-3 border border-border/30">
+              <div className="flex items-center gap-1.5 mb-2">
+                <Flame className="h-3 w-3 text-purple-500" />
+                <span className="text-xs font-medium text-muted-foreground">BLND Emissions</span>
+              </div>
+              <BlndApySparkline
+                poolId={position.poolId}
+                type="backstop"
+                currentApy={position.emissionApy}
+                className="h-12 w-full"
+              />
+            </div>
+          )}
+          <div className="bg-background/50 rounded-lg p-3 border border-border/30">
+            <div className="flex items-center gap-1.5 mb-2">
+              <TrendingUp className="h-3 w-3 text-purple-400" />
+              <span className="text-xs font-medium text-muted-foreground">LP Token Price</span>
+            </div>
             <LpPriceSparkline
               currentPrice={lpTokenPrice || undefined}
-              className="w-full h-10"
+              className="h-12 w-full"
             />
           </div>
         </div>
@@ -1075,7 +1053,7 @@ export default function PoolDetailsPage() {
             {/* Supply/Borrow Positions */}
             {poolData.positions.length > 0 && (
               <Card>
-                <CardHeader className="pb-2">
+                <CardHeader className="pb-3">
                   <CardTitle className="text-lg">Your Positions</CardTitle>
                 </CardHeader>
                 <CardContent>

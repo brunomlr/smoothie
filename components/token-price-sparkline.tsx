@@ -11,19 +11,22 @@ interface PriceDataPoint {
   price: number
 }
 
-interface LpPriceSparklineProps {
+interface TokenPriceSparklineProps {
+  tokenAddress: string
+  tokenSymbol: string
   currentPrice?: number // SDK price to use for latest day
   className?: string
 }
 
-async function fetchLpPriceHistory(): Promise<PriceDataPoint[]> {
+async function fetchTokenPriceHistory(tokenAddress: string): Promise<PriceDataPoint[]> {
   const params = new URLSearchParams({
+    token: tokenAddress,
     days: "180", // 6 months
   })
 
-  const response = await fetchWithTimeout(`/api/lp-price-history?${params}`)
+  const response = await fetchWithTimeout(`/api/token-price-history?${params}`)
   if (!response.ok) {
-    throw new Error("Failed to fetch LP price history")
+    throw new Error("Failed to fetch token price history")
   }
 
   const data = await response.json()
@@ -31,15 +34,22 @@ async function fetchLpPriceHistory(): Promise<PriceDataPoint[]> {
 }
 
 function formatPrice(value: number): string {
-  return `$${value.toFixed(4)}`
+  if (value >= 1) {
+    return `$${value.toFixed(2)}`
+  }
+  if (value >= 0.01) {
+    return `$${value.toFixed(4)}`
+  }
+  return `$${value.toFixed(6)}`
 }
 
 interface CustomTooltipProps {
   active?: boolean
   payload?: Array<{ value: number; payload: PriceDataPoint }>
+  tokenSymbol: string
 }
 
-function CustomTooltip({ active, payload }: CustomTooltipProps) {
+function CustomTooltip({ active, payload, tokenSymbol }: CustomTooltipProps) {
   if (!active || !payload?.length) {
     return null
   }
@@ -49,7 +59,6 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
   const price = data.value
 
   // Parse date as local time to avoid timezone shift
-  // "2026-01-02" should display as "Jan 2, 2026" regardless of timezone
   const [year, month, day] = date.split('-').map(Number)
   const localDate = new Date(year, month - 1, day)
 
@@ -58,18 +67,20 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
       <p className="text-zinc-400">
         {format(localDate, "MMM d, yyyy")}
       </p>
-      <p className="font-medium text-purple-400">{formatPrice(price)}</p>
+      <p className="font-medium text-blue-400">{tokenSymbol}: {formatPrice(price)}</p>
     </div>
   )
 }
 
-export function LpPriceSparkline({
+export function TokenPriceSparkline({
+  tokenAddress,
+  tokenSymbol,
   currentPrice,
   className = "",
-}: LpPriceSparklineProps) {
+}: TokenPriceSparklineProps) {
   const { data: priceHistory, isLoading } = useQuery({
-    queryKey: ["lp-price-history"],
-    queryFn: () => fetchLpPriceHistory(),
+    queryKey: ["token-price-history", tokenAddress],
+    queryFn: () => fetchTokenPriceHistory(tokenAddress),
     staleTime: 60 * 60 * 1000, // 1 hour
     refetchInterval: false,
   })
@@ -91,7 +102,7 @@ export function LpPriceSparkline({
   }, [priceHistory, currentPrice])
 
   // Calculate price change percentage
-  const { priceChange, priceChangePercent } = useMemo(() => {
+  const { priceChangePercent } = useMemo(() => {
     if (!chartData?.length || chartData.length < 2) {
       return { priceChange: 0, priceChangePercent: 0 }
     }
@@ -136,7 +147,7 @@ export function LpPriceSparkline({
           >
             <YAxis domain={['dataMin', 'dataMax']} hide />
             <Tooltip
-              content={<CustomTooltip />}
+              content={<CustomTooltip tokenSymbol={tokenSymbol} />}
               cursor={false}
               allowEscapeViewBox={{ x: true, y: true }}
               wrapperStyle={{ zIndex: 50 }}
@@ -146,13 +157,13 @@ export function LpPriceSparkline({
             <Line
               type="monotone"
               dataKey="price"
-              stroke="#c084fc"
+              stroke="#3b82f6"
               strokeWidth={1.5}
               dot={false}
               activeDot={{
                 r: 3,
-                fill: "#c084fc",
-                stroke: "#c084fc",
+                fill: "#3b82f6",
+                stroke: "#3b82f6",
               }}
               isAnimationActive={false}
             />

@@ -133,8 +133,8 @@ export function ApySparkline({
   }
 
   return (
-    <div className="flex items-center gap-2">
-      <div className={`${defaultSize} ${className}`}>
+    <div className="flex items-center gap-3">
+      <div className={`${defaultSize} ${className} flex-1`}>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart
             data={chartData}
@@ -165,8 +165,9 @@ export function ApySparkline({
           </LineChart>
         </ResponsiveContainer>
       </div>
-      <div className="text-[10px] text-muted-foreground whitespace-nowrap">
-        6mo avg:<br />{formatPercent(avgApy)}
+      <div className="shrink-0 text-right">
+        <p className="text-[10px] text-muted-foreground uppercase tracking-wide">6mo avg</p>
+        <p className="text-sm font-semibold text-foreground">{formatPercent(avgApy)}</p>
       </div>
     </div>
   )

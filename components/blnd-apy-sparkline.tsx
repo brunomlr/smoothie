@@ -142,8 +142,8 @@ export function BlndApySparkline({
   }
 
   return (
-    <div className="flex items-center gap-2">
-      <div className={`${defaultSize} ${className}`}>
+    <div className="flex items-center gap-3">
+      <div className={`${defaultSize} ${className} flex-1`}>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart
             data={chartData}
@@ -174,8 +174,9 @@ export function BlndApySparkline({
           </LineChart>
         </ResponsiveContainer>
       </div>
-      <div className="text-[10px] text-muted-foreground whitespace-nowrap">
-        30d avg:<br />{formatPercent(avg30d)}
+      <div className="shrink-0 text-right">
+        <p className="text-[10px] text-muted-foreground uppercase tracking-wide">30d avg</p>
+        <p className="text-sm font-semibold text-foreground">{formatPercent(avg30d)}</p>
       </div>
     </div>
   )

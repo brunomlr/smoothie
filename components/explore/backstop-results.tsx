@@ -1,10 +1,14 @@
 "use client"
 
-import { TrendingUp, Flame, Shield, ArrowUpRight, Clock } from "lucide-react"
+import { useState } from "react"
+import { TrendingUp, Flame, Shield, ArrowUpRight, Clock, ChevronDown, ChevronUp } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { BackstopApySparkline } from "@/components/backstop-apy-sparkline"
+import { BlndApySparkline } from "@/components/blnd-apy-sparkline"
+import { LpPriceSparkline } from "@/components/lp-price-sparkline"
 import type { BackstopExploreItem, SortBy } from "@/types/explore"
 
 interface BackstopResultsProps {
@@ -47,108 +51,173 @@ function sortItems(items: BackstopExploreItem[], sortBy: SortBy): BackstopExplor
   })
 }
 
+function BackstopRowCharts({ item }: { item: BackstopExploreItem }) {
+  return (
+    <div className="border-t border-border/30 bg-muted/10 px-4 py-4">
+      <div className="space-y-3">
+        {/* 6 month Interest APR */}
+        <div className="bg-background/50 rounded-lg p-3 border border-border/30">
+          <div className="flex items-center gap-1.5 mb-2">
+            <TrendingUp className="h-3 w-3 text-emerald-500" />
+            <span className="text-xs font-medium text-muted-foreground">Interest APR</span>
+          </div>
+          <BackstopApySparkline
+            poolId={item.poolId}
+            currentApy={item.interestApr}
+            className="h-12 w-full"
+          />
+        </div>
+
+        {/* 30 days BLND APY */}
+        <div className="bg-background/50 rounded-lg p-3 border border-border/30">
+          <div className="flex items-center gap-1.5 mb-2">
+            <Flame className="h-3 w-3 text-purple-500" />
+            <span className="text-xs font-medium text-muted-foreground">BLND Emissions</span>
+          </div>
+          <BlndApySparkline
+            poolId={item.poolId}
+            type="backstop"
+            currentApy={item.emissionApy}
+            className="h-12 w-full"
+          />
+        </div>
+
+        {/* 6 months LP Token Price */}
+        <div className="bg-background/50 rounded-lg p-3 border border-border/30">
+          <div className="flex items-center gap-1.5 mb-2">
+            <TrendingUp className="h-3 w-3 text-purple-400" />
+            <span className="text-xs font-medium text-muted-foreground">LP Token Price</span>
+          </div>
+          <LpPriceSparkline className="h-12 w-full" />
+        </div>
+
+        {/* Link to Blend */}
+        <a
+          href={`https://mainnet.blend.capital/backstop/?poolId=${item.poolId}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors"
+        >
+          Deposit on Blend Capital
+          <ArrowUpRight className="h-3 w-3" />
+        </a>
+      </div>
+    </div>
+  )
+}
+
 function BackstopRow({ item, sortBy }: { item: BackstopExploreItem; sortBy: SortBy }) {
-  const blendUrl = `https://mainnet.blend.capital/backstop/?poolId=${item.poolId}`
+  const [isExpanded, setIsExpanded] = useState(false)
 
   return (
-    <a
-      href={blendUrl}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="flex items-center justify-between py-3 px-4 hover:bg-muted/50 transition-colors border-b border-border/50 last:border-b-0"
-    >
-      {/* Left side: Pool info */}
-      <div className="flex items-center gap-3 min-w-0 flex-1">
-        {item.iconUrl ? (
-          <img
-            src={item.iconUrl}
-            alt={item.poolName}
-            className="w-9 h-9 rounded-full"
-          />
-        ) : (
-          <div className="h-9 w-9 rounded-full bg-purple-500/10 flex items-center justify-center">
-            <Shield className="h-5 w-5 text-purple-500" />
+    <div className="border-b border-border/50 last:border-b-0">
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="w-full flex items-center justify-between py-3 px-4 hover:bg-muted/50 transition-colors"
+      >
+        {/* Left side: Pool info */}
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          {item.iconUrl ? (
+            <img
+              src={item.iconUrl}
+              alt={item.poolName}
+              className="w-9 h-9 rounded-full"
+            />
+          ) : (
+            <div className="h-9 w-9 rounded-full bg-purple-500/10 flex items-center justify-center">
+              <Shield className="h-5 w-5 text-purple-500" />
+            </div>
+          )}
+          <div className="min-w-0 flex-1 text-left">
+            <p className="font-medium truncate">{item.poolName}</p>
+            <p className="text-sm text-muted-foreground">Backstop</p>
+            {(item.totalDeposited !== null || item.q4wPercent !== null) && (
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                {item.totalDeposited !== null && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span
+                        className="inline-flex items-center gap-0.5"
+                        onClick={(e) => e.stopPropagation()}
+                        onTouchStart={(e) => e.stopPropagation()}
+                      >
+                        <ArrowUpRight className="h-3 w-3 text-green-500" />
+                        {formatUsdCompact(item.totalDeposited)}
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <div className="text-xs">
+                        <p className="font-medium">Deposited</p>
+                        <p>{formatUsdFull(item.totalDeposited)}</p>
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
+                )}
+                {item.totalDeposited !== null && item.q4wPercent !== null && " · "}
+                {item.q4wPercent !== null && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span
+                        className="inline-flex items-center gap-0.5"
+                        onClick={(e) => e.stopPropagation()}
+                        onTouchStart={(e) => e.stopPropagation()}
+                      >
+                        <Clock className="h-3 w-3 text-purple-500" />
+                        {item.q4wPercent.toFixed(1)}%
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <div className="text-xs">
+                        <p className="font-medium">Q4W</p>
+                        <p>{item.q4wPercent.toFixed(2)}% · {formatUsdFull(item.totalQ4w)}</p>
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
+                )}
+              </p>
+            )}
           </div>
-        )}
-        <div className="min-w-0 flex-1">
-          <p className="font-medium truncate">{item.poolName}</p>
-          <p className="text-sm text-muted-foreground">Backstop</p>
-          {(item.totalDeposited !== null || item.q4wPercent !== null) && (
-            <p className="text-xs text-muted-foreground flex items-center gap-1">
-              {item.totalDeposited !== null && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span
-                      className="inline-flex items-center gap-0.5"
-                      onClick={(e) => e.preventDefault()}
-                      onTouchStart={(e) => e.stopPropagation()}
-                    >
-                      <ArrowUpRight className="h-3 w-3 text-green-500" />
-                      {formatUsdCompact(item.totalDeposited)}
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <div className="text-xs">
-                      <p className="font-medium">Deposited</p>
-                      <p>{formatUsdFull(item.totalDeposited)}</p>
-                    </div>
-                  </TooltipContent>
-                </Tooltip>
-              )}
-              {item.totalDeposited !== null && item.q4wPercent !== null && " · "}
-              {item.q4wPercent !== null && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span
-                      className="inline-flex items-center gap-0.5"
-                      onClick={(e) => e.preventDefault()}
-                      onTouchStart={(e) => e.stopPropagation()}
-                    >
-                      <Clock className="h-3 w-3 text-purple-500" />
-                      {item.q4wPercent.toFixed(1)}%
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <div className="text-xs">
-                      <p className="font-medium">Q4W</p>
-                      <p>{item.q4wPercent.toFixed(2)}% · {formatUsdFull(item.totalQ4w)}</p>
-                    </div>
-                  </TooltipContent>
-                </Tooltip>
-              )}
-            </p>
+        </div>
+
+        {/* Right side: APY badges and chevron */}
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="flex flex-col gap-1 items-end">
+            <Badge
+              variant="secondary"
+              className={`text-xs font-medium min-w-[90px] justify-center ${sortBy === "total" ? "bg-white/20" : ""}`}
+            >
+              {formatApy(item.totalApy)} Total
+            </Badge>
+            {item.interestApr > 0.005 && (
+              <Badge
+                variant="secondary"
+                className={`text-xs min-w-[90px] justify-center ${sortBy === "apy" ? "bg-white/20" : ""}`}
+              >
+                <TrendingUp className="mr-1 h-3 w-3" />
+                {formatApy(item.interestApr)}
+              </Badge>
+            )}
+            {item.emissionApy > 0.005 && (
+              <Badge
+                variant="secondary"
+                className={`text-xs min-w-[90px] justify-center ${sortBy === "blnd" ? "bg-white/20" : ""}`}
+              >
+                <Flame className="mr-1 h-3 w-3" />
+                {formatApy(item.emissionApy)}
+              </Badge>
+            )}
+          </div>
+          {isExpanded ? (
+            <ChevronUp className="h-4 w-4 text-muted-foreground ml-1" />
+          ) : (
+            <ChevronDown className="h-4 w-4 text-muted-foreground ml-1" />
           )}
         </div>
-      </div>
+      </button>
 
-      {/* Right side: APY badges - stacked vertically with equal width */}
-      <div className="flex flex-col gap-1 items-end shrink-0">
-        <Badge
-          variant="secondary"
-          className={`text-xs font-medium min-w-[90px] justify-center ${sortBy === "total" ? "bg-white/20" : ""}`}
-        >
-          {formatApy(item.totalApy)} Total
-        </Badge>
-        {item.interestApr > 0.005 && (
-          <Badge
-            variant="secondary"
-            className={`text-xs min-w-[90px] justify-center ${sortBy === "apy" ? "bg-white/20" : ""}`}
-          >
-            <TrendingUp className="mr-1 h-3 w-3" />
-            {formatApy(item.interestApr)}
-          </Badge>
-        )}
-        {item.emissionApy > 0.005 && (
-          <Badge
-            variant="secondary"
-            className={`text-xs min-w-[90px] justify-center ${sortBy === "blnd" ? "bg-white/20" : ""}`}
-          >
-            <Flame className="mr-1 h-3 w-3" />
-            {formatApy(item.emissionApy)}
-          </Badge>
-        )}
-      </div>
-    </a>
+      {/* Expanded charts section */}
+      {isExpanded && <BackstopRowCharts item={item} />}
+    </div>
   )
 }
 
@@ -163,10 +232,13 @@ function BackstopRowSkeleton() {
           <Skeleton className="h-3 w-20" />
         </div>
       </div>
-      <div className="flex flex-col gap-1 items-end">
-        <Skeleton className="h-5 w-[90px]" />
-        <Skeleton className="h-5 w-[90px]" />
-        <Skeleton className="h-5 w-[90px]" />
+      <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-1 items-end">
+          <Skeleton className="h-5 w-[90px]" />
+          <Skeleton className="h-5 w-[90px]" />
+          <Skeleton className="h-5 w-[90px]" />
+        </div>
+        <Skeleton className="h-4 w-4 ml-1" />
       </div>
     </div>
   )
