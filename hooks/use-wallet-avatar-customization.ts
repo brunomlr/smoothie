@@ -8,7 +8,7 @@ export interface AvatarCustomization {
   gradientId: string
 }
 
-// 8 playful gradient backgrounds
+// 10 playful gradient backgrounds (2 rows of 5)
 export const AVATAR_GRADIENTS = [
   { id: "sunset", colors: ["#FF6B6B", "#FFE66D"], name: "Sunset" },
   { id: "ocean", colors: ["#0077B6", "#00B4D8"], name: "Ocean" },
@@ -18,6 +18,8 @@ export const AVATAR_GRADIENTS = [
   { id: "peach", colors: ["#FD79A8", "#FDCB6E"], name: "Peach" },
   { id: "sky", colors: ["#74B9FF", "#A29BFE"], name: "Sky" },
   { id: "fire", colors: ["#FF7675", "#FD79A8"], name: "Fire" },
+  { id: "forest", colors: ["#2D5016", "#7CB342"], name: "Forest" },
+  { id: "midnight", colors: ["#1A1A2E", "#6C63FF"], name: "Midnight" },
 ] as const
 
 export type GradientId = typeof AVATAR_GRADIENTS[number]["id"]

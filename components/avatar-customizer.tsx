@@ -2,11 +2,12 @@
 
 import * as React from "react"
 import emojilib from "emojilib"
-import { Search, Eraser } from "lucide-react"
+import { Search, X, Undo2 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Drawer, DrawerContent, DrawerTrigger } from "@/components/ui/drawer"
 import { Button } from "@/components/ui/button"
+import { WalletAvatar } from "@/components/wallet-avatar"
 import { cn } from "@/lib/utils"
 import { AVATAR_GRADIENTS, type AvatarCustomization, type GradientId } from "@/hooks/use-wallet-avatar-customization"
 
@@ -237,9 +238,19 @@ function searchEmojis(query: string): string[] {
 
 interface AvatarCustomizerProps {
   currentCustomization: AvatarCustomization | null
-  onSave: (customization: AvatarCustomization) => void
+  onSave: (customization: AvatarCustomization, name?: string) => void
   onClear: () => void
   children: React.ReactNode
+  walletName?: string
+  onSaveName?: (name: string) => void
+  /** When true in uncontrolled mode, focuses name field on open. In controlled mode, use openWithNameFocus */
+  focusNameField?: boolean
+  /** Controlled open state */
+  open?: boolean
+  /** Controlled open change handler */
+  onOpenChange?: (open: boolean, focusNameField?: boolean) => void
+  /** Wallet address for identicon preview when clearing */
+  walletAddress?: string
 }
 
 function useIsMobile() {
@@ -317,6 +328,13 @@ function AvatarCustomizerContent({
   currentCustomization,
   onSave,
   onClear,
+  onUndoClear,
+  walletName,
+  editName,
+  setEditName,
+  nameInputRef,
+  walletAddress,
+  willClear,
 }: {
   selectedEmoji: string
   setSelectedEmoji: (emoji: string) => void
@@ -326,25 +344,79 @@ function AvatarCustomizerContent({
   currentCustomization: AvatarCustomization | null
   onSave: () => void
   onClear: () => void
+  onUndoClear: () => void
+  walletName?: string
+  editName: string
+  setEditName: (name: string) => void
+  nameInputRef: React.RefObject<HTMLInputElement | null>
+  walletAddress?: string
+  willClear: boolean
 }) {
+  const hasCustomization = currentCustomization !== null || !willClear
+
   return (
     <div className="space-y-3 pt-4">
-      {/* Preview */}
+      {/* Preview with clear button */}
       <div className="flex items-center justify-center">
-        <div
-          className="h-16 w-16 rounded-full flex items-center justify-center text-4xl"
-          style={{
-            background: `linear-gradient(135deg, ${currentGradient.colors[0]}, ${currentGradient.colors[1]})`,
-          }}
-        >
-          {selectedEmoji}
+        <div className="relative">
+          {willClear && walletAddress ? (
+            <WalletAvatar
+              address={walletAddress}
+              size="lg"
+              customization={null}
+              className="!h-16 !w-16"
+            />
+          ) : (
+            <div
+              className="h-16 w-16 rounded-full flex items-center justify-center text-4xl"
+              style={{
+                background: `linear-gradient(135deg, ${currentGradient.colors[0]}, ${currentGradient.colors[1]})`,
+              }}
+            >
+              {selectedEmoji}
+            </div>
+          )}
+          {willClear ? (
+            <button
+              type="button"
+              onClick={onUndoClear}
+              className="absolute -bottom-0.5 -right-0.5 size-5 rounded-full bg-zinc-900 border border-zinc-800 grid place-items-center text-muted-foreground hover:text-foreground hover:border-zinc-600 transition-colors"
+              title="Undo reset"
+            >
+              <Undo2 className="size-2.5" />
+            </button>
+          ) : hasCustomization && currentCustomization !== null ? (
+            <button
+              type="button"
+              onClick={onClear}
+              className="absolute -bottom-0.5 -right-0.5 size-5 rounded-full bg-zinc-900 border border-zinc-800 grid place-items-center text-muted-foreground hover:text-destructive hover:border-destructive/50 transition-colors"
+              title="Reset to default"
+            >
+              <X className="size-2.5" />
+            </button>
+          ) : null}
         </div>
       </div>
+
+      {/* Name input */}
+      {walletName !== undefined && (
+        <div>
+          <Input
+            ref={nameInputRef}
+            value={editName}
+            onChange={(e) => setEditName(e.target.value)}
+            placeholder="Wallet name"
+            className="h-8 px-2 text-sm font-medium text-center bg-zinc-900 border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+            maxLength={40}
+            enterKeyHint="done"
+          />
+        </div>
+      )}
 
       {/* Gradient selector */}
       <div>
         <p className="text-xs text-muted-foreground mb-2">Background</p>
-        <div className="grid grid-cols-4 gap-1.5">
+        <div className="grid grid-cols-5 gap-1.5">
           {AVATAR_GRADIENTS.map((gradient) => (
             <button
               key={gradient.id}
@@ -379,17 +451,6 @@ function AvatarCustomizerContent({
         >
           Save
         </Button>
-        {currentCustomization && (
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-8 px-2 text-muted-foreground hover:text-destructive"
-            onClick={onClear}
-            title="Reset to default"
-          >
-            <Eraser className="size-4" />
-          </Button>
-        )}
       </div>
     </div>
   )
@@ -400,14 +461,27 @@ export function AvatarCustomizer({
   onSave,
   onClear,
   children,
+  walletName,
+  onSaveName,
+  focusNameField = false,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
+  walletAddress,
 }: AvatarCustomizerProps) {
-  const [open, setOpen] = React.useState(false)
+  const [internalOpen, setInternalOpen] = React.useState(false)
+  const isControlled = controlledOpen !== undefined
+  const open = isControlled ? controlledOpen : internalOpen
+
   const [selectedEmoji, setSelectedEmoji] = React.useState<string>(
     currentCustomization?.emoji || EMOJI_LIST[0]
   )
   const [selectedGradient, setSelectedGradient] = React.useState<GradientId>(
     currentCustomization?.gradientId as GradientId || AVATAR_GRADIENTS[0].id
   )
+  const [editName, setEditName] = React.useState(walletName || "")
+  const [willClear, setWillClear] = React.useState(false)
+  const nameInputRef = React.useRef<HTMLInputElement>(null)
+  const shouldFocusName = React.useRef(false)
   const isMobile = useIsMobile()
 
   // Reset selection when opening
@@ -415,17 +489,73 @@ export function AvatarCustomizer({
     if (open) {
       setSelectedEmoji(currentCustomization?.emoji || EMOJI_LIST[0])
       setSelectedGradient(currentCustomization?.gradientId as GradientId || AVATAR_GRADIENTS[0].id)
+      setEditName(walletName || "")
+      setWillClear(false)
     }
-  }, [open, currentCustomization])
+  }, [open, currentCustomization, walletName])
+
+  // Focus name input after open if flagged
+  React.useEffect(() => {
+    if (!open || (!shouldFocusName.current && !focusNameField)) return
+
+    // Try to focus and place cursor at end of text
+    const tryFocus = () => {
+      if (nameInputRef.current) {
+        nameInputRef.current.focus()
+        // Place cursor at end instead of selecting all
+        const len = nameInputRef.current.value.length
+        nameInputRef.current.setSelectionRange(len, len)
+        return true
+      }
+      return false
+    }
+
+    // Try immediately
+    if (!tryFocus()) {
+      // Retry after a short delay for the drawer to render
+      const timer = setTimeout(() => {
+        tryFocus()
+        shouldFocusName.current = false
+      }, 50)
+      return () => clearTimeout(timer)
+    }
+    shouldFocusName.current = false
+  }, [open, focusNameField])
+
+  const setOpen = (newOpen: boolean, withNameFocus?: boolean) => {
+    if (newOpen && (focusNameField || withNameFocus)) {
+      shouldFocusName.current = true
+    }
+    if (isControlled) {
+      controlledOnOpenChange?.(newOpen, withNameFocus)
+    } else {
+      setInternalOpen(newOpen)
+    }
+  }
 
   const handleSave = () => {
-    onSave({ emoji: selectedEmoji, gradientId: selectedGradient })
+    if (willClear) {
+      onClear()
+    } else {
+      onSave({ emoji: selectedEmoji, gradientId: selectedGradient })
+    }
+    if (onSaveName && editName.trim()) {
+      onSaveName(editName.trim())
+    }
     setOpen(false)
   }
 
   const handleClear = () => {
-    onClear()
-    setOpen(false)
+    // Mark for clearing - user still needs to save
+    setWillClear(true)
+  }
+
+  const handleUndoClear = () => {
+    setWillClear(false)
+  }
+
+  const handleOpenChange = (newOpen: boolean) => {
+    setOpen(newOpen)
   }
 
   const currentGradient = AVATAR_GRADIENTS.find((g) => g.id === selectedGradient) || AVATAR_GRADIENTS[0]
@@ -439,11 +569,18 @@ export function AvatarCustomizer({
     currentCustomization,
     onSave: handleSave,
     onClear: handleClear,
+    onUndoClear: handleUndoClear,
+    walletName,
+    editName,
+    setEditName,
+    nameInputRef,
+    walletAddress,
+    willClear,
   }
 
   if (isMobile) {
     return (
-      <Drawer open={open} onOpenChange={setOpen} repositionInputs={false}>
+      <Drawer open={open} onOpenChange={handleOpenChange} repositionInputs={false}>
         <DrawerTrigger asChild>{children}</DrawerTrigger>
         <DrawerContent
           className="bg-zinc-950 border-zinc-800 px-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))] max-h-[80dvh] overflow-y-auto"
@@ -458,7 +595,7 @@ export function AvatarCustomizer({
   }
 
   return (
-    <Popover open={open} onOpenChange={setOpen} modal>
+    <Popover open={open} onOpenChange={handleOpenChange} modal>
       <PopoverTrigger asChild>{children}</PopoverTrigger>
       <PopoverContent
         className="w-72 p-3 bg-zinc-950 border-zinc-800 z-[100]"

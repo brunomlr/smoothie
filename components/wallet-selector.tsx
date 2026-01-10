@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Wallet, Check, Plus, LogOut, Copy, ChevronDown, Eye, Smile } from "lucide-react"
+import { Wallet, Check, Plus, LogOut, Copy, ChevronDown, Eye, Smile, Pencil } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
@@ -15,7 +15,6 @@ import {
 import { WalletConnectionModal } from "@/components/wallet-connection-modal"
 import { FollowAddressModal } from "@/components/follow-address-modal"
 import { WalletAvatar } from "@/components/wallet-avatar"
-import { WalletNameEditor } from "@/components/wallet-name-editor"
 import { AvatarCustomizer } from "@/components/avatar-customizer"
 import { useStellarWalletKit, type SupportedWallet } from "@/hooks/use-stellar-wallet-kit"
 import { useAnalytics, hashWalletAddress } from "@/hooks/use-analytics"
@@ -54,7 +53,8 @@ export function WalletSelector({
   const [isOpen, setIsOpen] = React.useState(false)
   const [supportedWallets, setSupportedWallets] = React.useState<SupportedWallet[]>([])
   const [isLoadingWallets, setIsLoadingWallets] = React.useState(false)
-  const [isEditingName, setIsEditingName] = React.useState(false)
+  const [customizerOpen, setCustomizerOpen] = React.useState(false)
+  const [focusNameOnOpen, setFocusNameOnOpen] = React.useState(false)
   const { disconnect: disconnectWallet, getSupportedWallets, connectWallet } = useStellarWalletKit()
   const { capture } = useAnalytics()
   const { getDisplayName, setCustomName } = useWalletCustomNames()
@@ -276,6 +276,7 @@ export function WalletSelector({
                 {wallets.map((wallet) => {
                   const isActive = wallet.isActive
                   const watched = isWatched(wallet)
+                  const displayName = watched ? "Watch" : getDisplayName(wallet)
 
                   return (
                     <div
@@ -314,12 +315,25 @@ export function WalletSelector({
                               currentCustomization={getCustomization(wallet.id)}
                               onSave={(customization) => setCustomization(wallet.id, customization)}
                               onClear={() => clearCustomization(wallet.id)}
+                              walletName={displayName}
+                              onSaveName={(name) => setCustomName(wallet.id, name)}
+                              open={customizerOpen}
+                              onOpenChange={(open) => {
+                                setCustomizerOpen(open)
+                                if (!open) setFocusNameOnOpen(false)
+                              }}
+                              focusNameField={focusNameOnOpen}
+                              walletAddress={wallet.publicKey}
                             >
                               <button
                                 type="button"
                                 className="relative group"
                                 data-avatar-customizer
-                                onClick={(e) => e.stopPropagation()}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setFocusNameOnOpen(false)
+                                  setCustomizerOpen(true)
+                                }}
                               >
                                 <WalletAvatar
                                   address={wallet.publicKey}
@@ -327,10 +341,7 @@ export function WalletSelector({
                                   size="lg"
                                   customization={getCustomization(wallet.id)}
                                 />
-                                <div className={cn(
-                                  "absolute inset-0 rounded-lg bg-black/50 flex items-center justify-center transition-opacity",
-                                  isEditingName ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-                                )}>
+                                <div className="absolute inset-0 rounded-lg bg-black/50 flex items-center justify-center transition-opacity opacity-0 group-hover:opacity-100">
                                   <Smile className="size-3.5 text-white" />
                                 </div>
                               </button>
@@ -351,18 +362,29 @@ export function WalletSelector({
                         </div>
 
                         <div className="flex-1 min-w-0">
-                          <WalletNameEditor
-                            name={watched ? "Watch" : getDisplayName(wallet)}
-                            isEditable={isActive}
-                            onSave={(name) => setCustomName(wallet.id, name)}
-                            onEditingChange={isActive ? setIsEditingName : undefined}
-                          />
+                          <div className="flex items-center gap-1">
+                            <span className="font-medium text-sm truncate">{displayName}</span>
+                            {isActive && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setFocusNameOnOpen(true)
+                                  setCustomizerOpen(true)
+                                }}
+                                className="p-1 rounded hover:bg-zinc-700 text-muted-foreground hover:text-foreground"
+                                title="Edit wallet name"
+                              >
+                                <Pencil className="size-2.5" />
+                              </button>
+                            )}
+                          </div>
                           <p className="text-xs text-muted-foreground font-mono truncate">
                             {formatWalletAddress(wallet, 6)}
                           </p>
                         </div>
 
-                        {isActive && !isEditingName && (
+                        {isActive && (
                           <div className="h-5 w-5 rounded-full bg-primary flex items-center justify-center shrink-0">
                             <Check className="h-3 w-3 text-primary-foreground" />
                           </div>
