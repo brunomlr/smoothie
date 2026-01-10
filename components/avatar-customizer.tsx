@@ -584,8 +584,6 @@ export function AvatarCustomizer({
         <DrawerTrigger asChild>{children}</DrawerTrigger>
         <DrawerContent
           className="bg-zinc-950 border-zinc-800 px-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))] max-h-[80dvh] overflow-y-auto"
-          data-avatar-customizer
-          onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
         >
           <AvatarCustomizerContent {...contentProps} />
@@ -603,9 +601,7 @@ export function AvatarCustomizer({
         side="bottom"
         sideOffset={8}
         collisionPadding={16}
-        data-avatar-customizer
         onOpenAutoFocus={(e) => e.preventDefault()}
-        onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
       >
         <AvatarCustomizerContent {...contentProps} />
