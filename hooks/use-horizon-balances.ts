@@ -49,7 +49,20 @@ async function fetchCurrentPrices(): Promise<Map<string, TokenPriceInfo>> {
       return new Map()
     }
     const data = await response.json()
-    return new Map(Object.entries(data.prices || {})) as Map<string, TokenPriceInfo>
+    const prices = data.prices || {}
+
+    // Build map with validated entries
+    const priceMap = new Map<string, TokenPriceInfo>()
+    for (const [symbol, info] of Object.entries(prices)) {
+      const priceInfo = info as { price?: number; address?: string }
+      if (typeof priceInfo.price === "number" && typeof priceInfo.address === "string") {
+        priceMap.set(symbol, {
+          price: priceInfo.price,
+          address: priceInfo.address,
+        })
+      }
+    }
+    return priceMap
   } catch {
     return new Map()
   }
@@ -92,6 +105,40 @@ interface HorizonBalancesResult {
   priceMap: Map<string, TokenPriceInfo>
 }
 
+// Enrich a single balance with price data
+function enrichBalanceWithPrice(
+  balance: TokenBalance,
+  priceMap: Map<string, TokenPriceInfo>
+): TokenBalance {
+  // Try exact match first, then case-insensitive
+  let priceInfo = priceMap.get(balance.assetCode)
+  if (!priceInfo) {
+    // Fallback: case-insensitive search
+    const upperCode = balance.assetCode.toUpperCase()
+    for (const [symbol, info] of priceMap.entries()) {
+      if (symbol.toUpperCase() === upperCode) {
+        priceInfo = info
+        break
+      }
+    }
+  }
+
+  if (!priceInfo || priceInfo.price <= 0) {
+    return balance
+  }
+
+  const balanceNum = parseFloat(balance.balance)
+  if (isNaN(balanceNum)) {
+    return balance
+  }
+
+  return {
+    ...balance,
+    usdValue: balanceNum * priceInfo.price,
+    tokenAddress: priceInfo.address,
+  }
+}
+
 export function useHorizonBalances(userAddress: string | undefined) {
   const isDemo = isDemoWallet(userAddress)
 
@@ -108,18 +155,9 @@ export function useHorizonBalances(userAddress: string | undefined) {
         ])
 
         // Add USD values and token addresses to balances
-        const enrichedBalances = balances.map((balance) => {
-          const priceInfo = priceMap.get(balance.assetCode)
-          if (priceInfo && priceInfo.price > 0) {
-            const balanceNum = parseFloat(balance.balance)
-            return {
-              ...balance,
-              usdValue: balanceNum * priceInfo.price,
-              tokenAddress: priceInfo.address,
-            }
-          }
-          return balance
-        })
+        const enrichedBalances = balances.map((balance) =>
+          enrichBalanceWithPrice(balance, priceMap)
+        )
         return { balances: enrichedBalances, priceMap }
       }
 
@@ -179,9 +217,8 @@ export function useHorizonBalances(userAddress: string | undefined) {
 
         // Attach home_domain, USD value, and token address to each balance
         const balancesWithMetadata = balances.map((balance) => {
-          const result: TokenBalance = { ...balance }
-
-          // Add home_domain if available
+          // First add home_domain if available
+          let result: TokenBalance = { ...balance }
           if (balance.assetIssuer) {
             const homeDomain = homeDomainMap.get(balance.assetIssuer)
             if (homeDomain) {
@@ -189,13 +226,8 @@ export function useHorizonBalances(userAddress: string | undefined) {
             }
           }
 
-          // Add USD value and token address if price info is known
-          const priceInfo = priceMap.get(balance.assetCode)
-          if (priceInfo && priceInfo.price > 0) {
-            const balanceNum = parseFloat(balance.balance)
-            result.usdValue = balanceNum * priceInfo.price
-            result.tokenAddress = priceInfo.address
-          }
+          // Then enrich with price data
+          result = enrichBalanceWithPrice(result, priceMap)
 
           return result
         })

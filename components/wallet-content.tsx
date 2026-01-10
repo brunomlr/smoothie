@@ -5,8 +5,9 @@ import { useWalletState } from "@/hooks/use-wallet-state"
 import { useHorizonBalances, type TokenBalance, type TokenPriceInfo } from "@/hooks/use-horizon-balances"
 import { useTokenBalance } from "@/hooks/use-token-balance"
 import { TokenLogo } from "@/components/token-logo"
-import { TokenSparklineBg } from "@/components/token-sparkline-bg"
+import { TokenSparkline, Token30dChange } from "@/components/token-sparkline-bg"
 import { Card, CardContent } from "@/components/ui/card"
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
 import { Droplets } from "lucide-react"
 import { WalletTokensSkeleton } from "@/components/wallet-tokens/skeleton"
 
@@ -59,44 +60,44 @@ const TokenItem = memo(function TokenItem({ token }: TokenItemProps) {
   const logoUrl = getTokenIconUrl(token.assetCode, token.assetIssuer)
   const balance = parseFloat(token.balance)
 
-  // Display: prefer home_domain, fallback to shortened issuer
-  const issuerDisplay = token.assetType === "native"
-    ? "Native"
-    : token.assetType === "liquidity_pool_shares"
-    ? "LP Shares"
-    : token.homeDomain
-    ? token.homeDomain
-    : token.assetIssuer
-    ? `${token.assetIssuer.slice(0, 4)}...${token.assetIssuer.slice(-4)}`
-    : "Unknown"
-
   return (
-    <div className="relative flex items-center justify-between py-2 gap-3">
-      {/* Background sparkline for tokens with price data */}
-      {token.tokenAddress && (
-        <TokenSparklineBg tokenAddress={token.tokenAddress} />
-      )}
-
-      <div className="relative flex items-center gap-3 min-w-0">
+    <div className="flex items-center py-2 gap-3">
+      {/* Left: Logo, name, balance */}
+      <div className="flex items-center gap-3 min-w-0 w-32 shrink-0">
         <TokenLogo
           src={logoUrl}
           symbol={token.assetCode}
           size={36}
         />
         <div className="min-w-0 flex-1">
-          <p className="font-medium truncate">{token.assetCode}</p>
+          <p className="text-sm sm:text-base font-medium truncate">{token.assetCode}</p>
           <p className="text-xs text-muted-foreground truncate">
-            {issuerDisplay}
+            {formatBalance(balance)}
           </p>
         </div>
       </div>
-      <div className="relative text-right shrink-0">
-        {token.usdValue !== undefined && token.usdValue > 0 && (
-          <p className="font-medium">
+
+      {/* Middle: Sparkline - centered */}
+      <div className="flex-1 flex justify-center">
+        {token.tokenAddress && (
+          <TokenSparkline tokenAddress={token.tokenAddress} />
+        )}
+      </div>
+
+      {/* Right: USD value, 30d change */}
+      <div className="flex flex-col items-end shrink-0 w-20">
+        {token.usdValue !== undefined ? (
+          <p className="text-sm sm:text-base font-medium">
             ${formatUsd(token.usdValue)}
           </p>
+        ) : (
+          <p className="text-sm sm:text-base font-medium text-muted-foreground">—</p>
         )}
-        <p className="text-xs text-muted-foreground">{formatBalance(balance)}</p>
+        {token.tokenAddress ? (
+          <Token30dChange tokenAddress={token.tokenAddress} />
+        ) : (
+          <p className="text-xs text-muted-foreground">—</p>
+        )}
       </div>
     </div>
   )
@@ -114,43 +115,58 @@ const LpTokenItem = memo(function LpTokenItem({ balance, usdValue, isLoading }: 
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-between py-2 gap-3 animate-pulse">
-        <div className="flex items-center gap-3">
-          <div className="h-9 w-9 rounded-full bg-muted" />
-          <div className="space-y-1.5">
-            <div className="h-4 w-16 bg-muted rounded" />
-            <div className="h-3 w-24 bg-muted rounded" />
+      <div className="flex items-center py-2 gap-3 animate-pulse">
+        <div className="flex items-center gap-3 w-32 shrink-0">
+          <div className="h-9 w-9 rounded-full bg-muted shrink-0" />
+          <div className="space-y-1.5 flex-1 min-w-0">
+            <div className="h-4 w-full bg-muted rounded" />
+            <div className="h-3 w-16 bg-muted rounded" />
           </div>
         </div>
-        <div className="text-right space-y-1.5">
-          <div className="h-4 w-20 bg-muted rounded" />
-          <div className="h-3 w-16 bg-muted rounded ml-auto" />
+        <div className="flex-1 flex justify-center">
+          <div className="h-8 w-full max-w-48 bg-muted rounded" />
+        </div>
+        <div className="flex flex-col items-end shrink-0 w-20 space-y-1.5">
+          <div className="h-4 w-16 bg-muted rounded" />
+          <div className="h-3 w-12 bg-muted rounded" />
         </div>
       </div>
     )
   }
 
   return (
-    <div className="relative flex items-center justify-between py-2 gap-3">
-      {/* Background sparkline for LP token */}
-      <TokenSparklineBg tokenAddress={LP_TOKEN_CONTRACT_ID} />
-
-      <div className="relative flex items-center gap-3 min-w-0">
-        <div className="h-9 w-9 rounded-full bg-purple-500/10 flex items-center justify-center">
+    <div className="flex items-center py-2 gap-3">
+      {/* Left: Logo, name, balance */}
+      <div className="flex items-center gap-3 min-w-0 w-32 shrink-0">
+        <div className="h-9 w-9 rounded-full bg-purple-500/10 flex items-center justify-center shrink-0">
           <Droplets className="h-5 w-5 text-purple-500" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="font-medium truncate">BLND-USDC LP</p>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <p className="text-sm sm:text-base font-medium truncate cursor-help">LP</p>
+            </TooltipTrigger>
+            <TooltipContent>BLND-USDC LP</TooltipContent>
+          </Tooltip>
           <p className="text-xs text-muted-foreground truncate">
-            blend.capital
+            {formatBalance(balanceNum)}
           </p>
         </div>
       </div>
-      <div className="relative text-right shrink-0">
-        {usdValue !== undefined && usdValue > 0 && (
-          <p className="font-medium">${formatUsd(usdValue)}</p>
+
+      {/* Middle: Sparkline - centered */}
+      <div className="flex-1 flex justify-center">
+        <TokenSparkline tokenAddress={LP_TOKEN_CONTRACT_ID} />
+      </div>
+
+      {/* Right: USD value, 30d change */}
+      <div className="flex flex-col items-end shrink-0 w-20">
+        {usdValue !== undefined ? (
+          <p className="text-sm sm:text-base font-medium">${formatUsd(usdValue)}</p>
+        ) : (
+          <p className="text-sm sm:text-base font-medium text-muted-foreground">—</p>
         )}
-        <p className="text-xs text-muted-foreground">{formatBalance(balanceNum)}</p>
+        <Token30dChange tokenAddress={LP_TOKEN_CONTRACT_ID} />
       </div>
     </div>
   )

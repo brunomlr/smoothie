@@ -1,4 +1,4 @@
-import { Home, TrendingUp, Compass, History, Settings, LucideIcon } from "lucide-react"
+import { Home, TrendingUp, Compass, History, Settings, Wallet, LucideIcon } from "lucide-react"
 
 export interface NavItem {
   title: string
@@ -11,6 +11,11 @@ export const navItems: NavItem[] = [
     title: "Home",
     href: "/",
     icon: Home,
+  },
+  {
+    title: "Wallet",
+    href: "/wallet",
+    icon: Wallet,
   },
   {
     title: "Performance",

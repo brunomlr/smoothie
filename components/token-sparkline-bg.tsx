@@ -2,15 +2,16 @@
 
 import { useMemo } from "react"
 import { useQuery } from "@tanstack/react-query"
-import { AreaChart, Area, ResponsiveContainer, YAxis } from "recharts"
+import { LineChart, Line, ResponsiveContainer, YAxis } from "recharts"
 import { fetchWithTimeout } from "@/lib/fetch-utils"
+import { TrendingUp, TrendingDown, Minus } from "lucide-react"
 
 interface PriceDataPoint {
   date: string
   price: number
 }
 
-interface TokenSparklineBgProps {
+interface TokenSparklineProps {
   tokenAddress: string
   className?: string
 }
@@ -18,7 +19,7 @@ interface TokenSparklineBgProps {
 async function fetchTokenPriceHistory(tokenAddress: string): Promise<PriceDataPoint[]> {
   const params = new URLSearchParams({
     token: tokenAddress,
-    days: "30", // 30 days for background sparkline
+    days: "30",
   })
 
   const response = await fetchWithTimeout(`/api/token-price-history?${params}`)
@@ -30,57 +31,102 @@ async function fetchTokenPriceHistory(tokenAddress: string): Promise<PriceDataPo
   return data.history || []
 }
 
-export function TokenSparklineBg({
+// Calculate 30d change percentage
+function calculate30dChange(priceHistory: PriceDataPoint[]): { percentage: number; trend: "up" | "down" | "unchanged" } {
+  if (!priceHistory?.length || priceHistory.length < 2) {
+    return { percentage: 0, trend: "unchanged" }
+  }
+  const startPrice = priceHistory[0].price
+  const endPrice = priceHistory[priceHistory.length - 1].price
+
+  if (startPrice === 0) {
+    return { percentage: 0, trend: "unchanged" }
+  }
+
+  const percentage = ((endPrice - startPrice) / startPrice) * 100
+
+  // Consider changes less than 0.01% as unchanged
+  if (Math.abs(percentage) < 0.01) {
+    return { percentage: 0, trend: "unchanged" }
+  }
+
+  return {
+    percentage,
+    trend: percentage > 0 ? "up" : "down"
+  }
+}
+
+// Inline sparkline component
+export function TokenSparkline({
   tokenAddress,
   className = "",
-}: TokenSparklineBgProps) {
+}: TokenSparklineProps) {
   const { data: priceHistory } = useQuery({
-    queryKey: ["token-sparkline-bg", tokenAddress],
+    queryKey: ["token-sparkline", tokenAddress],
     queryFn: () => fetchTokenPriceHistory(tokenAddress),
     staleTime: 60 * 60 * 1000, // 1 hour
     refetchInterval: false,
   })
 
-  // Determine if trend is positive or negative
-  const isPositive = useMemo(() => {
-    if (!priceHistory?.length || priceHistory.length < 2) return true
-    const startPrice = priceHistory[0].price
-    const endPrice = priceHistory[priceHistory.length - 1].price
-    return endPrice >= startPrice
-  }, [priceHistory])
+  const { trend } = useMemo(() => calculate30dChange(priceHistory || []), [priceHistory])
 
   if (!priceHistory?.length) {
     return null
   }
 
-  const strokeColor = isPositive ? "#22c55e" : "#ef4444" // green-500 or red-500
-  const fillColor = isPositive ? "#22c55e" : "#ef4444"
+  const strokeColor = trend === "up" ? "#22c55e" : trend === "down" ? "#ef4444" : "#a1a1aa" // green-500, red-500, zinc-400
 
   return (
-    <div className={`absolute top-1/2 -translate-y-1/2 h-8 left-[-16px] right-[70px] overflow-visible pointer-events-none ${className}`}>
+    <div className={`h-8 w-full max-w-48 ${className}`}>
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart
+        <LineChart
           data={priceHistory}
-          margin={{ top: 0, right: 0, bottom: 0, left: 0 }}
+          margin={{ top: 2, right: 2, bottom: 2, left: 2 }}
         >
-            <defs>
-              <linearGradient id={`gradient-${tokenAddress}`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={fillColor} stopOpacity={0.15} />
-                <stop offset="100%" stopColor={fillColor} stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <YAxis domain={["dataMin", "dataMax"]} hide />
-            <Area
-              type="monotone"
-              dataKey="price"
-              stroke={strokeColor}
-              strokeWidth={1}
-              strokeOpacity={0.3}
-              fill={`url(#gradient-${tokenAddress})`}
-              isAnimationActive={false}
-            />
-        </AreaChart>
+          <YAxis domain={["dataMin", "dataMax"]} hide />
+          <Line
+            type="monotone"
+            dataKey="price"
+            stroke={strokeColor}
+            strokeWidth={1.5}
+            dot={false}
+            isAnimationActive={false}
+          />
+        </LineChart>
       </ResponsiveContainer>
     </div>
   )
 }
+
+// 30d change indicator component
+export function Token30dChange({
+  tokenAddress,
+}: {
+  tokenAddress: string
+}) {
+  const { data: priceHistory } = useQuery({
+    queryKey: ["token-sparkline", tokenAddress],
+    queryFn: () => fetchTokenPriceHistory(tokenAddress),
+    staleTime: 60 * 60 * 1000, // 1 hour
+    refetchInterval: false,
+  })
+
+  const { percentage, trend } = useMemo(() => calculate30dChange(priceHistory || []), [priceHistory])
+
+  if (!priceHistory?.length) {
+    return null
+  }
+
+  const colorClass = trend === "up" ? "text-green-500" : trend === "down" ? "text-red-500" : "text-muted-foreground"
+  const Icon = trend === "up" ? TrendingUp : trend === "down" ? TrendingDown : Minus
+
+  return (
+    <div className={`flex items-center gap-0.5 text-xs ${colorClass}`}>
+      <Icon className="h-3 w-3" />
+      <span>{Math.abs(percentage).toFixed(1)}%</span>
+    </div>
+  )
+}
+
+// Legacy export for backwards compatibility
+export const TokenSparklineBg = TokenSparkline
