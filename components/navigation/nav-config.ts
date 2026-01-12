@@ -1,4 +1,4 @@
-import { Home, TrendingUp, Compass, History, Settings, LucideIcon } from "lucide-react"
+import { Home, TrendingUp, Compass, History, Settings, WalletCards, LucideIcon } from "lucide-react"
 
 export interface NavItem {
   title: string
@@ -6,7 +6,8 @@ export interface NavItem {
   icon: LucideIcon
 }
 
-export const navItems: NavItem[] = [
+// Primary items shown in bottom nav
+export const primaryNavItems: NavItem[] = [
   {
     title: "Home",
     href: "/",
@@ -23,6 +24,15 @@ export const navItems: NavItem[] = [
     icon: Compass,
   },
   {
+    title: "Wallet",
+    href: "/wallet",
+    icon: WalletCards,
+  },
+]
+
+// Secondary items shown in "More" menu
+export const secondaryNavItems: NavItem[] = [
+  {
     title: "Activity",
     href: "/activity",
     icon: History,
@@ -33,3 +43,6 @@ export const navItems: NavItem[] = [
     icon: Settings,
   },
 ]
+
+// All items combined (for sidebar)
+export const navItems: NavItem[] = [...primaryNavItems, ...secondaryNavItems]

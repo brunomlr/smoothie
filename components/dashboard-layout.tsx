@@ -32,6 +32,8 @@ export function DashboardLayout({
 
   // Get page title for non-home pages
   const isHomePage = pathname === "/"
+  const isSettingsPage = pathname === "/settings" || pathname.startsWith("/settings/")
+  const showFooter = isHomePage || isSettingsPage
   const currentNavItem = navItems.find(
     (item) => item.href !== "/" && pathname.startsWith(item.href)
   )
@@ -127,7 +129,7 @@ export function DashboardLayout({
         )}
       </main>
 
-      <Footer />
+      {showFooter && <Footer />}
     </div>
   )
 }

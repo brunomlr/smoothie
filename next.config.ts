@@ -8,6 +8,11 @@ const nextConfig: NextConfig = {
         hostname: "id.lobstr.co",
         pathname: "/*.png",
       },
+      {
+        protocol: "https",
+        hostname: "stellar.expert",
+        pathname: "/explorer/**",
+      },
     ],
   },
   // Exclude Node.js-only packages from client-side bundling (WalletConnect dependencies)
