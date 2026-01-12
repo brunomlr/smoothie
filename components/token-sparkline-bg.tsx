@@ -2,9 +2,10 @@
 
 import { useMemo } from "react"
 import { useQuery } from "@tanstack/react-query"
-import { LineChart, Line, ResponsiveContainer, YAxis, Tooltip } from "recharts"
+import { LineChart, Line, ResponsiveContainer, YAxis, Tooltip as RechartsTooltip } from "recharts"
 import { fetchWithTimeout } from "@/lib/fetch-utils"
 import { TrendingUp, TrendingDown } from "lucide-react"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 
 interface PriceDataPoint {
   date: string
@@ -109,14 +110,14 @@ export function TokenSparkline({
   const strokeColor = trend === "up" ? "#22c55e" : trend === "down" ? "#f87171" : "rgba(255, 255, 255, 0.25)" // green-500, red-400, white with low opacity
 
   return (
-    <div className={`h-8 w-full max-w-48 ${className}`}>
+    <div className={`h-6 w-full max-w-48 ${className}`}>
       <ResponsiveContainer width="100%" height="100%">
         <LineChart
           data={priceHistory}
           margin={{ top: 2, right: 2, bottom: 2, left: 2 }}
         >
           <YAxis domain={["dataMin", "dataMax"]} hide />
-          <Tooltip
+          <RechartsTooltip
             content={<SparklineTooltip />}
             cursor={{ stroke: "rgba(255, 255, 255, 0.2)", strokeWidth: 1 }}
           />
@@ -158,10 +159,15 @@ export function Token30dChange({
   const Icon = trend === "up" ? TrendingUp : trend === "down" ? TrendingDown : null
 
   return (
-    <div className={`flex items-center gap-0.5 text-xs ${colorClass}`}>
-      {Icon && <Icon className="h-3 w-3" />}
-      <span>{Math.abs(percentage).toFixed(1)}%</span>
-    </div>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div className={`flex items-center gap-0.5 text-xs ${colorClass} cursor-default`}>
+          {Icon && <Icon className="h-3 w-3" />}
+          <span>{Math.abs(percentage).toFixed(1)}%</span>
+        </div>
+      </TooltipTrigger>
+      <TooltipContent>30-day price change</TooltipContent>
+    </Tooltip>
   )
 }
 
