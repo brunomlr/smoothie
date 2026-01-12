@@ -29,9 +29,12 @@ interface ApyHistoryResponse {
 /**
  * Calculate APY from consecutive b_rate values
  * APY = ((b_rate_today / b_rate_yesterday) ^ 365 - 1) * 100
+ *
+ * Handles gaps in trading activity by detecting forward-filled data (null rate_timestamp)
+ * and spreading the accumulated interest over the actual elapsed days.
  */
 function calculateApyFromRates(
-  rates: { rate_date: string; b_rate: number | null }[]
+  rates: { rate_date: string; b_rate: number | null; rate_timestamp: string | null }[]
 ): ApyDataPoint[] {
   // Sort by date ascending
   const sorted = [...rates].sort(
@@ -40,27 +43,49 @@ function calculateApyFromRates(
 
   const result: ApyDataPoint[] = []
   let lastApy = 0
+  let lastRealEventIndex = 0 // Track the last row with actual on-chain data
+
+  // Find first row with real data to use as baseline
+  for (let i = 0; i < sorted.length; i++) {
+    if (sorted[i].rate_timestamp !== null && sorted[i].b_rate !== null) {
+      lastRealEventIndex = i
+      break
+    }
+  }
 
   for (let i = 1; i < sorted.length; i++) {
-    const prevRate = sorted[i - 1].b_rate
     const currRate = sorted[i].b_rate
+    const currHasRealData = sorted[i].rate_timestamp !== null
 
-    if (prevRate && currRate && prevRate > 0) {
-      const dailyReturn = currRate / prevRate
-      // Annualize: (1 + daily_return) ^ 365 - 1
-      const apy = (Math.pow(dailyReturn, 365) - 1) * 100
-      lastApy = apy
-      result.push({
-        date: sorted[i].rate_date,
-        apy: Math.max(0, apy), // APY shouldn't be negative for supply
-      })
-    } else {
-      // Carry forward previous APY if data is missing
-      result.push({
-        date: sorted[i].rate_date,
-        apy: lastApy,
-      })
+    if (currHasRealData && currRate !== null) {
+      // This row has actual on-chain data
+      const prevRate = sorted[lastRealEventIndex].b_rate
+
+      if (prevRate && prevRate > 0) {
+        // Calculate actual days elapsed since last real event
+        const prevDate = new Date(sorted[lastRealEventIndex].rate_date)
+        const currDate = new Date(sorted[i].rate_date)
+        const daysElapsed = Math.max(
+          1,
+          Math.round((currDate.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24))
+        )
+
+        // Calculate daily return spread over actual elapsed days
+        const totalReturn = currRate / prevRate
+        const dailyReturn = Math.pow(totalReturn, 1 / daysElapsed)
+        const apy = (Math.pow(dailyReturn, 365) - 1) * 100
+
+        lastApy = Math.max(0, apy)
+      }
+
+      lastRealEventIndex = i
     }
+
+    // Always add a data point for each date (for chart continuity)
+    result.push({
+      date: sorted[i].rate_date,
+      apy: lastApy,
+    })
   }
 
   return result
