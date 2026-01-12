@@ -2,9 +2,9 @@
 
 import { useMemo } from "react"
 import { useQuery } from "@tanstack/react-query"
-import { LineChart, Line, ResponsiveContainer, YAxis } from "recharts"
+import { LineChart, Line, ResponsiveContainer, YAxis, Tooltip } from "recharts"
 import { fetchWithTimeout } from "@/lib/fetch-utils"
-import { TrendingUp, TrendingDown, Minus } from "lucide-react"
+import { TrendingUp, TrendingDown } from "lucide-react"
 
 interface PriceDataPoint {
   date: string
@@ -29,6 +29,38 @@ async function fetchTokenPriceHistory(tokenAddress: string): Promise<PriceDataPo
 
   const data = await response.json()
   return data.history || []
+}
+
+// Format price for display
+function formatPrice(price: number): string {
+  if (price >= 1) {
+    return `$${price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  } else if (price >= 0.01) {
+    return `$${price.toFixed(4)}`
+  } else {
+    return `$${price.toFixed(6)}`
+  }
+}
+
+// Format date for tooltip
+function formatDate(dateStr: string): string {
+  const date = new Date(dateStr)
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" })
+}
+
+// Custom tooltip component
+function SparklineTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload: PriceDataPoint }> }) {
+  if (!active || !payload?.length) {
+    return null
+  }
+
+  const data = payload[0].payload
+  return (
+    <div className="rounded-md bg-zinc-900 border border-zinc-700 px-2 py-1 shadow-lg">
+      <p className="text-xs text-zinc-400">{formatDate(data.date)}</p>
+      <p className="text-sm font-medium text-white">{formatPrice(data.price)}</p>
+    </div>
+  )
 }
 
 // Calculate 30d change percentage
@@ -74,7 +106,7 @@ export function TokenSparkline({
     return null
   }
 
-  const strokeColor = trend === "up" ? "#22c55e" : trend === "down" ? "#ef4444" : "#a1a1aa" // green-500, red-500, zinc-400
+  const strokeColor = trend === "up" ? "#22c55e" : trend === "down" ? "#f87171" : "rgba(255, 255, 255, 0.25)" // green-500, red-400, white with low opacity
 
   return (
     <div className={`h-8 w-full max-w-48 ${className}`}>
@@ -84,12 +116,17 @@ export function TokenSparkline({
           margin={{ top: 2, right: 2, bottom: 2, left: 2 }}
         >
           <YAxis domain={["dataMin", "dataMax"]} hide />
+          <Tooltip
+            content={<SparklineTooltip />}
+            cursor={{ stroke: "rgba(255, 255, 255, 0.2)", strokeWidth: 1 }}
+          />
           <Line
             type="monotone"
             dataKey="price"
             stroke={strokeColor}
             strokeWidth={1.5}
             dot={false}
+            activeDot={{ r: 3, fill: strokeColor }}
             isAnimationActive={false}
           />
         </LineChart>
@@ -117,12 +154,12 @@ export function Token30dChange({
     return null
   }
 
-  const colorClass = trend === "up" ? "text-green-500" : trend === "down" ? "text-red-500" : "text-muted-foreground"
-  const Icon = trend === "up" ? TrendingUp : trend === "down" ? TrendingDown : Minus
+  const colorClass = trend === "up" ? "text-green-500" : trend === "down" ? "text-red-400" : "text-white/25"
+  const Icon = trend === "up" ? TrendingUp : trend === "down" ? TrendingDown : null
 
   return (
     <div className={`flex items-center gap-0.5 text-xs ${colorClass}`}>
-      <Icon className="h-3 w-3" />
+      {Icon && <Icon className="h-3 w-3" />}
       <span>{Math.abs(percentage).toFixed(1)}%</span>
     </div>
   )

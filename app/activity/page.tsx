@@ -1,22 +1,30 @@
 "use client"
 
-import { Suspense, useEffect } from "react"
+import { Suspense, useEffect, useState } from "react"
 import { TransactionHistory } from "@/components/transaction-history"
+import { WalletActivityHistory } from "@/components/wallet-activity"
 import { PageTitle } from "@/components/page-title"
 import { useWalletState } from "@/hooks/use-wallet-state"
 import { useAnalytics } from "@/hooks/use-analytics"
 import { AuthenticatedPage } from "@/components/authenticated-page"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Card, CardContent } from "@/components/ui/card"
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 
 function HistoryContent() {
   const { capture } = useAnalytics()
   const { activeWallet } = useWalletState()
+  const [activeTab, setActiveTab] = useState("blend")
 
   // Track page view
   useEffect(() => {
     capture('page_viewed', { page: 'activity' })
   }, [capture])
+
+  const handleTabChange = (value: string) => {
+    setActiveTab(value)
+    capture('tab_changed', { tab: value, page: 'activity' })
+  }
 
   // Guard against null activeWallet during static generation
   // AuthenticatedPage will show the landing page if no wallet is connected
@@ -28,12 +36,33 @@ function HistoryContent() {
     <AuthenticatedPage>
       <div>
         <PageTitle>Activity</PageTitle>
-        <TransactionHistory
-          publicKey={activeWallet.publicKey}
-          limit={50}
-          showControls={true}
-          isDemoWallet={activeWallet.isDemoWallet}
-        />
+        <Tabs value={activeTab} onValueChange={handleTabChange}>
+          <TabsList className="grid w-full grid-cols-2 h-10 sm:h-11 mb-6 bg-transparent border">
+            <TabsTrigger value="blend">
+              Blend Activity
+            </TabsTrigger>
+            <TabsTrigger value="wallet">
+              Wallet Activity
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="blend">
+            <TransactionHistory
+              publicKey={activeWallet.publicKey}
+              limit={50}
+              showControls={true}
+              isDemoWallet={activeWallet.isDemoWallet}
+            />
+          </TabsContent>
+
+          <TabsContent value="wallet">
+            <WalletActivityHistory
+              publicKey={activeWallet.publicKey}
+              limit={50}
+              isDemoWallet={activeWallet.isDemoWallet}
+            />
+          </TabsContent>
+        </Tabs>
       </div>
     </AuthenticatedPage>
   )

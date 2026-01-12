@@ -41,8 +41,8 @@ async function fetchBalancesFromApi(walletAlias: string): Promise<TokenBalance[]
   return data.balances || []
 }
 
-// Fetch current token prices from database (by symbol)
-async function fetchCurrentPrices(): Promise<Map<string, TokenPriceInfo>> {
+// Fetch current token prices from database (fallback source)
+async function fetchDbPrices(): Promise<Map<string, TokenPriceInfo>> {
   try {
     const response = await fetch("/api/token-prices-current")
     if (!response.ok) {
@@ -51,7 +51,6 @@ async function fetchCurrentPrices(): Promise<Map<string, TokenPriceInfo>> {
     const data = await response.json()
     const prices = data.prices || {}
 
-    // Build map with validated entries
     const priceMap = new Map<string, TokenPriceInfo>()
     for (const [symbol, info] of Object.entries(prices)) {
       const priceInfo = info as { price?: number; address?: string }
@@ -63,9 +62,59 @@ async function fetchCurrentPrices(): Promise<Map<string, TokenPriceInfo>> {
       }
     }
     return priceMap
-  } catch {
+  } catch (error) {
+    console.error("[useHorizonBalances] DB prices fetch error:", error)
     return new Map()
   }
+}
+
+// Fetch current token prices - oracle first, then merge with DB prices (for LP token and fallbacks)
+async function fetchOraclePrices(
+  assets: Array<{ code: string; issuer: string | null }>
+): Promise<Map<string, TokenPriceInfo>> {
+  const priceMap = new Map<string, TokenPriceInfo>()
+
+  // Always fetch DB prices first (includes LP token and other tokens not in oracle)
+  const dbPrices = await fetchDbPrices()
+
+  // Add all DB prices to the map (will be overwritten by oracle prices for supported tokens)
+  for (const [symbol, priceInfo] of dbPrices.entries()) {
+    priceMap.set(symbol, priceInfo)
+  }
+
+  if (assets.length === 0) {
+    return priceMap
+  }
+
+  // Then try the Reflector oracle for supported tokens (oracle prices take priority)
+  try {
+    const response = await fetch("/api/oracle-prices", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ assets }),
+    })
+
+    if (response.ok) {
+      const data = await response.json()
+      const prices = data.prices || {}
+
+      for (const [symbol, info] of Object.entries(prices)) {
+        const priceInfo = info as { price?: number; contractId?: string }
+        if (typeof priceInfo.price === "number" && typeof priceInfo.contractId === "string") {
+          // Oracle prices override DB prices
+          priceMap.set(symbol, {
+            price: priceInfo.price,
+            address: priceInfo.contractId,
+          })
+        }
+      }
+    }
+  } catch (error) {
+    console.error("[useHorizonBalances] Oracle prices fetch error:", error)
+    // DB prices already in map as fallback
+  }
+
+  return priceMap
 }
 
 // Fetch home_domain for a list of issuer addresses
@@ -149,10 +198,17 @@ export function useHorizonBalances(userAddress: string | undefined) {
 
       // Demo wallet: fetch from backend API (address resolution happens server-side)
       if (isDemo) {
-        const [balances, priceMap] = await Promise.all([
-          fetchBalancesFromApi(userAddress),
-          fetchCurrentPrices(),
-        ])
+        const balances = await fetchBalancesFromApi(userAddress)
+
+        // Build asset list for oracle price fetch (exclude LP shares - they don't have prices)
+        const assets = balances
+          .filter((b) => b.assetType !== "liquidity_pool_shares")
+          .map((b) => ({
+            code: b.assetCode,
+            issuer: b.assetIssuer,
+          }))
+
+        const priceMap = await fetchOraclePrices(assets)
 
         // Add USD values and token addresses to balances
         const enrichedBalances = balances.map((balance) =>
@@ -209,11 +265,19 @@ export function useHorizonBalances(userAddress: string | undefined) {
           ),
         ]
 
-        // Fetch home_domain for all issuers
-        const homeDomainMap = await fetchHomeDomainsFromHorizon(uniqueIssuers)
+        // Build asset list for oracle price fetch (exclude LP shares - they don't have prices)
+        const assets = balances
+          .filter((b) => b.assetType !== "liquidity_pool_shares")
+          .map((b) => ({
+            code: b.assetCode,
+            issuer: b.assetIssuer,
+          }))
 
-        // Fetch current prices by symbol
-        const priceMap = await fetchCurrentPrices()
+        // Fetch home_domain and oracle prices in parallel
+        const [homeDomainMap, priceMap] = await Promise.all([
+          fetchHomeDomainsFromHorizon(uniqueIssuers),
+          fetchOraclePrices(assets),
+        ])
 
         // Attach home_domain, USD value, and token address to each balance
         const balancesWithMetadata = balances.map((balance) => {

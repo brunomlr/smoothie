@@ -1,18 +1,24 @@
 /**
  * Token Icon API Route
  *
- * Fetches token icon from the issuer's stellar.toml file.
+ * Serves token icons with local-first approach:
  * Flow:
- * 1. Get issuer account from Horizon to find home_domain
- * 2. Fetch stellar.toml from home_domain
- * 3. Parse TOML to find the token's image URL
- * 4. Redirect to that image URL
+ * 1. Check if a local icon exists in /public/tokens/{code}.png
+ * 2. If local icon exists, redirect to it
+ * 3. Try Stellar Expert API (aggregated asset metadata)
+ * 4. Fall back to stellar.toml lookup:
+ *    a. Get issuer account from Horizon to find home_domain
+ *    b. Fetch stellar.toml from home_domain
+ *    c. Parse TOML to find the token's image URL
+ *    d. Redirect to that image URL
  *
  * Caches results aggressively (1 week) since token logos rarely change.
  */
 
 import { NextRequest, NextResponse } from "next/server"
 import { getHorizonServer } from "@/lib/stellar/horizon"
+import { existsSync } from "fs"
+import { join } from "path"
 
 // Cache for 1 week
 const CACHE_MAX_AGE = 60 * 60 * 24 * 7
@@ -35,6 +41,54 @@ function getFromMemoryCache(key: string): string | null | undefined {
 
 function setMemoryCache(key: string, url: string | null): void {
   iconUrlCache.set(key, { url, timestamp: Date.now() })
+}
+
+// Check if a local icon exists for the given asset code
+function getLocalIconPath(assetCode: string): string | null {
+  const filename = `${assetCode.toLowerCase()}.png`
+  const localPath = join(process.cwd(), "public", "tokens", filename)
+
+  if (existsSync(localPath)) {
+    return `/tokens/${filename}`
+  }
+  return null
+}
+
+// Try to get icon URL from Stellar Expert API
+async function getIconFromStellarExpert(code: string, issuer: string): Promise<string | null> {
+  try {
+    // Stellar Expert uses type 1 for native-like assets and 2 for credit alphanumeric
+    // Most assets are type 1, but we'll try type 1 first then type 2 if needed
+    const assetId = `${code}-${issuer}-1`
+    const url = `https://api.stellar.expert/explorer/public/asset/meta?asset[]=${encodeURIComponent(assetId)}`
+
+    const response = await fetch(url, {
+      headers: {
+        Accept: "application/json",
+      },
+      signal: AbortSignal.timeout(5000), // 5 second timeout
+    })
+
+    if (!response.ok) {
+      return null
+    }
+
+    const data = await response.json()
+    const records = data?._embedded?.records
+
+    if (records && records.length > 0) {
+      const record = records[0]
+      const imageUrl = record?.toml_info?.image
+      if (imageUrl) {
+        return imageUrl
+      }
+    }
+
+    return null
+  } catch (error) {
+    console.error("[Token Icon API] Stellar Expert lookup failed:", error)
+    return null
+  }
 }
 
 // Simple TOML parser for stellar.toml [[CURRENCIES]] section
@@ -97,9 +151,22 @@ export async function GET(request: NextRequest) {
     )
   }
 
+  // Step 1: Check for local icon first (highest priority)
+  const localIconPath = getLocalIconPath(code)
+  if (localIconPath) {
+    // Build absolute URL for the local icon
+    const baseUrl = request.nextUrl.origin
+    return NextResponse.redirect(`${baseUrl}${localIconPath}`, {
+      status: 302,
+      headers: {
+        "Cache-Control": `public, max-age=${CACHE_MAX_AGE}`,
+      },
+    })
+  }
+
   const cacheKey = getCacheKey(code, issuer)
 
-  // Check memory cache first
+  // Step 2: Check memory cache for TOML-resolved URLs
   const cachedUrl = getFromMemoryCache(cacheKey)
   if (cachedUrl !== undefined) {
     if (cachedUrl === null) {
@@ -124,7 +191,19 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Step 1: Get issuer account to find home_domain
+    // Step 3: Try Stellar Expert API first (faster, aggregated data)
+    const stellarExpertUrl = await getIconFromStellarExpert(code, issuer)
+    if (stellarExpertUrl) {
+      setMemoryCache(cacheKey, stellarExpertUrl)
+      return NextResponse.redirect(stellarExpertUrl, {
+        status: 302,
+        headers: {
+          "Cache-Control": `public, max-age=${CACHE_MAX_AGE}`,
+        },
+      })
+    }
+
+    // Step 4a: Fall back to TOML lookup - Get issuer account to find home_domain
     const server = getHorizonServer()
     let homeDomain: string | undefined
 
@@ -158,7 +237,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Step 2: Fetch stellar.toml from home_domain
+    // Step 4b: Fetch stellar.toml from home_domain
     const tomlUrl = `https://${homeDomain}/.well-known/stellar.toml`
     let tomlContent: string
 
@@ -189,7 +268,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Step 3: Parse TOML to find image URL
+    // Step 4c: Parse TOML to find image URL
     const imageUrl = parseTomlForImage(tomlContent, code, issuer)
 
     if (!imageUrl) {
