@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, Suspense, useEffect } from "react"
+import { useState, Suspense, useEffect, useCallback } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { PiggyBank, ShieldCheck, Layers } from "lucide-react"
 import { ExploreFilters } from "@/components/explore/explore-filters"
@@ -17,6 +18,7 @@ import type { ExploreFilters as ExploreFiltersType } from "@/types/explore"
 import { PageTitle } from "@/components/page-title"
 
 function ExploreContent() {
+  const queryClient = useQueryClient()
   const { capture } = useAnalytics()
   const [activeTab, setActiveTab] = useState<"supply" | "backstops" | "pools">("supply")
   const [filters, setFilters] = useState<ExploreFiltersType>({
@@ -37,8 +39,14 @@ function ExploreContent() {
     capture('tab_changed', { tab, page: 'explore' })
   }
 
+  const handleRefresh = useCallback(async () => {
+    capture('pull_to_refresh', { page: 'explore' })
+
+    await queryClient.invalidateQueries({ queryKey: ["explore"] })
+  }, [queryClient, capture])
+
   return (
-    <AuthenticatedPage>
+    <AuthenticatedPage onRefresh={handleRefresh}>
       <div>
         <PageTitle>Explore</PageTitle>
 

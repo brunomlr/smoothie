@@ -1,6 +1,7 @@
 "use client"
 
-import { Suspense, useEffect, useState } from "react"
+import { Suspense, useEffect, useState, useCallback } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import { TransactionHistory } from "@/components/transaction-history"
 import { WalletActivityHistory } from "@/components/wallet-activity"
 import { PageTitle } from "@/components/page-title"
@@ -12,6 +13,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 
 function HistoryContent() {
+  const queryClient = useQueryClient()
   const { capture } = useAnalytics()
   const { activeWallet } = useWalletState()
   const [activeTab, setActiveTab] = useState("blend")
@@ -26,6 +28,18 @@ function HistoryContent() {
     capture('tab_changed', { tab: value, page: 'activity' })
   }
 
+  const handleRefresh = useCallback(async () => {
+    if (!activeWallet?.publicKey) return
+
+    capture('pull_to_refresh', { page: 'activity' })
+
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["user-actions", activeWallet.publicKey] }),
+      queryClient.invalidateQueries({ queryKey: ["wallet-operations", activeWallet.publicKey] }),
+      queryClient.invalidateQueries({ queryKey: ["historical-prices"] }),
+    ])
+  }, [activeWallet?.publicKey, queryClient, capture])
+
   // Guard against null activeWallet during static generation
   // AuthenticatedPage will show the landing page if no wallet is connected
   if (!activeWallet) {
@@ -33,7 +47,7 @@ function HistoryContent() {
   }
 
   return (
-    <AuthenticatedPage>
+    <AuthenticatedPage onRefresh={handleRefresh}>
       <div>
         <PageTitle>Activity</PageTitle>
         <Tabs value={activeTab} onValueChange={handleTabChange}>

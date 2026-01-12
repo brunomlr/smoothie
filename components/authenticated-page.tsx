@@ -2,6 +2,7 @@
 
 import { LandingPage } from "@/components/landing-page"
 import { DashboardLayout } from "@/components/dashboard-layout"
+import { PullToRefresh } from "@/components/pull-to-refresh"
 import { useWalletState } from "@/hooks/use-wallet-state"
 
 interface AuthenticatedPageProps {
@@ -49,6 +50,10 @@ export function AuthenticatedPage({
   }
 
   if (!withLayout) {
+    // Support pull-to-refresh even without DashboardLayout
+    if (onRefresh) {
+      return <PullToRefresh onRefresh={onRefresh}>{children}</PullToRefresh>
+    }
     return <>{children}</>
   }
 

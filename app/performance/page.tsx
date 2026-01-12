@@ -1,6 +1,7 @@
 "use client"
 
-import { useMemo, Suspense, useEffect, useState } from "react"
+import { useMemo, Suspense, useEffect, useState, useCallback } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import { TrendingUp, Shield, PiggyBank, Calendar, Banknote } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -38,6 +39,7 @@ function formatDate(dateStr: string): string {
 
 
 function RealizedYieldContent() {
+  const queryClient = useQueryClient()
   const { capture } = useAnalytics()
   const { format: formatInCurrency } = useCurrencyPreference()
   const { preferences: displayPreferences } = useDisplayPreferences()
@@ -645,8 +647,21 @@ function RealizedYieldContent() {
   const hasCurrentPositions = unrealizedData.totalCurrentUsd > 0
   const totalPnlPositive = displayPnl.totalPnl >= 0
 
+  const handleRefresh = useCallback(async () => {
+    capture('pull_to_refresh', { page: 'performance' })
+
+    // Invalidate all performance-related queries for selected wallets
+    await Promise.all([
+      ...selectedPublicKeys.map(pk => queryClient.invalidateQueries({ queryKey: ["blend-wallet-snapshot", pk] })),
+      ...selectedPublicKeys.map(pk => queryClient.invalidateQueries({ queryKey: ["realized-yield", pk] })),
+      ...selectedPublicKeys.map(pk => queryClient.invalidateQueries({ queryKey: ["backstop-cost-basis", pk] })),
+      ...selectedPublicKeys.map(pk => queryClient.invalidateQueries({ queryKey: ["balance-history-batch", pk] })),
+      queryClient.invalidateQueries({ queryKey: ["pnl-change-chart"] }),
+    ])
+  }, [selectedPublicKeys, queryClient, capture])
+
   return (
-    <AuthenticatedPage>
+    <AuthenticatedPage onRefresh={handleRefresh}>
       <TooltipProvider>
       <div>
         <PageTitle badge="Beta">Performance</PageTitle>

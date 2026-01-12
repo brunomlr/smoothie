@@ -1,9 +1,9 @@
 "use client"
 
-import { useEffect, useMemo } from "react"
+import { useEffect, useMemo, useCallback } from "react"
 import { useParams } from "next/navigation"
 import Link from "next/link"
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { ArrowLeft, TrendingUp, TrendingDown, AlertTriangle, ExternalLink, Flame, Shield, Clock } from "lucide-react"
 import { ApySparkline } from "@/components/apy-sparkline"
 import { BackstopApySparkline } from "@/components/backstop-apy-sparkline"
@@ -22,6 +22,7 @@ import { usePoolsOnly } from "@/hooks/use-metadata"
 import { TokenLogo } from "@/components/token-logo"
 import { useCurrencyPreference } from "@/hooks/use-currency-preference"
 import { useWalletState } from "@/hooks/use-wallet-state"
+import { useAnalytics } from "@/hooks/use-analytics"
 import { AuthenticatedPage } from "@/components/authenticated-page"
 
 // Extended position type with yield data
@@ -728,6 +729,8 @@ function PageHeader({ title, subtitle, explorerUrl }: { title: string; subtitle?
 export default function PoolDetailsPage() {
   const params = useParams()
   const poolId = decodeURIComponent(params.poolId as string)
+  const queryClient = useQueryClient()
+  const { capture } = useAnalytics()
 
   // Use the shared wallet state hook
   const { activeWallet } = useWalletState()
@@ -984,6 +987,19 @@ export default function PoolDetailsPage() {
   // Get pool info from tracked pools for explorer link
   const poolInfo = trackedPools.find(p => p.id === poolId)
 
+  const handleRefresh = useCallback(async () => {
+    if (!activeWallet?.publicKey) return
+
+    capture('pull_to_refresh', { page: 'pool', pool_id: poolId })
+
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["blend-wallet-snapshot", activeWallet.publicKey] }),
+      queryClient.invalidateQueries({ queryKey: ["backstop-cost-basis", activeWallet.publicKey] }),
+      queryClient.invalidateQueries({ queryKey: ["pool-balance-history-batch", activeWallet.publicKey, poolId] }),
+      queryClient.invalidateQueries({ queryKey: ["claimed-blnd", activeWallet.publicKey] }),
+    ])
+  }, [activeWallet?.publicKey, poolId, queryClient, capture])
+
   // Render content based on state
   const renderContent = () => {
     if (isLoading) {
@@ -1092,7 +1108,7 @@ export default function PoolDetailsPage() {
   }
 
   return (
-    <AuthenticatedPage withLayout={false}>
+    <AuthenticatedPage withLayout={false} onRefresh={handleRefresh}>
       {renderContent()}
     </AuthenticatedPage>
   )

@@ -7,7 +7,7 @@ import { Networks } from "@creit-tech/stellar-wallets-kit/types"
 import { defaultModules } from "@creit-tech/stellar-wallets-kit/modules/utils"
 // WalletConnect is imported dynamically to avoid SSR issues with Node.js-only dependencies
 import { LedgerModule } from "@creit-tech/stellar-wallets-kit/modules/ledger"
-// import { HotWalletModule } from "@creit-tech/stellar-wallets-kit/modules/hotwallet"
+import { HotWalletModule } from "@creit-tech/stellar-wallets-kit/modules/hotwallet"
 
 // Polyfill Buffer for browser (required by Ledger and HotWallet modules)
 if (typeof window !== "undefined") {
@@ -60,6 +60,9 @@ async function ensureInitialized(network: Networks): Promise<void> {
 
       // Add Ledger module
       modules.push(new LedgerModule())
+
+      // Add HotWallet module
+      modules.push(new HotWalletModule())
 
       // Add WalletConnect module if project ID is available
       // Dynamic import to avoid SSR issues with Node.js-only dependencies
