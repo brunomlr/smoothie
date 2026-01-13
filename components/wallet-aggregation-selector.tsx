@@ -115,7 +115,7 @@ export function WalletAggregationSelector({
             {displayWallets.map((wallet, index) => (
               <div
                 key={wallet.id}
-                className="ring-2 ring-background rounded-md"
+                className="rounded-md"
                 style={{ zIndex: displayWallets.length - index }}
               >
                 <WalletAvatar
