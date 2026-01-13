@@ -85,8 +85,16 @@ export function BackstopChart({ items, isLoading }: BackstopChartProps) {
   const { containerRef, shouldRenderTooltip } = useTooltipDismiss()
 
   const chartData = useMemo(() => {
-    // Sort by total APY and take top 5
-    const sorted = [...items].sort((a, b) => b.totalApy - a.totalApy)
+    // Sort by total APY with 10k threshold: backstops with >=10k deposited ranked before backstops with <10k
+    const sorted = [...items].sort((a, b) => {
+      const aAboveThreshold = (a.totalDeposited ?? 0) >= 10000
+      const bAboveThreshold = (b.totalDeposited ?? 0) >= 10000
+
+      if (aAboveThreshold && !bAboveThreshold) return -1
+      if (!aAboveThreshold && bAboveThreshold) return 1
+
+      return b.totalApy - a.totalApy
+    })
     const top5 = sorted.slice(0, 5)
 
     return top5.map((item) => ({

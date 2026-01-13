@@ -39,6 +39,14 @@ function formatUsdFull(value: number | null): string {
 
 function sortItems(items: BackstopExploreItem[], sortBy: SortBy): BackstopExploreItem[] {
   return [...items].sort((a, b) => {
+    // Apply 10k threshold: backstops with >=10k deposited ranked before backstops with <10k
+    const aAboveThreshold = (a.totalDeposited ?? 0) >= 10000
+    const bAboveThreshold = (b.totalDeposited ?? 0) >= 10000
+
+    if (aAboveThreshold && !bAboveThreshold) return -1
+    if (!aAboveThreshold && bAboveThreshold) return 1
+
+    // Within the same threshold group, sort by the selected metric
     switch (sortBy) {
       case "apy":
         return b.interestApr - a.interestApr

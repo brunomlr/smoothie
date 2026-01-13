@@ -52,6 +52,14 @@ function formatPercentage(value: number): string {
 
 function sortItems(items: SupplyExploreItem[], sortBy: SortBy): SupplyExploreItem[] {
   return [...items].sort((a, b) => {
+    // Apply 10k threshold: items with >=10k supplied ranked before items with <10k
+    const aAboveThreshold = (a.totalSupplied ?? 0) >= 10000
+    const bAboveThreshold = (b.totalSupplied ?? 0) >= 10000
+
+    if (aAboveThreshold && !bAboveThreshold) return -1
+    if (!aAboveThreshold && bAboveThreshold) return 1
+
+    // Within the same threshold group, sort by the selected metric
     switch (sortBy) {
       case "apy":
         return (b.supplyApy ?? 0) - (a.supplyApy ?? 0)

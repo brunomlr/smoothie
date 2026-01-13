@@ -63,12 +63,20 @@ function computePoolItems(
     }
   }
 
-  // Sort pools by TVL descending, and sort tokens within each pool by supplied descending
+  // Sort pools by TVL descending with 10k threshold: pools with >=10k ranked before pools with <10k
   const pools = Array.from(poolMap.values())
   for (const pool of pools) {
     pool.tokens.sort((a, b) => b.totalSupplied - a.totalSupplied)
   }
-  return pools.sort((a, b) => b.totalTvl - a.totalTvl)
+  return pools.sort((a, b) => {
+    const aAboveThreshold = a.totalTvl >= 10000
+    const bAboveThreshold = b.totalTvl >= 10000
+
+    if (aAboveThreshold && !bAboveThreshold) return -1
+    if (!aAboveThreshold && bAboveThreshold) return 1
+
+    return b.totalTvl - a.totalTvl
+  })
 }
 
 /**

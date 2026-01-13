@@ -83,8 +83,16 @@ export function PoolsChart({ items, isLoading }: PoolsChartProps) {
   const { containerRef, shouldRenderTooltip } = useTooltipDismiss()
 
   const chartData = useMemo(() => {
-    // Sort by total TVL and take top 5
-    const sorted = [...items].sort((a, b) => b.totalTvl - a.totalTvl)
+    // Sort by total TVL with 10k threshold: pools with >=10k ranked before pools with <10k
+    const sorted = [...items].sort((a, b) => {
+      const aAboveThreshold = a.totalTvl >= 10000
+      const bAboveThreshold = b.totalTvl >= 10000
+
+      if (aAboveThreshold && !bAboveThreshold) return -1
+      if (!aAboveThreshold && bAboveThreshold) return 1
+
+      return b.totalTvl - a.totalTvl
+    })
     const top5 = sorted.slice(0, 5)
 
     return top5.map((item) => ({
