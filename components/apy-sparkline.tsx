@@ -146,7 +146,6 @@ export function ApySparkline({
               cursor={false}
               allowEscapeViewBox={{ x: true, y: true }}
               wrapperStyle={{ zIndex: 50 }}
-              offset={-70}
               position={{ y: -50 }}
             />
             <Line
