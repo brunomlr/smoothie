@@ -1,6 +1,6 @@
 "use client"
 
-import { memo, useMemo, useState } from "react"
+import { memo, useMemo, useState, useEffect } from "react"
 import { useWalletState } from "@/hooks/use-wallet-state"
 import { useHorizonBalances, type TokenBalance } from "@/hooks/use-horizon-balances"
 import { useTokenBalance } from "@/hooks/use-token-balance"
@@ -19,6 +19,10 @@ const LP_TOKEN_CONTRACT_ID = "CAS3FL6TLZKDGGSISDBWGGPXT3NRR4DYTZD7YOD3HMYO6LTJUV
 
 // Period type for sparkline display
 type SparklinePeriod = "24h" | "7d" | "1mo"
+
+// localStorage keys for persisting wallet state
+const STORAGE_KEY_PERIOD = "wallet-selected-period"
+const STORAGE_KEY_SHOW_PRICE = "wallet-show-price"
 
 // Format balance - only show extra decimals if value is non-zero but small
 function formatBalance(value: number): string {
@@ -248,8 +252,31 @@ export function WalletContent() {
   const { activeWallet, isHydrated } = useWalletState()
   const publicKey = activeWallet?.publicKey
   const { format: formatCurrency } = useCurrencyPreference()
-  const [selectedPeriod, setSelectedPeriod] = useState<SparklinePeriod>("1mo")
-  const [showPrice, setShowPrice] = useState(false)
+
+  // Initialize state from localStorage
+  const [selectedPeriod, setSelectedPeriod] = useState<SparklinePeriod>(() => {
+    if (typeof window === "undefined") return "1mo"
+    const saved = localStorage.getItem(STORAGE_KEY_PERIOD)
+    if (saved === "24h" || saved === "7d" || saved === "1mo") {
+      return saved
+    }
+    return "1mo"
+  })
+
+  const [showPrice, setShowPrice] = useState(() => {
+    if (typeof window === "undefined") return false
+    return localStorage.getItem(STORAGE_KEY_SHOW_PRICE) === "true"
+  })
+
+  // Persist selectedPeriod to localStorage
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY_PERIOD, selectedPeriod)
+  }, [selectedPeriod])
+
+  // Persist showPrice to localStorage
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY_SHOW_PRICE, String(showPrice))
+  }, [showPrice])
 
   // Toggle between showing price and percentage for all items
   const handlePriceToggle = () => setShowPrice((prev) => !prev)
@@ -315,7 +342,7 @@ export function WalletContent() {
   }
 
   return (
-    <div className="flex flex-col gap-4 pb-4 pt-8">
+    <div className="flex flex-col gap-4 pb-4 pt-8 @container/card">
       {/* Total Portfolio Value and Period Selector */}
       <div className="flex items-end justify-between gap-4 mb-2">
         <div>
@@ -323,7 +350,7 @@ export function WalletContent() {
           {isLoadingTotalValue ? (
             <div className="h-9 w-40 bg-muted rounded animate-pulse" />
           ) : (
-            <p className="text-3xl font-semibold tabular-nums">{formatCurrency(totalUsdValue)}</p>
+            <p className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl @[400px]/card:text-4xl">{formatCurrency(totalUsdValue)}</p>
           )}
         </div>
 
