@@ -9,6 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Separator } from "@/components/ui/separator"
 import { WalletAvatar } from "@/components/wallet-avatar"
 import { useWalletAvatarCustomization } from "@/hooks/use-wallet-avatar-customization"
+import { useWalletCustomNames } from "@/hooks/use-wallet-custom-names"
 import type { Wallet } from "@/types/wallet"
 
 interface WalletAggregationSelectorProps {
@@ -27,6 +28,7 @@ export function WalletAggregationSelector({
   const [open, setOpen] = React.useState(false)
   const [pendingSelection, setPendingSelection] = React.useState<string[]>(selectedWalletIds)
   const { getCustomization } = useWalletAvatarCustomization()
+  const { getDisplayName } = useWalletCustomNames()
 
   // Reset pending selection when popover opens
   React.useEffect(() => {
@@ -70,15 +72,13 @@ export function WalletAggregationSelector({
   }
 
   const getWalletDisplayName = (wallet: Wallet) => {
-    if (wallet.name) {
-      // Clean up old format names like "Watch XXXX...YYYY" or "Contract XXXX...YYYY"
-      // to just "Watch" or "Contract" since we show address separately
-      if (wallet.name.match(/^(Watch|Contract)\s+[A-Z0-9]{4}\.\.\.[A-Z0-9]{4}$/i)) {
-        return wallet.name.split(" ")[0]
-      }
-      return wallet.name
+    const displayName = getDisplayName(wallet)
+    // Clean up old format names like "Watch XXXX...YYYY" or "Contract XXXX...YYYY"
+    // to just "Watch" or "Contract" since we show address separately
+    if (displayName.match(/^(Watch|Contract)\s+[A-Z0-9]{4}\.\.\.[A-Z0-9]{4}$/i)) {
+      return displayName.split(" ")[0]
     }
-    return `${wallet.publicKey.slice(0, 4)}...${wallet.publicKey.slice(-4)}`
+    return displayName
   }
 
   const getTruncatedAddress = (address: string) => {

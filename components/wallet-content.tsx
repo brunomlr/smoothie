@@ -1,18 +1,21 @@
 "use client"
 
 import { memo, useMemo, useState, useEffect } from "react"
+import { useQueries } from "@tanstack/react-query"
 import { useWalletState } from "@/hooks/use-wallet-state"
-import { useHorizonBalances, type TokenBalance } from "@/hooks/use-horizon-balances"
+import { useHorizonBalances, type TokenBalance, type TokenPriceInfo } from "@/hooks/use-horizon-balances"
 import { useTokenBalance } from "@/hooks/use-token-balance"
 import { useBlendPositions } from "@/hooks/use-blend-positions"
 import { useCurrencyPreference } from "@/hooks/use-currency-preference"
 import { TokenLogo } from "@/components/token-logo"
 import { TokenSparkline, Token30dChange } from "@/components/token-sparkline-bg"
+import { WalletAllocationBar } from "@/components/wallet-allocation-bar"
 import { Card, CardContent } from "@/components/ui/card"
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Droplets } from "lucide-react"
 import { WalletTokensSkeleton } from "@/components/wallet-tokens/skeleton"
+import type { Wallet } from "@/types/wallet"
 
 // LP Token contract ID to check
 const LP_TOKEN_CONTRACT_ID = "CAS3FL6TLZKDGGSISDBWGGPXT3NRR4DYTZD7YOD3HMYO6LTJUVGRVEAM"
@@ -248,53 +251,246 @@ const LpTokenItem = memo(function LpTokenItem({ balance, usdValue, isLoading, fo
 })
 
 
-export function WalletContent() {
+interface WalletContentProps {
+  // Multi-wallet mode props
+  selectedWalletAddresses?: Array<{ walletId: string; publicKey: string }>
+  wallets?: Wallet[]
+  isMultiWallet?: boolean
+  walletSelector?: React.ReactNode
+}
+
+export function WalletContent({
+  selectedWalletAddresses,
+  wallets,
+  isMultiWallet = false,
+  walletSelector,
+}: WalletContentProps = {}) {
   const { activeWallet, isHydrated } = useWalletState()
   const publicKey = activeWallet?.publicKey
   const { format: formatCurrency } = useCurrencyPreference()
 
-  // Initialize state from localStorage
-  const [selectedPeriod, setSelectedPeriod] = useState<SparklinePeriod>(() => {
-    if (typeof window === "undefined") return "1mo"
-    const saved = localStorage.getItem(STORAGE_KEY_PERIOD)
-    if (saved === "24h" || saved === "7d" || saved === "1mo") {
-      return saved
+  // Initialize state with defaults (avoid localStorage in useState to prevent hydration mismatch)
+  const [selectedPeriod, setSelectedPeriod] = useState<SparklinePeriod>("1mo")
+  const [showPrice, setShowPrice] = useState(false)
+  const [hasLoadedFromStorage, setHasLoadedFromStorage] = useState(false)
+
+  // Load from localStorage after mount (client-side only)
+  useEffect(() => {
+    const savedPeriod = localStorage.getItem(STORAGE_KEY_PERIOD)
+    if (savedPeriod === "24h" || savedPeriod === "7d" || savedPeriod === "1mo") {
+      setSelectedPeriod(savedPeriod)
     }
-    return "1mo"
-  })
+    setShowPrice(localStorage.getItem(STORAGE_KEY_SHOW_PRICE) === "true")
+    setHasLoadedFromStorage(true)
+  }, [])
 
-  const [showPrice, setShowPrice] = useState(() => {
-    if (typeof window === "undefined") return false
-    return localStorage.getItem(STORAGE_KEY_SHOW_PRICE) === "true"
-  })
-
-  // Persist selectedPeriod to localStorage
+  // Persist selectedPeriod to localStorage (only after initial load)
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_PERIOD, selectedPeriod)
-  }, [selectedPeriod])
+    if (hasLoadedFromStorage) {
+      localStorage.setItem(STORAGE_KEY_PERIOD, selectedPeriod)
+    }
+  }, [selectedPeriod, hasLoadedFromStorage])
 
-  // Persist showPrice to localStorage
+  // Persist showPrice to localStorage (only after initial load)
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_SHOW_PRICE, String(showPrice))
-  }, [showPrice])
+    if (hasLoadedFromStorage) {
+      localStorage.setItem(STORAGE_KEY_SHOW_PRICE, String(showPrice))
+    }
+  }, [showPrice, hasLoadedFromStorage])
 
   // Toggle between showing price and percentage for all items
   const handlePriceToggle = () => setShowPrice((prev) => !prev)
 
-  // Fetch all tokens from Horizon (returns balances and price map)
+  // Single wallet mode: Fetch all tokens from Horizon
   const {
-    data: horizonData,
-    isLoading: isLoadingHorizon,
-  } = useHorizonBalances(publicKey)
+    data: singleHorizonData,
+    isLoading: isLoadingSingleHorizon,
+  } = useHorizonBalances(isMultiWallet ? undefined : publicKey)
 
-  // Fetch LP token balance via RPC
+  // Multi-wallet mode: Fetch balances for all selected wallets
+  // Note: We use a different queryKey prefix ("multiWalletBalances") to avoid conflicts
+  // with useHorizonBalances which returns a different data shape ({ balances, priceMap })
+  const multiWalletQueries = useQueries({
+    queries: (isMultiWallet && selectedWalletAddresses ? selectedWalletAddresses : []).map(
+      ({ walletId, publicKey: pk }) => ({
+        queryKey: ["multiWalletBalances", pk],
+        queryFn: async () => {
+          // 1. Fetch raw balances from Horizon API
+          const response = await fetch(
+            `/api/horizon-balances?user=${encodeURIComponent(pk)}`
+          )
+          if (!response.ok) {
+            throw new Error("Failed to fetch balances")
+          }
+          const data = await response.json()
+          const rawBalances = (data.balances as TokenBalance[]) || []
+
+          // 2. Build asset list for oracle price fetch (exclude LP shares)
+          const assets = rawBalances
+            .filter((b) => b.assetType !== "liquidity_pool_shares")
+            .map((b) => ({
+              code: b.assetCode,
+              issuer: b.assetIssuer,
+            }))
+
+          // 3. Fetch oracle prices to enrich balances
+          const priceMap = new Map<string, { price: number; address: string }>()
+          if (assets.length > 0) {
+            try {
+              // First get DB prices (includes LP token and fallbacks)
+              const dbResponse = await fetch("/api/token-prices-current")
+              if (dbResponse.ok) {
+                const dbData = await dbResponse.json()
+                const prices = dbData.prices || {}
+                for (const [symbol, info] of Object.entries(prices)) {
+                  const priceInfo = info as { price?: number; address?: string }
+                  if (typeof priceInfo.price === "number" && typeof priceInfo.address === "string") {
+                    priceMap.set(symbol, { price: priceInfo.price, address: priceInfo.address })
+                  }
+                }
+              }
+
+              // Then try oracle prices (override DB prices for supported tokens)
+              const oracleResponse = await fetch("/api/oracle-prices", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ assets }),
+              })
+              if (oracleResponse.ok) {
+                const oracleData = await oracleResponse.json()
+                const oraclePrices = oracleData.prices || {}
+                for (const [symbol, info] of Object.entries(oraclePrices)) {
+                  const priceInfo = info as { price?: number; contractId?: string }
+                  if (typeof priceInfo.price === "number" && typeof priceInfo.contractId === "string") {
+                    priceMap.set(symbol, { price: priceInfo.price, address: priceInfo.contractId })
+                  }
+                }
+              }
+            } catch (error) {
+              console.error("[WalletContent] Error fetching prices:", error)
+            }
+          }
+
+          // 4. Enrich balances with price data
+          const enrichedBalances = rawBalances.map((balance) => {
+            // Try exact match first, then case-insensitive
+            let priceInfo = priceMap.get(balance.assetCode)
+            if (!priceInfo) {
+              const upperCode = balance.assetCode.toUpperCase()
+              for (const [symbol, info] of priceMap.entries()) {
+                if (symbol.toUpperCase() === upperCode) {
+                  priceInfo = info
+                  break
+                }
+              }
+            }
+
+            if (!priceInfo || priceInfo.price <= 0) {
+              return balance
+            }
+
+            const balanceNum = parseFloat(balance.balance)
+            if (isNaN(balanceNum)) {
+              return balance
+            }
+
+            return {
+              ...balance,
+              usdValue: balanceNum * priceInfo.price,
+              tokenAddress: priceInfo.address,
+            }
+          })
+
+          return {
+            walletId,
+            publicKey: pk,
+            balances: enrichedBalances,
+          }
+        },
+        enabled: !!pk,
+        staleTime: 30 * 1000,
+      })
+    ),
+  })
+
+  const isLoadingMultiHorizon = multiWalletQueries.some((q) => q.isLoading)
+
+  // Aggregate multi-wallet data
+  const multiWalletData = useMemo(() => {
+    if (!isMultiWallet || isLoadingMultiHorizon) {
+      return null
+    }
+
+    const tokenMap = new Map<string, TokenBalance & { perWalletAmounts: Array<{ walletId: string; publicKey: string; balance: string; usdValue: number }> }>()
+    const priceMap = new Map<string, TokenPriceInfo>()
+    const perWalletTotals: Array<{ walletId: string; publicKey: string; totalUsdValue: number }> = []
+    let totalValue = 0
+
+    for (const query of multiWalletQueries) {
+      if (!query.data) continue
+
+      const { walletId, publicKey: pk, balances } = query.data
+      let walletTotal = 0
+
+      for (const balance of balances) {
+        const tokenKey =
+          balance.assetType === "liquidity_pool_shares"
+            ? `lp-${balance.liquidityPoolId}`
+            : `${balance.assetCode}-${balance.assetIssuer ?? "native"}`
+
+        const balanceNum = parseFloat(balance.balance)
+        const usdValue = balance.usdValue ?? 0
+        walletTotal += usdValue
+
+        if (balance.tokenAddress && balance.usdValue && balanceNum > 0) {
+          priceMap.set(balance.assetCode, {
+            price: balance.usdValue / balanceNum,
+            address: balance.tokenAddress,
+          })
+        }
+
+        const existing = tokenMap.get(tokenKey)
+        if (existing) {
+          const existingBalance = parseFloat(existing.balance)
+          existing.balance = (existingBalance + balanceNum).toString()
+          existing.usdValue = (existing.usdValue ?? 0) + usdValue
+          existing.perWalletAmounts.push({ walletId, publicKey: pk, balance: balance.balance, usdValue })
+        } else {
+          tokenMap.set(tokenKey, {
+            ...balance,
+            perWalletAmounts: [{ walletId, publicKey: pk, balance: balance.balance, usdValue }],
+          })
+        }
+      }
+
+      perWalletTotals.push({ walletId, publicKey: pk, totalUsdValue: walletTotal })
+      totalValue += walletTotal
+    }
+
+    const balances = Array.from(tokenMap.values()).sort((a, b) => {
+      if (a.assetType === "native") return -1
+      if (b.assetType === "native") return 1
+      if (a.assetType === "liquidity_pool_shares") return 1
+      if (b.assetType === "liquidity_pool_shares") return -1
+      return (b.usdValue ?? 0) - (a.usdValue ?? 0)
+    })
+
+    return { balances, priceMap, perWalletTotals, totalValue }
+  }, [isMultiWallet, isLoadingMultiHorizon, multiWalletQueries])
+
+  // Unified data based on mode
+  const horizonData = isMultiWallet ? (multiWalletData ? { balances: multiWalletData.balances, priceMap: multiWalletData.priceMap } : undefined) : singleHorizonData
+  const isLoadingHorizon = isMultiWallet ? isLoadingMultiHorizon : isLoadingSingleHorizon
+  const perWalletTotals = multiWalletData?.perWalletTotals
+
+  // Fetch LP token balance via RPC (single wallet mode only for now)
   const {
     data: lpTokenBalance,
     isLoading: isLoadingLpToken,
-  } = useTokenBalance(LP_TOKEN_CONTRACT_ID, publicKey)
+  } = useTokenBalance(LP_TOKEN_CONTRACT_ID, isMultiWallet ? undefined : publicKey)
 
   // Get LP token price from Blend SDK (live price from the protocol)
-  const { lpTokenPrice, isLoading: isLoadingBlend } = useBlendPositions(publicKey)
+  const { lpTokenPrice, isLoading: isLoadingBlend } = useBlendPositions(isMultiWallet ? undefined : publicKey)
 
   // Extract balances and priceMap from horizon data
   const horizonBalances = horizonData?.balances
@@ -302,6 +498,9 @@ export function WalletContent() {
 
   // Calculate total USD value (must be before early return to follow Rules of Hooks)
   const totalUsdValue = useMemo(() => {
+    if (isMultiWallet && multiWalletData) {
+      return multiWalletData.totalValue
+    }
     let total = 0
     // Sum all token USD values
     for (const token of horizonBalances || []) {
@@ -314,7 +513,7 @@ export function WalletContent() {
       total += (parseFloat(lpTokenBalance) / 1e7) * lpTokenPrice
     }
     return total
-  }, [horizonBalances, lpTokenPrice, lpTokenBalance])
+  }, [isMultiWallet, multiWalletData, horizonBalances, lpTokenPrice, lpTokenBalance])
 
   // Sort balances (must be memoized to follow Rules of Hooks)
   const sortedBalances = useMemo(() => {
@@ -334,7 +533,7 @@ export function WalletContent() {
 
   // Check if we're still waiting for LP price (only matters if user has LP tokens)
   const hasLpTokens = lpTokenBalance && parseFloat(lpTokenBalance) > 0
-  const isLoadingTotalValue = hasLpTokens && (isLoadingLpToken || isLoadingBlend || lpTokenPrice === null)
+  const isLoadingTotalValue = !isMultiWallet && hasLpTokens && (isLoadingLpToken || isLoadingBlend || lpTokenPrice === null)
 
   // Show skeleton while loading
   if (!isHydrated || isLoadingHorizon) {
@@ -354,21 +553,33 @@ export function WalletContent() {
           )}
         </div>
 
-        {/* Period selector */}
-        <Tabs value={selectedPeriod} onValueChange={(value) => setSelectedPeriod(value as SparklinePeriod)}>
-          <TabsList className="h-8">
-            <TabsTrigger value="24h" className="text-xs px-2 sm:text-sm sm:px-3">
-              24h
-            </TabsTrigger>
-            <TabsTrigger value="7d" className="text-xs px-2 sm:text-sm sm:px-3">
-              7d
-            </TabsTrigger>
-            <TabsTrigger value="1mo" className="text-xs px-2 sm:text-sm sm:px-3">
-              1mo
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
+        {/* Period selector and wallet selector */}
+        <div className="flex items-center gap-2">
+          <Tabs value={selectedPeriod} onValueChange={(value) => setSelectedPeriod(value as SparklinePeriod)}>
+            <TabsList className="h-8">
+              <TabsTrigger value="24h" className="text-xs px-2 sm:text-sm sm:px-3">
+                24h
+              </TabsTrigger>
+              <TabsTrigger value="7d" className="text-xs px-2 sm:text-sm sm:px-3">
+                7d
+              </TabsTrigger>
+              <TabsTrigger value="1mo" className="text-xs px-2 sm:text-sm sm:px-3">
+                1mo
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+          {walletSelector}
+        </div>
       </div>
+
+      {/* Wallet allocation bar - only shown in multi-wallet mode */}
+      {isMultiWallet && wallets && perWalletTotals && perWalletTotals.length > 1 && (
+        <WalletAllocationBar
+          wallets={wallets}
+          perWalletTotals={perWalletTotals}
+          isLoading={isLoadingHorizon}
+        />
+      )}
 
       <Card className="py-2 gap-0">
         <CardContent className="px-4 py-2">
