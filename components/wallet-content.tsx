@@ -1,7 +1,7 @@
 "use client"
 
 import { memo, useMemo, useState, useEffect } from "react"
-import { useQueries } from "@tanstack/react-query"
+import { useQueries, useQuery } from "@tanstack/react-query"
 import { useWalletState } from "@/hooks/use-wallet-state"
 import { useHorizonBalances, type TokenBalance, type TokenPriceInfo } from "@/hooks/use-horizon-balances"
 import { useTokenBalance } from "@/hooks/use-token-balance"
@@ -307,15 +307,13 @@ export function WalletContent({
     isLoading: isLoadingSingleHorizon,
   } = useHorizonBalances(isMultiWallet ? undefined : publicKey)
 
-  // Multi-wallet mode: Fetch balances for all selected wallets
-  // Note: We use a different queryKey prefix ("multiWalletBalances") to avoid conflicts
-  // with useHorizonBalances which returns a different data shape ({ balances, priceMap })
+  // Multi-wallet mode: Fetch raw balances for all selected wallets (no price enrichment)
+  // Prices are fetched separately in a single query to avoid duplicate API calls
   const multiWalletQueries = useQueries({
     queries: (isMultiWallet && selectedWalletAddresses ? selectedWalletAddresses : []).map(
       ({ walletId, publicKey: pk }) => ({
-        queryKey: ["multiWalletBalances", pk],
+        queryKey: ["multiWalletRawBalances", pk],
         queryFn: async () => {
-          // 1. Fetch raw balances from Horizon API
           const response = await fetch(
             `/api/horizon-balances?user=${encodeURIComponent(pk)}`
           )
@@ -323,88 +321,10 @@ export function WalletContent({
             throw new Error("Failed to fetch balances")
           }
           const data = await response.json()
-          const rawBalances = (data.balances as TokenBalance[]) || []
-
-          // 2. Build asset list for oracle price fetch (exclude LP shares)
-          const assets = rawBalances
-            .filter((b) => b.assetType !== "liquidity_pool_shares")
-            .map((b) => ({
-              code: b.assetCode,
-              issuer: b.assetIssuer,
-            }))
-
-          // 3. Fetch oracle prices to enrich balances
-          const priceMap = new Map<string, { price: number; address: string }>()
-          if (assets.length > 0) {
-            try {
-              // First get DB prices (includes LP token and fallbacks)
-              const dbResponse = await fetch("/api/token-prices-current")
-              if (dbResponse.ok) {
-                const dbData = await dbResponse.json()
-                const prices = dbData.prices || {}
-                for (const [symbol, info] of Object.entries(prices)) {
-                  const priceInfo = info as { price?: number; address?: string }
-                  if (typeof priceInfo.price === "number" && typeof priceInfo.address === "string") {
-                    priceMap.set(symbol, { price: priceInfo.price, address: priceInfo.address })
-                  }
-                }
-              }
-
-              // Then try oracle prices (override DB prices for supported tokens)
-              const oracleResponse = await fetch("/api/oracle-prices", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ assets }),
-              })
-              if (oracleResponse.ok) {
-                const oracleData = await oracleResponse.json()
-                const oraclePrices = oracleData.prices || {}
-                for (const [symbol, info] of Object.entries(oraclePrices)) {
-                  const priceInfo = info as { price?: number; contractId?: string }
-                  if (typeof priceInfo.price === "number" && typeof priceInfo.contractId === "string") {
-                    priceMap.set(symbol, { price: priceInfo.price, address: priceInfo.contractId })
-                  }
-                }
-              }
-            } catch (error) {
-              console.error("[WalletContent] Error fetching prices:", error)
-            }
-          }
-
-          // 4. Enrich balances with price data
-          const enrichedBalances = rawBalances.map((balance) => {
-            // Try exact match first, then case-insensitive
-            let priceInfo = priceMap.get(balance.assetCode)
-            if (!priceInfo) {
-              const upperCode = balance.assetCode.toUpperCase()
-              for (const [symbol, info] of priceMap.entries()) {
-                if (symbol.toUpperCase() === upperCode) {
-                  priceInfo = info
-                  break
-                }
-              }
-            }
-
-            if (!priceInfo || priceInfo.price <= 0) {
-              return balance
-            }
-
-            const balanceNum = parseFloat(balance.balance)
-            if (isNaN(balanceNum)) {
-              return balance
-            }
-
-            return {
-              ...balance,
-              usdValue: balanceNum * priceInfo.price,
-              tokenAddress: priceInfo.address,
-            }
-          })
-
           return {
             walletId,
             publicKey: pk,
-            balances: enrichedBalances,
+            balances: (data.balances as TokenBalance[]) || [],
           }
         },
         enabled: !!pk,
@@ -413,11 +333,95 @@ export function WalletContent({
     ),
   })
 
-  const isLoadingMultiHorizon = multiWalletQueries.some((q) => q.isLoading)
+  const isLoadingMultiBalances = multiWalletQueries.some((q) => q.isLoading)
 
-  // Aggregate multi-wallet data
+  // Collect unique assets from all wallets for price fetching
+  const allUniqueAssets = useMemo(() => {
+    if (!isMultiWallet || isLoadingMultiBalances) return []
+
+    const assetMap = new Map<string, { code: string; issuer?: string }>()
+    for (const query of multiWalletQueries) {
+      if (!query.data) continue
+      for (const balance of query.data.balances) {
+        if (balance.assetType === "liquidity_pool_shares") continue
+        const key = `${balance.assetCode}-${balance.assetIssuer ?? "native"}`
+        if (!assetMap.has(key)) {
+          assetMap.set(key, { code: balance.assetCode, issuer: balance.assetIssuer ?? undefined })
+        }
+      }
+    }
+    return Array.from(assetMap.values())
+  }, [isMultiWallet, isLoadingMultiBalances, multiWalletQueries])
+
+  // Fetch prices once for all unique assets across all wallets
+  const { data: sharedPriceMap, isLoading: isLoadingSharedPrices } = useQuery({
+    queryKey: ["multiWalletPrices", allUniqueAssets.map(a => `${a.code}-${a.issuer}`).sort().join(",")],
+    queryFn: async () => {
+      const priceMap = new Map<string, { price: number; address: string }>()
+
+      try {
+        // 1. Fetch DB prices (single call - includes LP token and fallbacks)
+        const dbResponse = await fetch("/api/token-prices-current")
+        if (dbResponse.ok) {
+          const dbData = await dbResponse.json()
+          const prices = dbData.prices || {}
+          for (const [symbol, info] of Object.entries(prices)) {
+            const priceInfo = info as { price?: number; address?: string }
+            if (typeof priceInfo.price === "number" && typeof priceInfo.address === "string") {
+              priceMap.set(symbol, { price: priceInfo.price, address: priceInfo.address })
+            }
+          }
+        }
+
+        // 2. Fetch oracle prices (single call with all unique assets)
+        if (allUniqueAssets.length > 0) {
+          const oracleResponse = await fetch("/api/oracle-prices", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ assets: allUniqueAssets }),
+          })
+          if (oracleResponse.ok) {
+            const oracleData = await oracleResponse.json()
+            const oraclePrices = oracleData.prices || {}
+            for (const [symbol, info] of Object.entries(oraclePrices)) {
+              const priceInfo = info as { price?: number; contractId?: string }
+              if (typeof priceInfo.price === "number" && typeof priceInfo.contractId === "string") {
+                priceMap.set(symbol, { price: priceInfo.price, address: priceInfo.contractId })
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error("[WalletContent] Error fetching shared prices:", error)
+      }
+
+      return priceMap
+    },
+    enabled: isMultiWallet && !isLoadingMultiBalances && allUniqueAssets.length > 0,
+    staleTime: 30 * 1000,
+  })
+
+  const isLoadingMultiHorizon = isLoadingMultiBalances || isLoadingSharedPrices
+
+  // Helper to get price info from shared price map
+  const getPriceInfo = (assetCode: string): { price: number; address: string } | undefined => {
+    if (!sharedPriceMap) return undefined
+    // Try exact match first
+    let priceInfo = sharedPriceMap.get(assetCode)
+    if (priceInfo) return priceInfo
+    // Try case-insensitive match
+    const upperCode = assetCode.toUpperCase()
+    for (const [symbol, info] of sharedPriceMap.entries()) {
+      if (symbol.toUpperCase() === upperCode) {
+        return info
+      }
+    }
+    return undefined
+  }
+
+  // Aggregate multi-wallet data and enrich with shared prices
   const multiWalletData = useMemo(() => {
-    if (!isMultiWallet || isLoadingMultiHorizon) {
+    if (!isMultiWallet || isLoadingMultiHorizon || !sharedPriceMap) {
       return null
     }
 
@@ -439,13 +443,21 @@ export function WalletContent({
             : `${balance.assetCode}-${balance.assetIssuer ?? "native"}`
 
         const balanceNum = parseFloat(balance.balance)
-        const usdValue = balance.usdValue ?? 0
+
+        // Enrich balance with price from shared price map
+        const priceInfo = getPriceInfo(balance.assetCode)
+        const usdValue = priceInfo && priceInfo.price > 0 && !isNaN(balanceNum)
+          ? balanceNum * priceInfo.price
+          : 0
+        const tokenAddress = priceInfo?.address
+
         walletTotal += usdValue
 
-        if (balance.tokenAddress && balance.usdValue && balanceNum > 0) {
+        // Store price info for the output priceMap
+        if (priceInfo && priceInfo.price > 0) {
           priceMap.set(balance.assetCode, {
-            price: balance.usdValue / balanceNum,
-            address: balance.tokenAddress,
+            price: priceInfo.price,
+            address: priceInfo.address,
           })
         }
 
@@ -458,6 +470,8 @@ export function WalletContent({
         } else {
           tokenMap.set(tokenKey, {
             ...balance,
+            usdValue,
+            tokenAddress,
             perWalletAmounts: [{ walletId, publicKey: pk, balance: balance.balance, usdValue }],
           })
         }
@@ -476,7 +490,7 @@ export function WalletContent({
     })
 
     return { balances, priceMap, perWalletTotals, totalValue }
-  }, [isMultiWallet, isLoadingMultiHorizon, multiWalletQueries])
+  }, [isMultiWallet, isLoadingMultiHorizon, sharedPriceMap, multiWalletQueries])
 
   // Unified data based on mode
   const horizonData = isMultiWallet ? (multiWalletData ? { balances: multiWalletData.balances, priceMap: multiWalletData.priceMap } : undefined) : singleHorizonData
