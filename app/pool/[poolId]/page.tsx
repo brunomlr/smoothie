@@ -14,7 +14,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { fetchWalletBlendSnapshot, type BlendReservePosition, type BlendPoolEstimate, type BlendBackstopPosition } from "@/lib/blend/positions"
+import { fetchWalletBlendSnapshot, type BlendReservePosition, type BlendPoolEstimate, type BlendBackstopPosition, type BlendWalletSnapshot } from "@/lib/blend/positions"
+import { FixedMath } from "@blend-capital/blend-sdk"
 import { fetchWithTimeout } from "@/lib/fetch-utils"
 import type { BackstopCostBasis } from "@/lib/db/types"
 import { toTrackedPools } from "@/lib/blend/pools"
@@ -517,13 +518,11 @@ function formatTimeRemaining(targetDate: Date): string {
 interface BackstopSectionProps {
   position: BlendBackstopPosition
   claimedLp?: number // Total LP tokens claimed from emissions
-  blndPerLpToken?: number // BLND per LP token for conversion
-  blndPrice?: number | null // BLND price in USD for displaying value
   formatUsd: (value: number, decimals?: number) => string
   formatYield: (value: number) => string
 }
 
-function BackstopSection({ position, claimedLp = 0, blndPerLpToken = 0, blndPrice, formatUsd, formatYield }: BackstopSectionProps) {
+function BackstopSection({ position, claimedLp = 0, formatUsd, formatYield }: BackstopSectionProps) {
   const hasQ4w = position.q4wShares > BigInt(0)
   const q4wExpDate = position.q4wExpiration
     ? new Date(position.q4wExpiration * 1000)
@@ -537,7 +536,10 @@ function BackstopSection({ position, claimedLp = 0, blndPerLpToken = 0, blndPric
   // Calculate derived values
   const lpTokenPrice = position.lpTokens > 0 ? position.lpTokensUsd / position.lpTokens : 0
   const yieldUsd = position.yieldLp * lpTokenPrice
-  const claimedBlndApprox = claimedLp * blndPerLpToken
+
+  // Use simulated LP tokens from on-chain RPC (exact match with Blend UI)
+  // Falls back to 0 if simulation failed
+  const claimableLp = position.simulatedEmissionsLp ?? 0
 
   return (
     <Card>
@@ -587,19 +589,19 @@ function BackstopSection({ position, claimedLp = 0, blndPerLpToken = 0, blndPric
             </div>
           </div>
 
-          {/* BLND Rewards */}
+          {/* LP Rewards (from emissions) */}
           <div>
-            <p className="text-xs text-muted-foreground mb-1">BLND Rewards</p>
+            <p className="text-xs text-muted-foreground mb-1">LP Rewards</p>
             <p className="font-mono text-purple-400">
-              {formatNumber(position.claimableBlnd, 2)} BLND
-              {position.claimableBlnd > 0 && blndPrice && (
-                <span className="text-xs text-muted-foreground font-sans"> ({formatUsd(position.claimableBlnd * blndPrice)}) to claim</span>
+              {formatNumber(claimableLp, 2)} LP
+              {claimableLp > 0 && lpTokenPrice > 0 && (
+                <span className="text-xs text-muted-foreground font-sans"> ({formatUsd(claimableLp * lpTokenPrice)}) to claim</span>
               )}
             </p>
-            {claimedBlndApprox > 0 && (
+            {claimedLp > 0 && (
               <p className="text-xs text-muted-foreground mt-0.5">
-                ~{formatNumber(claimedBlndApprox, 0)} BLND
-                {blndPrice && ` (${formatUsd(claimedBlndApprox * blndPrice)})`} claimed
+                {formatNumber(claimedLp, 2)} LP
+                {lpTokenPrice > 0 && ` (${formatUsd(claimedLp * lpTokenPrice)})`} claimed
               </p>
             )}
           </div>
@@ -973,9 +975,7 @@ export default function PoolDetailsPage() {
       positions: positionsWithYield,
       backstopPosition,
       backstopClaimedLp: backstopClaimData?.total_claimed_lp || 0,
-      blndPerLpToken: snapshot?.backstopPositions?.[0]?.blndAmount && snapshot?.backstopPositions?.[0]?.lpTokens
-        ? snapshot.backstopPositions[0].blndAmount / snapshot.backstopPositions[0].lpTokens
-        : 0,
+      blndPerLpToken: snapshot?.blndPerLpToken || 0,
       poolName: positionsWithYield[0]?.poolName || backstopPosition?.poolName || "Unknown Pool",
       // Pool-level BLND data
       totalClaimableBlnd,
@@ -1095,8 +1095,6 @@ export default function PoolDetailsPage() {
               <BackstopSection
                 position={poolData.backstopPosition}
                 claimedLp={poolData.backstopClaimedLp}
-                blndPerLpToken={poolData.blndPerLpToken}
-                blndPrice={poolData.blndPrice}
                 formatUsd={formatUsd}
                 formatYield={formatYield}
               />

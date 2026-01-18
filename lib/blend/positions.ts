@@ -24,6 +24,7 @@ import {
 } from "@blend-capital/blend-sdk";
 import { getBlendNetwork } from "./network";
 import { type TrackedPool } from "./pools";
+import { simulateCometDeposit } from "./comet";
 import type { PriceQuote } from "@/lib/pricing/types";
 
 export interface BlendReservePosition {
@@ -104,6 +105,8 @@ export interface BlendBackstopPosition {
   poolQ4wPercent: number; // Percent of pool's backstop capital queued for withdrawal (higher = riskier)
   // Claimable BLND emissions
   claimableBlnd: number; // BLND waiting to be claimed for this backstop position
+  // Simulated LP tokens from emissions (via on-chain simulation)
+  simulatedEmissionsLp: number | null; // LP tokens claimable from emissions, null if simulation failed
 }
 
 // Per-pool position estimate (health, borrow capacity, etc.)
@@ -144,6 +147,10 @@ export interface BlendWalletSnapshot {
   perPoolBorrowEmissions: Record<string, number>; // Per-pool claimable BLND from borrows
   blndPrice: number | null; // BLND price in USDC from backstop
   lpTokenPrice: number | null; // LP token price in USD from backstop
+  blndPerLpToken: number; // BLND tokens per LP token (for converting emissions to LP)
+  // Backstop comet pool data for estSingleSidedDeposit calculation
+  backstopPoolBlnd: bigint; // BLND in comet pool (7 decimals)
+  backstopPoolShares: bigint; // Total LP shares in comet pool (7 decimals)
 }
 
 interface LoadContext {
@@ -840,6 +847,9 @@ function aggregateSnapshot(
     perPoolBorrowEmissions: {}, // Will be set by fetchWalletBlendSnapshot
     blndPrice: null, // Will be set by fetchWalletBlendSnapshot
     lpTokenPrice: null, // Will be set by fetchWalletBlendSnapshot
+    blndPerLpToken: 0, // Will be set by fetchWalletBlendSnapshot
+    backstopPoolBlnd: BigInt(0), // Will be set by fetchWalletBlendSnapshot
+    backstopPoolShares: BigInt(0), // Will be set by fetchWalletBlendSnapshot
   };
 }
 
@@ -931,6 +941,9 @@ export async function fetchWalletBlendSnapshot(
       perPoolBorrowEmissions: {},
       blndPrice: null,
       lpTokenPrice: null,
+      blndPerLpToken: 0,
+      backstopPoolBlnd: BigInt(0),
+      backstopPoolShares: BigInt(0),
     };
   }
 
@@ -990,6 +1003,9 @@ async function fetchWalletBlendSnapshotInternal(
       perPoolBorrowEmissions: {},
       blndPrice: null,
       lpTokenPrice: null,
+      blndPerLpToken: 0,
+      backstopPoolBlnd: BigInt(0),
+      backstopPoolShares: BigInt(0),
     };
   }
 
@@ -1131,7 +1147,7 @@ async function fetchWalletBlendSnapshotInternal(
   // Calculate BLND price and LP token price from first available backstop
   let blndPrice: number | null = null;
   let lpTokenPrice: number | null = null;
-  let backstopToken: { blndPerLpToken: number; usdcPerLpToken: number; lpTokenPrice: number } | null = null;
+  let backstopToken: { blndPerLpToken: number; usdcPerLpToken: number; lpTokenPrice: number; blnd: bigint; shares: bigint } | null = null;
 
   for (const poolSnapshot of snapshotsWithUsers) {
     if (poolSnapshot.backstop?.backstopToken) {
@@ -1147,6 +1163,9 @@ async function fetchWalletBlendSnapshotInternal(
             blndPerLpToken: bt.blndPerLpToken,
             usdcPerLpToken: bt.usdcPerLpToken,
             lpTokenPrice: bt.lpTokenPrice,
+            // Raw values needed for estSingleSidedDeposit calculation
+            blnd: bt.blnd,
+            shares: bt.shares,
           };
           break;
         }
@@ -1318,6 +1337,25 @@ async function fetchWalletBlendSnapshotInternal(
         // Failed to get backstop emissions for pool
       }
 
+      // Simulate the exact LP tokens from emissions via on-chain RPC
+      // This replicates what Blend UI does with cometContract.depositTokenInGetLPOut()
+      let simulatedEmissionsLp: number | null = null;
+      console.log(`[blend] Pool ${poolId}: backstopClaimableBlnd=${backstopClaimableBlnd}, hasBackstop=${!!poolSnapshot.backstop}`);
+      if (backstopClaimableBlnd > 0 && poolSnapshot.backstop) {
+        try {
+          console.log(`[blend] Calling simulateCometDeposit for pool ${poolId}`);
+          simulatedEmissionsLp = await simulateCometDeposit(
+            poolSnapshot.backstop.backstopToken.id, // comet pool address
+            poolSnapshot.backstop.config.blndTkn, // BLND token address
+            poolSnapshot.backstop.id, // backstop address (used as "user" in simulation)
+            backstopClaimableBlnd // BLND amount to simulate depositing
+          );
+          console.log(`[blend] Pool ${poolId}: simulatedEmissionsLp=${simulatedEmissionsLp}`);
+        } catch (e) {
+          console.warn(`[blend] Failed to simulate comet deposit for pool ${poolId}:`, e);
+        }
+      }
+
       backstopPositions.push({
         id: `backstop-${poolId}`,
         poolId,
@@ -1345,6 +1383,8 @@ async function fetchWalletBlendSnapshotInternal(
         poolQ4wPercent: Number.isFinite(poolQ4wPercent) ? poolQ4wPercent : 0,
         // Claimable BLND emissions
         claimableBlnd: Number.isFinite(backstopClaimableBlnd) ? backstopClaimableBlnd : 0,
+        // Simulated LP tokens from emissions (via on-chain simulation)
+        simulatedEmissionsLp,
       });
     } catch (error) {
       console.warn(
@@ -1389,5 +1429,8 @@ async function fetchWalletBlendSnapshotInternal(
     perPoolBorrowEmissions,
     blndPrice,
     lpTokenPrice,
+    blndPerLpToken: backstopToken?.blndPerLpToken ?? 0,
+    backstopPoolBlnd: backstopToken?.blnd ?? BigInt(0),
+    backstopPoolShares: backstopToken?.shares ?? BigInt(0),
   };
 }

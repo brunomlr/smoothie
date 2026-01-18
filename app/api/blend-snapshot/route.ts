@@ -29,8 +29,10 @@ type SerializableBackstopPosition = Omit<BlendBackstopPosition, 'shares' | 'q4wS
   }>
 }
 
-type SerializableSnapshot = Omit<BlendWalletSnapshot, 'backstopPositions'> & {
+type SerializableSnapshot = Omit<BlendWalletSnapshot, 'backstopPositions' | 'backstopPoolBlnd' | 'backstopPoolShares'> & {
   backstopPositions: SerializableBackstopPosition[]
+  backstopPoolBlnd: string
+  backstopPoolShares: string
 }
 
 // Convert BigInt values to strings for JSON serialization
@@ -47,6 +49,8 @@ function serializeSnapshot(snapshot: BlendWalletSnapshot): SerializableSnapshot 
         shares: chunk.shares.toString(),
       })),
     })),
+    backstopPoolBlnd: snapshot.backstopPoolBlnd.toString(),
+    backstopPoolShares: snapshot.backstopPoolShares.toString(),
   }
 }
 
@@ -90,6 +94,9 @@ export const GET = createApiHandler<SerializableSnapshot>({
         perPoolBorrowEmissions: {},
         blndPrice: null,
         lpTokenPrice: null,
+        blndPerLpToken: 0,
+        backstopPoolBlnd: '0',
+        backstopPoolShares: '0',
       }
     }
 
