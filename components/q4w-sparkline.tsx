@@ -4,32 +4,30 @@ import { useMemo } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { LineChart, Line, Tooltip, ResponsiveContainer, YAxis } from "recharts"
 import { format } from "date-fns"
-import { Flame } from "lucide-react"
 import { fetchWithTimeout } from "@/lib/fetch-utils"
 
-interface EmissionApyDataPoint {
+interface Q4wDataPoint {
   date: string
-  apy: number
+  q4wPercent: number
 }
 
-interface EmissionApyHistoryResponse {
-  history: EmissionApyDataPoint[]
-  avg30d: number
-}
-
-interface BlndApySparklineProps {
+interface Q4wSparklineProps {
   poolId: string
-  type: 'backstop' | 'lending_supply'
-  assetAddress?: string // Required for lending_supply type
-  currentApy?: number // SDK APY to use for latest day
+  currentQ4w?: number // SDK Q4W percent to use for latest day
   className?: string
+}
+
+// Get user's timezone
+function getUserTimezone(): string {
+  if (typeof window === 'undefined') return 'UTC'
+  return Intl.DateTimeFormat().resolvedOptions().timeZone
 }
 
 // Get today's date in user's timezone as YYYY-MM-DD
 function getTodayInTimezone(): string {
   if (typeof window === 'undefined') return new Date().toISOString().split('T')[0]
   const formatter = new Intl.DateTimeFormat('en-CA', {
-    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    timeZone: getUserTimezone(),
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -37,27 +35,20 @@ function getTodayInTimezone(): string {
   return formatter.format(new Date())
 }
 
-async function fetchEmissionApyHistory(
-  poolId: string,
-  type: 'backstop' | 'lending_supply',
-  assetAddress?: string
-): Promise<EmissionApyHistoryResponse> {
+async function fetchQ4wHistory(poolId: string): Promise<Q4wDataPoint[]> {
   const params = new URLSearchParams({
     pool: poolId,
-    type,
-    days: "30",
+    days: "180", // 6 months
+    timezone: getUserTimezone(),
   })
 
-  if (assetAddress) {
-    params.set('asset', assetAddress)
-  }
-
-  const response = await fetchWithTimeout(`/api/emission-apy-history?${params}`)
+  const response = await fetchWithTimeout(`/api/backstop-q4w-history?${params}`)
   if (!response.ok) {
-    throw new Error("Failed to fetch emission APY history")
+    throw new Error("Failed to fetch Q4W history")
   }
 
-  return response.json()
+  const data = await response.json()
+  return data.history || []
 }
 
 function formatPercent(value: number): string {
@@ -66,7 +57,7 @@ function formatPercent(value: number): string {
 
 interface CustomTooltipProps {
   active?: boolean
-  payload?: Array<{ value: number; payload: EmissionApyDataPoint }>
+  payload?: Array<{ value: number; payload: Q4wDataPoint }>
 }
 
 function CustomTooltip({ active, payload }: CustomTooltipProps) {
@@ -76,81 +67,72 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
 
   const data = payload[0]
   const date = data.payload.date
-  const apy = data.value
+  const q4w = data.value
 
   return (
     <div className="bg-black text-white border border-zinc-800 rounded-md px-2 py-1.5 shadow-md text-[11px] whitespace-nowrap">
       <p className="text-zinc-400">
         {format(new Date(date), "MMM d, yyyy")}
       </p>
-      <p className="font-medium text-purple-400 flex items-center gap-1">
-        <Flame className="h-3 w-3" />
-        {formatPercent(apy)} BLND APY
-      </p>
+      <p className="font-medium text-amber-400">{formatPercent(q4w)} Q4W</p>
     </div>
   )
 }
 
-export function BlndApySparkline({
+export function Q4wSparkline({
   poolId,
-  type,
-  assetAddress,
-  currentApy,
+  currentQ4w,
   className = "",
-}: BlndApySparklineProps) {
-  const { data, isLoading } = useQuery({
-    queryKey: ["emission-apy-history", poolId, type, assetAddress],
-    queryFn: () => fetchEmissionApyHistory(poolId, type, assetAddress),
+}: Q4wSparklineProps) {
+  const { data: q4wHistory, isLoading } = useQuery({
+    queryKey: ["backstop-q4w-history", poolId],
+    queryFn: () => fetchQ4wHistory(poolId),
     staleTime: 60 * 60 * 1000, // 1 hour
     refetchInterval: false,
-    enabled: type === 'backstop' || !!assetAddress,
   })
 
-  // Filter out future dates and replace today's APY with the SDK APY
+  // Filter out future dates and replace today's Q4W with the SDK value
   const chartData = useMemo(() => {
-    if (!data?.history?.length) return []
+    if (!q4wHistory?.length) return []
 
     const today = getTodayInTimezone()
 
     // Filter out any dates that are "in the future" from user's timezone perspective
     // This handles the case where server (UTC) is ahead of the user's timezone
-    const filteredHistory = data.history.filter(d => d.date <= today)
+    const filteredHistory = q4wHistory.filter(d => d.date <= today)
 
     if (!filteredHistory.length) return []
-    if (currentApy === undefined) return filteredHistory
+    if (currentQ4w === undefined) return filteredHistory
 
-    const history = [...filteredHistory]
+    const data = [...filteredHistory]
 
-    // Find today's entry and replace with SDK APY
-    const todayIndex = history.findIndex(d => d.date === today)
+    // Find today's entry and replace with SDK Q4W
+    const todayIndex = data.findIndex(d => d.date === today)
     if (todayIndex !== -1) {
-      history[todayIndex] = {
-        ...history[todayIndex],
-        apy: currentApy,
+      data[todayIndex] = {
+        ...data[todayIndex],
+        q4wPercent: currentQ4w,
       }
-    } else if (history.length > 0) {
-      // If today isn't in the data yet, add it with SDK APY
-      history.push({
+    } else if (data.length > 0) {
+      // If today isn't in the data yet, add it with SDK Q4W
+      data.push({
         date: today,
-        apy: currentApy,
+        q4wPercent: currentQ4w,
       })
     }
-    return history
-  }, [data?.history, currentApy])
+    return data
+  }, [q4wHistory, currentQ4w])
 
-  // Calculate 30-day average (use server-provided or calculate from data)
-  const avg30d = useMemo(() => {
-    if (data?.avg30d !== undefined) {
-      // If currentApy is provided, recalculate to include it
-      if (currentApy !== undefined && chartData.length > 0) {
-        const sum = chartData.reduce((acc, d) => acc + d.apy, 0)
-        return sum / chartData.length
-      }
-      return data.avg30d
-    }
-    if (!chartData.length) return 0
-    return chartData.reduce((acc, d) => acc + d.apy, 0) / chartData.length
-  }, [data?.avg30d, chartData, currentApy])
+  // Calculate 6mo average
+  const { avgQ4w } = useMemo(() => {
+    if (!chartData?.length) return { avgQ4w: 0 }
+
+    const values = chartData.map((d) => d.q4wPercent)
+    const sum = values.reduce((acc, val) => acc + val, 0)
+    const avg = sum / values.length
+
+    return { avgQ4w: avg }
+  }, [chartData])
 
   // Default size if not specified via className
   const defaultSize = !className?.includes("w-") && !className?.includes("h-")
@@ -187,14 +169,14 @@ export function BlndApySparkline({
             />
             <Line
               type="monotone"
-              dataKey="apy"
-              stroke="#a855f7"
+              dataKey="q4wPercent"
+              stroke="#f59e0b"
               strokeWidth={1}
               dot={false}
               activeDot={{
                 r: 2,
-                fill: "#a855f7",
-                stroke: "#a855f7",
+                fill: "#f59e0b",
+                stroke: "#f59e0b",
               }}
               isAnimationActive={false}
             />
@@ -202,11 +184,11 @@ export function BlndApySparkline({
         </ResponsiveContainer>
       </div>
       <div className="shrink-0 text-right">
-        {currentApy !== undefined && (
-          <p className="text-sm font-semibold text-purple-400 mb-1">{formatPercent(currentApy)}</p>
+        {currentQ4w !== undefined && (
+          <p className="text-sm font-semibold text-amber-400 mb-1">{formatPercent(currentQ4w)}</p>
         )}
-        <p className="text-[10px] text-muted-foreground uppercase tracking-wide">30d avg</p>
-        <p className="text-xs text-foreground">{formatPercent(avg30d)}</p>
+        <p className="text-[10px] text-muted-foreground uppercase tracking-wide">6mo avg</p>
+        <p className="text-xs text-foreground">{formatPercent(avgQ4w)}</p>
       </div>
     </div>
   )

@@ -187,8 +187,11 @@ export function BackstopApySparkline({
         </ResponsiveContainer>
       </div>
       <div className="shrink-0 text-right">
+        {currentApy !== undefined && (
+          <p className="text-sm font-semibold text-emerald-400 mb-1">{formatPercent(currentApy)}</p>
+        )}
         <p className="text-[10px] text-muted-foreground uppercase tracking-wide">6mo avg</p>
-        <p className="text-sm font-semibold text-foreground">{formatPercent(avgApy)}</p>
+        <p className="text-xs text-foreground">{formatPercent(avgApy)}</p>
       </div>
     </div>
   )

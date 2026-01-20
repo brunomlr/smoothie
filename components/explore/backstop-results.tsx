@@ -9,6 +9,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { BackstopApySparkline } from "@/components/backstop-apy-sparkline"
 import { BlndApySparkline } from "@/components/blnd-apy-sparkline"
 import { LpPriceSparkline } from "@/components/lp-price-sparkline"
+import { Q4wSparkline } from "@/components/q4w-sparkline"
 import type { BackstopExploreItem, SortBy, LpPriceDataPoint } from "@/types/explore"
 
 interface BackstopResultsProps {
@@ -99,6 +100,19 @@ function BackstopRowCharts({ item, lpTokenPrice, lpPriceHistory }: { item: Backs
             <span className="text-xs font-medium text-muted-foreground">LP Token Price</span>
           </div>
           <LpPriceSparkline currentPrice={lpTokenPrice ?? undefined} priceHistory={lpPriceHistory} className="h-12 w-full" />
+        </div>
+
+        {/* 6 months Pool Q4W */}
+        <div className="bg-background/50 rounded-lg p-3 border border-border/30">
+          <div className="flex items-center gap-1.5 mb-2">
+            <Clock className="h-3 w-3 text-amber-500" />
+            <span className="text-xs font-medium text-muted-foreground">Pool Q4W</span>
+          </div>
+          <Q4wSparkline
+            poolId={item.poolId}
+            currentQ4w={item.q4wPercent ?? undefined}
+            className="h-12 w-full"
+          />
         </div>
 
         {/* Link to Blend */}

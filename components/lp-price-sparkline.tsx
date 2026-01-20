@@ -210,8 +210,11 @@ export function LpPriceSparkline({
         </ResponsiveContainer>
       </div>
       <div className="shrink-0 text-right">
+        {currentPrice !== undefined && (
+          <p className="text-sm font-semibold text-purple-400 mb-1">{formatPrice(currentPrice)}</p>
+        )}
         <p className="text-[10px] text-muted-foreground uppercase tracking-wide">6mo</p>
-        <p className="text-sm font-semibold text-foreground">
+        <p className={`text-xs ${isPositive ? 'text-emerald-400' : 'text-red-400'}`}>
           {isPositive ? "+" : ""}{priceChangePercent.toFixed(1)}%
         </p>
       </div>
