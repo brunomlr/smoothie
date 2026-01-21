@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
-import { Flame, ChevronDown } from "lucide-react"
+import { Flame, ChevronDown, Shield } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
@@ -17,11 +17,15 @@ import { useUserActions } from "@/hooks/use-user-actions"
 import { fetchWithTimeout } from "@/lib/fetch-utils"
 import { useCurrencyPreference } from "@/hooks/use-currency-preference"
 import { useDisplayPreferences } from "@/contexts/display-preferences-context"
+import { getPoolName as getConfigPoolName } from "@/lib/config/pools"
 
 interface BackstopPositionData {
   poolId: string
   poolName: string
   claimableBlnd?: number
+  simulatedEmissionsLp?: number | null // LP tokens claimable from emissions (via on-chain simulation)
+  emissionApy?: number // APY from BLND emissions for this pool's backstop (in %)
+  lpTokensUsd?: number // USD value of LP tokens in this backstop position
 }
 
 interface BlndRewardsCardProps {
@@ -52,12 +56,21 @@ function formatNumber(value: number, decimals = 2): string {
   })
 }
 
+// Format with integers if >= 1, otherwise show 2 decimals
+function formatCompact(value: number): string {
+  if (!Number.isFinite(value)) return "0"
+  const decimals = value >= 1 ? 0 : 2
+  return value.toLocaleString("en-US", {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  })
+}
+
 export function BlndRewardsCard({
   publicKey,
   pendingEmissions,
   pendingSupplyEmissions = 0,
   pendingBorrowEmissions = 0,
-  backstopClaimableBlnd = 0,
   blndPrice,
   lpTokenPrice,
   blndPerLpToken = 0,
@@ -140,18 +153,16 @@ export function BlndRewardsCard({
     return poolClaimedBlnd * (blndPrice || 0)
   }, [displayPreferences.useHistoricalBlndPrices, poolClaimedUsdHistorical, poolClaimedBlnd, blndPrice])
 
-  // Calculate total claimed BLND from backstop emissions (LP tokens → BLND)
-  const backstopClaimedBlnd = useMemo(() => {
-    if (!backstopClaimsData?.backstop_claims || !blndPerLpToken) {
+  // Calculate total claimed LP from backstop emissions
+  const totalClaimedLp = useMemo(() => {
+    if (!backstopClaimsData?.backstop_claims) {
       return 0
     }
-    // Sum all backstop LP tokens claimed and convert to BLND
-    const totalLpClaimed = backstopClaimsData.backstop_claims.reduce(
+    return backstopClaimsData.backstop_claims.reduce(
       (total: number, claim: { total_claimed_lp: number }) => total + (claim.total_claimed_lp || 0),
       0
     )
-    return totalLpClaimed * blndPerLpToken
-  }, [backstopClaimsData, blndPerLpToken])
+  }, [backstopClaimsData])
 
   // Calculate backstop claimed USD based on preference (historical vs current price)
   const backstopClaimedUsdDisplay = useMemo(() => {
@@ -159,19 +170,49 @@ export function BlndRewardsCard({
       // Use historical LP token prices from API
       return backstopClaimedUsdHistorical
     }
-    // Use current price: convert LP to BLND equivalent, then use current BLND price
-    return backstopClaimedBlnd * (blndPrice || 0)
-  }, [displayPreferences.useHistoricalBlndPrices, backstopClaimedUsdHistorical, backstopClaimedBlnd, blndPrice])
+    // Use current LP price
+    return totalClaimedLp * (lpTokenPrice || 0)
+  }, [displayPreferences.useHistoricalBlndPrices, backstopClaimedUsdHistorical, totalClaimedLp, lpTokenPrice])
 
-  // Backstop pending emissions
-  // Note: SDK doesn't provide backstop emissions estimate, so we only use what's passed in
-  // (which is usually 0). Backstop emissions auto-compound as LP tokens when claimed,
-  // so showing a pending BLND amount would be misleading anyway.
-  const effectiveBackstopPending = backstopClaimableBlnd > 0 ? backstopClaimableBlnd : 0
+  // Calculate total pending LP from backstop emissions
+  const totalPendingLp = useMemo(() => {
+    // Sum simulatedEmissionsLp from backstop positions, fallback to claimableBlnd converted
+    return backstopPositions.reduce((sum, bp) => {
+      if (bp.simulatedEmissionsLp != null && bp.simulatedEmissionsLp > 0) {
+        return sum + bp.simulatedEmissionsLp
+      }
+      // Fallback: rough conversion if simulation unavailable
+      if (bp.claimableBlnd && blndPerLpToken > 0) {
+        return sum + (bp.claimableBlnd / blndPerLpToken)
+      }
+      return sum
+    }, 0)
+  }, [backstopPositions, blndPerLpToken])
 
-  // Combined totals
-  const totalClaimedBlnd = poolClaimedBlnd + backstopClaimedBlnd
-  const totalPendingBlnd = pendingEmissions + effectiveBackstopPending
+  // Calculate combined weighted APY (BLND from supply/borrow + LP emissions from backstop)
+  const combinedApy = useMemo(() => {
+    // Calculate backstop totals
+    let totalBackstopUsd = 0
+    let weightedBackstopApy = 0
+    backstopPositions.forEach(bp => {
+      const posUsd = bp.lpTokensUsd || 0
+      const posApy = bp.emissionApy || 0
+      totalBackstopUsd += posUsd
+      weightedBackstopApy += posUsd * posApy
+    })
+
+    // Weighted average across supply/borrow and backstop positions
+    const totalUsd = totalPositionUsd + totalBackstopUsd
+    if (totalUsd <= 0) return 0
+
+    const blndWeighted = totalPositionUsd * blndApy
+    const combined = (blndWeighted + weightedBackstopApy) / totalUsd
+    return Number.isFinite(combined) ? combined : 0
+  }, [backstopPositions, totalPositionUsd, blndApy])
+
+  // BLND totals (pool emissions only)
+  const totalClaimedBlnd = poolClaimedBlnd
+  const totalPendingBlnd = pendingEmissions
 
   // Build table rows for per-pool breakdown
   type EmissionType = 'deposit' | 'borrow' | 'backstop'
@@ -181,6 +222,7 @@ export function BlndRewardsCard({
     claimable: number
     claimed: number
     type: EmissionType
+    tokenUnit: 'BLND' | 'LP'
   }
 
   const tableRows = useMemo(() => {
@@ -198,11 +240,8 @@ export function BlndRewardsCard({
 
     if (backstopClaimsData?.backstop_claims) {
       for (const claim of backstopClaimsData.backstop_claims) {
-        // Convert LP to BLND if we have the ratio, otherwise store LP directly
-        const claimedValue = blndPerLpToken > 0
-          ? (claim.total_claimed_lp || 0) * blndPerLpToken
-          : (claim.total_claimed_lp || 0) // Show LP if can't convert
-        backstopClaimsMap.set(claim.pool_address, claimedValue)
+        // Keep LP value directly (don't convert to BLND)
+        backstopClaimsMap.set(claim.pool_address, claim.total_claimed_lp || 0)
       }
     }
 
@@ -228,7 +267,8 @@ export function BlndRewardsCard({
 
     // Create rows for each pool - with separate deposit/borrow/backstop rows
     for (const poolId of poolIds) {
-      const poolName = poolNameMap.get(poolId) || 'Pool'
+      // Use config pool name if available, otherwise fall back to SDK name
+      const poolName = getConfigPoolName(poolId) || poolNameMap.get(poolId) || 'Pool'
 
       // Deposit row (supply emissions)
       const depositClaimable = perPoolSupplyEmissions[poolId] || 0
@@ -241,6 +281,7 @@ export function BlndRewardsCard({
           claimable: depositClaimable,
           claimed: depositClaimed, // Show all pool claims on deposit row
           type: 'deposit',
+          tokenUnit: 'BLND',
         })
       }
 
@@ -253,6 +294,7 @@ export function BlndRewardsCard({
           claimable: borrowClaimable,
           claimed: 0, // Claims are combined, already shown on deposit row
           type: 'borrow',
+          tokenUnit: 'BLND',
         })
       }
 
@@ -263,20 +305,26 @@ export function BlndRewardsCard({
           claimable: 0,
           claimed: depositClaimed,
           type: 'deposit',
+          tokenUnit: 'BLND',
         })
       }
 
-      // Backstop row
+      // Backstop row - show LP tokens (not BLND)
       const backstopPos = backstopPositions.find(bp => bp.poolId === poolId)
-      const backstopClaimable = backstopPos?.claimableBlnd || 0
-      const backstopClaimed = backstopClaimsMap.get(poolId) || 0
+      // Use simulatedEmissionsLp if available, otherwise convert claimableBlnd to LP
+      const backstopClaimableLp = backstopPos?.simulatedEmissionsLp ??
+        (backstopPos?.claimableBlnd && blndPerLpToken > 0
+          ? backstopPos.claimableBlnd / blndPerLpToken
+          : 0)
+      const backstopClaimedLp = backstopClaimsMap.get(poolId) || 0 // Already in LP
 
-      if (backstopClaimable > 0 || backstopClaimed > 0) {
+      if (backstopClaimableLp > 0 || backstopClaimedLp > 0) {
         rows.push({
           name: `${poolName} Backstop`,
-          claimable: backstopClaimable,
-          claimed: backstopClaimed,
+          claimable: backstopClaimableLp,
+          claimed: backstopClaimedLp,
           type: 'backstop',
+          tokenUnit: 'LP',
         })
       }
     }
@@ -286,6 +334,8 @@ export function BlndRewardsCard({
 
   const hasPendingEmissions = totalPendingBlnd > 0
   const hasClaimedBlnd = totalClaimedBlnd > 0
+  const hasPendingLp = totalPendingLp > 0
+  const hasClaimedLp = totalClaimedLp > 0
   const hasTableRows = tableRows.length > 0
   const loading = isLoading || actionsLoading || backstopClaimsLoading
 
@@ -309,7 +359,7 @@ export function BlndRewardsCard({
     )
   }
 
-  if (!hasPendingEmissions && !hasClaimedBlnd) {
+  if (!hasPendingEmissions && !hasClaimedBlnd && !hasPendingLp && !hasClaimedLp) {
     return null
   }
 
@@ -322,23 +372,47 @@ export function BlndRewardsCard({
         <div className="flex items-center gap-2">
           <Flame className="h-5 w-5 text-muted-foreground" />
           <div>
-            <div className="text-base font-semibold">{formatNumber(totalPendingBlnd, 2)} BLND</div>
-            {blndPrice && totalPendingBlnd > 0 && (
-              <div className="text-sm text-muted-foreground">{formatUsd(totalPendingBlnd * blndPrice)}</div>
-            )}
+            {(() => {
+              const hasBothRewards = totalPendingBlnd > 0 && totalPendingLp > 0
+              const fontSizeClass = hasBothRewards ? 'text-sm' : 'text-base'
+              const blndUsd = blndPrice ? totalPendingBlnd * blndPrice : 0
+              const lpUsd = lpTokenPrice ? totalPendingLp * lpTokenPrice : 0
+              const combinedUsd = blndUsd + lpUsd
+
+              return (
+                <>
+                  {/* BLND and LP rewards on same line */}
+                  {(totalPendingBlnd > 0 || totalPendingLp > 0) && (
+                    <div className={`${fontSizeClass} font-semibold`}>
+                      {totalPendingBlnd > 0 && <>{formatCompact(totalPendingBlnd)} BLND</>}
+                      {hasBothRewards && <span className="text-muted-foreground mx-1">+</span>}
+                      {totalPendingLp > 0 && <>{formatCompact(totalPendingLp)} LP</>}
+                    </div>
+                  )}
+                  {/* Combined USD value */}
+                  {combinedUsd > 0 && (
+                    <div className="text-sm text-muted-foreground">{formatUsd(combinedUsd)}</div>
+                  )}
+                  {/* Show nothing pending but has claimed - show a label */}
+                  {totalPendingBlnd === 0 && totalPendingLp === 0 && (hasClaimedBlnd || hasClaimedLp) && (
+                    <div className="text-base font-semibold text-muted-foreground">Rewards</div>
+                  )}
+                </>
+              )
+            })()}
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {blndApy > 0 && (
+          {combinedApy > 0 && (
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger onClick={(e) => e.stopPropagation()}>
                   <Badge variant="outline" className="text-xs">
-                    {blndApy.toFixed(2)}% APY
+                    {combinedApy.toFixed(2)}% APY
                   </Badge>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>Weighted average BLND APY across all positions</p>
+                  <p>Weighted average emission APY (BLND + LP)</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
@@ -347,7 +421,7 @@ export function BlndRewardsCard({
         </div>
       </div>
       <div
-        className={`overflow-hidden transition-[max-height,opacity] duration-300 ease-out ${isExpanded ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}`}
+        className={`overflow-hidden transition-[max-height,opacity] duration-300 ease-out ${isExpanded ? 'max-h-[700px] opacity-100' : 'max-h-0 opacity-0'}`}
       >
         <div className="px-4 pt-2 pb-4">
           {/* Table-like structure */}
@@ -374,11 +448,21 @@ export function BlndRewardsCard({
                     }`} />
                     <span className="truncate">{row.name}</span>
                   </div>
-                  <div className="w-20 text-right tabular-nums font-medium">
-                    {row.claimable > 0 ? formatNumber(row.claimable, 2) : '-'}
+                  <div className="w-20 text-right tabular-nums font-medium flex items-center justify-end gap-1">
+                    {row.claimable > 0 ? (
+                      <>
+                        {row.tokenUnit === 'LP' ? <Shield className="h-3 w-3 text-muted-foreground" /> : <Flame className="h-3 w-3 text-muted-foreground" />}
+                        {formatNumber(row.claimable, 2)}
+                      </>
+                    ) : '-'}
                   </div>
-                  <div className="w-20 text-right tabular-nums text-muted-foreground">
-                    {row.claimed > 0 ? `${row.type === 'backstop' ? '~' : ''}${formatNumber(row.claimed, 2)}` : '-'}
+                  <div className="w-20 text-right tabular-nums text-muted-foreground flex items-center justify-end gap-1">
+                    {row.claimed > 0 ? (
+                      <>
+                        {row.tokenUnit === 'LP' ? <Shield className="h-3 w-3" /> : <Flame className="h-3 w-3" />}
+                        {formatNumber(row.claimed, 2)}
+                      </>
+                    ) : '-'}
                   </div>
                 </div>
               ))
@@ -391,11 +475,17 @@ export function BlndRewardsCard({
                       <span className="inline-block w-2 h-2 rounded-full flex-shrink-0 bg-green-500" />
                       <span>Deposit</span>
                     </div>
-                    <div className="w-20 text-right tabular-nums font-medium">
+                    <div className="w-20 text-right tabular-nums font-medium flex items-center justify-end gap-1">
+                      <Flame className="h-3 w-3 text-muted-foreground" />
                       {formatNumber(pendingSupplyEmissions, 2)}
                     </div>
-                    <div className="w-20 text-right tabular-nums text-muted-foreground">
-                      {poolClaimedBlnd > 0 ? formatNumber(poolClaimedBlnd, 2) : '-'}
+                    <div className="w-20 text-right tabular-nums text-muted-foreground flex items-center justify-end gap-1">
+                      {poolClaimedBlnd > 0 ? (
+                        <>
+                          <Flame className="h-3 w-3" />
+                          {formatNumber(poolClaimedBlnd, 2)}
+                        </>
+                      ) : '-'}
                     </div>
                   </div>
                 )}
@@ -405,7 +495,8 @@ export function BlndRewardsCard({
                       <span className="inline-block w-2 h-2 rounded-full flex-shrink-0 bg-orange-500" />
                       <span>Borrow</span>
                     </div>
-                    <div className="w-20 text-right tabular-nums font-medium">
+                    <div className="w-20 text-right tabular-nums font-medium flex items-center justify-end gap-1">
+                      <Flame className="h-3 w-3 text-muted-foreground" />
                       {formatNumber(pendingBorrowEmissions, 2)}
                     </div>
                     <div className="w-20 text-right tabular-nums text-muted-foreground">-</div>
@@ -419,128 +510,205 @@ export function BlndRewardsCard({
                       <span>Deposit</span>
                     </div>
                     <div className="w-20 text-right tabular-nums font-medium">-</div>
-                    <div className="w-20 text-right tabular-nums text-muted-foreground">
+                    <div className="w-20 text-right tabular-nums text-muted-foreground flex items-center justify-end gap-1">
+                      <Flame className="h-3 w-3" />
                       {formatNumber(poolClaimedBlnd, 2)}
                     </div>
                   </div>
                 )}
-                {(effectiveBackstopPending > 0 || backstopClaimedBlnd > 0) && (
+                {(totalPendingLp > 0 || totalClaimedLp > 0) && (
                   <div className="grid grid-cols-[1fr_auto_auto] gap-2 text-xs py-1">
                     <div className="flex items-center gap-2 text-muted-foreground">
                       <span className="inline-block w-2 h-2 rounded-full flex-shrink-0 bg-purple-500" />
                       <span>Backstop</span>
                     </div>
-                    <div className="w-20 text-right tabular-nums font-medium">
-                      {effectiveBackstopPending > 0 ? formatNumber(effectiveBackstopPending, 2) : '-'}
+                    <div className="w-20 text-right tabular-nums font-medium flex items-center justify-end gap-1">
+                      {totalPendingLp > 0 ? (
+                        <>
+                          <Shield className="h-3 w-3 text-muted-foreground" />
+                          {formatNumber(totalPendingLp, 2)}
+                        </>
+                      ) : '-'}
                     </div>
-                    <div className="w-20 text-right tabular-nums text-muted-foreground">
-                      {backstopClaimedBlnd > 0 ? `~${formatNumber(backstopClaimedBlnd, 2)}` : '-'}
+                    <div className="w-20 text-right tabular-nums text-muted-foreground flex items-center justify-end gap-1">
+                      {totalClaimedLp > 0 ? (
+                        <>
+                          <Shield className="h-3 w-3" />
+                          {formatNumber(totalClaimedLp, 2)}
+                        </>
+                      ) : '-'}
                     </div>
                   </div>
                 )}
               </>
             )}
 
-            {/* Total row */}
-            <div className="grid grid-cols-[1fr_auto_auto] gap-2 text-sm pt-2 border-t border-border/50 font-medium">
-              <div>Total</div>
-              <div className="w-20 text-right">
-                <div className="tabular-nums">{formatNumber(totalPendingBlnd, 2)}</div>
-                {blndPrice && totalPendingBlnd > 0 && (
-                  <div className="text-xs text-muted-foreground font-normal">
-                    {formatUsd(totalPendingBlnd * blndPrice)}
-                  </div>
-                )}
-              </div>
-              <div className="w-20 text-right text-muted-foreground">
-                <div className="tabular-nums">{formatNumber(totalClaimedBlnd, 2)}</div>
-                {blndPrice && totalClaimedBlnd > 0 && (
-                  <div className="text-xs font-normal">
-                    {formatUsd(poolClaimedUsdDisplay + backstopClaimedUsdDisplay)}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Total BLND Earned summary */}
-          {(hasPendingEmissions || hasClaimedBlnd) && (
-            <>
-              <Separator className="my-3" />
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Total BLND Earned</span>
-                <div className="text-right">
-                  {blndPrice ? (
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger>
-                          <span className="font-semibold tabular-nums border-b border-dotted border-muted-foreground/50">
-                            {formatNumber(totalPendingBlnd + totalClaimedBlnd, 2)} ({formatUsd(
-                              (totalPendingBlnd * blndPrice) + poolClaimedUsdDisplay + backstopClaimedUsdDisplay
-                            )})
-                          </span>
-                        </TooltipTrigger>
-                        <TooltipContent className="max-w-xs p-2.5">
-                          <div className="space-y-1.5 text-[11px]">
-                            <div className="flex justify-between gap-4">
-                              <span className="text-zinc-400">Pending ({formatNumber(totalPendingBlnd, 2)} BLND)</span>
-                              <span className="text-zinc-200">{formatUsd(totalPendingBlnd * blndPrice)}</span>
-                            </div>
-                            {poolClaimedBlnd > 0 && (
-                              <div className="flex justify-between gap-4">
-                                <span className="text-zinc-400">Claimed - Pool ({formatNumber(poolClaimedBlnd, 2)} BLND)</span>
-                                <span className="text-zinc-200">{formatUsd(poolClaimedUsdDisplay)}</span>
-                              </div>
-                            )}
-                            {backstopClaimedBlnd > 0 && (
-                              <div className="flex justify-between gap-4">
-                                <span className="text-zinc-400">Claimed - Backstop (~{formatNumber(backstopClaimedBlnd, 2)} BLND)</span>
-                                <span className="text-zinc-200">{formatUsd(backstopClaimedUsdDisplay)}</span>
-                              </div>
-                            )}
-                            <div className="border-t border-zinc-700 pt-1 mt-1 text-[10px] text-zinc-500">
-                              {displayPreferences.useHistoricalBlndPrices
-                                ? "Claims valued at price when claimed"
-                                : "All emissions valued at current price"}
-                            </div>
-                          </div>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  ) : (
-                    <span className="font-semibold tabular-nums">
-                      {formatNumber(totalPendingBlnd + totalClaimedBlnd, 2)}
-                    </span>
+            {/* BLND Total row */}
+            {(totalPendingBlnd > 0 || totalClaimedBlnd > 0) && (
+              <div className="grid grid-cols-[1fr_auto_auto] gap-2 text-sm pt-2 border-t border-border/50 font-medium">
+                <div className="flex items-center gap-1">
+                  <Flame className="h-3.5 w-3.5 text-muted-foreground" />
+                  BLND Total
+                </div>
+                <div className="w-20 text-right">
+                  <div className="tabular-nums">{formatNumber(totalPendingBlnd, 2)}</div>
+                  {blndPrice && totalPendingBlnd > 0 && (
+                    <div className="text-xs text-muted-foreground font-normal">
+                      {formatUsd(totalPendingBlnd * blndPrice)}
+                    </div>
                   )}
                 </div>
+                <div className="w-20 text-right text-muted-foreground">
+                  <div className="tabular-nums">{formatNumber(totalClaimedBlnd, 2)}</div>
+                  {totalClaimedBlnd > 0 && (
+                    <div className="text-xs font-normal">
+                      {formatUsd(poolClaimedUsdDisplay)}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* LP Total row */}
+            {(totalPendingLp > 0 || totalClaimedLp > 0) && (
+              <div className="grid grid-cols-[1fr_auto_auto] gap-2 text-sm pt-2 border-t border-border/50 font-medium">
+                <div className="flex items-center gap-1">
+                  <Shield className="h-3.5 w-3.5 text-muted-foreground" />
+                  LP Total
+                </div>
+                <div className="w-20 text-right">
+                  <div className="tabular-nums">{formatNumber(totalPendingLp, 2)}</div>
+                  {lpTokenPrice && totalPendingLp > 0 && (
+                    <div className="text-xs text-muted-foreground font-normal">
+                      {formatUsd(totalPendingLp * lpTokenPrice)}
+                    </div>
+                  )}
+                </div>
+                <div className="w-20 text-right text-muted-foreground">
+                  <div className="tabular-nums">{formatNumber(totalClaimedLp, 2)}</div>
+                  {totalClaimedLp > 0 && (
+                    <div className="text-xs font-normal">
+                      {formatUsd(backstopClaimedUsdDisplay)}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Total Earned summary */}
+          {(hasPendingEmissions || hasClaimedBlnd || hasPendingLp || hasClaimedLp) && (
+            <>
+              <Separator className="my-3" />
+              <div className="space-y-2">
+                {/* Combined Total USD */}
+                {(() => {
+                  const blndTotalUsd = blndPrice ? (totalPendingBlnd * blndPrice) + poolClaimedUsdDisplay : 0
+                  const lpTotalUsd = lpTokenPrice ? (totalPendingLp * lpTokenPrice) + backstopClaimedUsdDisplay : 0
+                  const combinedTotalUsd = blndTotalUsd + lpTotalUsd
+                  if (combinedTotalUsd > 0) {
+                    return (
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">Total Earned</span>
+                        <span className="font-semibold tabular-nums">
+                          {formatUsd(combinedTotalUsd)}
+                        </span>
+                      </div>
+                    )
+                  }
+                  return null
+                })()}
               </div>
             </>
           )}
 
-          {/* BLND Yield Projection */}
-          {blndApy > 0 && blndPrice && totalPositionUsd > 0 && (
+          {/* Yield Projection */}
+          {blndPrice && ((blndApy > 0 && totalPositionUsd > 0) || backstopPositions.length > 0) && (
             <div className="grid grid-cols-3 gap-3 text-center mt-8">
                 {(() => {
-                  const annualUsdYield = totalPositionUsd * (blndApy / 100)
-                  const annualBlnd = annualUsdYield / blndPrice
+                  // Calculate backstop totals for LP projections
+                  const hasLpPositions = backstopPositions.length > 0
+                  let totalBackstopUsd = 0
+                  let weightedBackstopApy = 0
+                  backstopPositions.forEach(bp => {
+                    const posUsd = bp.lpTokensUsd || 0
+                    const posApy = bp.emissionApy || 0
+                    totalBackstopUsd += posUsd
+                    weightedBackstopApy += posUsd * posApy
+                  })
+                  const backstopApy = totalBackstopUsd > 0 ? weightedBackstopApy / totalBackstopUsd : 0
+
+                  // BLND projections: supply/borrow positions × their BLND APY
+                  // Note: blndApy and totalPositionUsd are both supply/borrow only (excludes backstop)
+                  const annualBlndUsd = totalPositionUsd * (blndApy / 100)
+                  const annualBlnd = blndPrice > 0 ? annualBlndUsd / blndPrice : 0
                   const monthlyBlnd = annualBlnd / 12
                   const dailyBlnd = annualBlnd / 365
+
+                  // LP yield: backstop position value × emission APY → USD → LP tokens
+                  const annualLpUsd = totalBackstopUsd * (backstopApy / 100)
+                  const annualLp = lpTokenPrice && lpTokenPrice > 0 ? annualLpUsd / lpTokenPrice : 0
+                  const monthlyLp = annualLp / 12
+                  const dailyLp = annualLp / 365
+
+                  // Combined USD
+                  const dailyBlndUsd = dailyBlnd * blndPrice
+                  const dailyLpUsd = dailyLp * (lpTokenPrice || 0)
+                  const dailyTotalUsd = dailyBlndUsd + dailyLpUsd
+                  const monthlyTotalUsd = dailyTotalUsd * 30
+                  const annualTotalUsd = dailyTotalUsd * 365
+
+                  const hasBlndPositions = blndApy > 0 && totalPositionUsd > 0
+
                   return (
                     <>
                       <div>
                         <div className="text-xs text-muted-foreground mb-0.5">Daily</div>
-                        <div className="font-semibold tabular-nums text-sm">{formatNumber(dailyBlnd, 2)}</div>
-                        <div className="text-xs text-muted-foreground">{formatUsd(dailyBlnd * blndPrice)}</div>
+                        {hasBlndPositions && (
+                          <div className="font-semibold tabular-nums text-sm flex items-center justify-center gap-1">
+                            <Flame className="h-3 w-3 text-muted-foreground" />
+                            {formatNumber(dailyBlnd, 2)}
+                          </div>
+                        )}
+                        {hasLpPositions && (
+                          <div className="font-semibold tabular-nums text-sm flex items-center justify-center gap-1">
+                            <Shield className="h-3 w-3 text-muted-foreground" />
+                            {dailyLp > 0 ? formatNumber(dailyLp, 2) : '-'}
+                          </div>
+                        )}
+                        <div className="text-xs text-muted-foreground mt-0.5">{formatUsd(dailyTotalUsd)}</div>
                       </div>
                       <div>
                         <div className="text-xs text-muted-foreground mb-0.5">Monthly</div>
-                        <div className="font-semibold tabular-nums text-sm">{formatNumber(monthlyBlnd, 2)}</div>
-                        <div className="text-xs text-muted-foreground">{formatUsd(monthlyBlnd * blndPrice)}</div>
+                        {hasBlndPositions && (
+                          <div className="font-semibold tabular-nums text-sm flex items-center justify-center gap-1">
+                            <Flame className="h-3 w-3 text-muted-foreground" />
+                            {formatNumber(monthlyBlnd, 2)}
+                          </div>
+                        )}
+                        {hasLpPositions && (
+                          <div className="font-semibold tabular-nums text-sm flex items-center justify-center gap-1">
+                            <Shield className="h-3 w-3 text-muted-foreground" />
+                            {monthlyLp > 0 ? formatNumber(monthlyLp, 2) : '-'}
+                          </div>
+                        )}
+                        <div className="text-xs text-muted-foreground mt-0.5">{formatUsd(monthlyTotalUsd)}</div>
                       </div>
                       <div>
                         <div className="text-xs text-muted-foreground mb-0.5">Annual</div>
-                        <div className="font-semibold tabular-nums text-sm">{formatNumber(annualBlnd, 2)}</div>
-                        <div className="text-xs text-muted-foreground">{formatUsd(annualBlnd * blndPrice)}</div>
+                        {hasBlndPositions && (
+                          <div className="font-semibold tabular-nums text-sm flex items-center justify-center gap-1">
+                            <Flame className="h-3 w-3 text-muted-foreground" />
+                            {formatNumber(annualBlnd, 2)}
+                          </div>
+                        )}
+                        {hasLpPositions && (
+                          <div className="font-semibold tabular-nums text-sm flex items-center justify-center gap-1">
+                            <Shield className="h-3 w-3 text-muted-foreground" />
+                            {annualLp > 0 ? formatNumber(annualLp, 2) : '-'}
+                          </div>
+                        )}
+                        <div className="text-xs text-muted-foreground mt-0.5">{formatUsd(annualTotalUsd)}</div>
                       </div>
                     </>
                   )
