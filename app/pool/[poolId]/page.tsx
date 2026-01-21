@@ -176,13 +176,17 @@ function PoolSummary({
           <p className="text-lg md:text-xl font-semibold truncate">
             {formatUsd(estimate.totalBorrowed)}
           </p>
-          {estimate.totalBorrowed > 0 && (
+          {estimate.totalBorrowed > 0 ? (
             <div className="flex items-center gap-1 mt-1">
               <TrendingDown className="h-3 w-3 text-red-400 shrink-0" />
               <span className="text-xs text-red-400">
                 {formatPercent(estimate.borrowApy)} APY
               </span>
             </div>
+          ) : (
+            <p className="text-xs text-muted-foreground mt-1 truncate">
+              Capacity: {formatUsd(estimate.borrowCap)}
+            </p>
           )}
         </CardContent>
       </Card>
@@ -194,9 +198,6 @@ function PoolSummary({
             className={`text-lg md:text-xl font-semibold ${estimate.netApy >= 0 ? "text-emerald-400" : "text-red-400"}`}
           >
             {formatPercent(estimate.netApy)}
-          </p>
-          <p className="text-xs text-muted-foreground mt-1 truncate">
-            Capacity: {formatUsd(estimate.borrowCap)}
           </p>
         </CardContent>
       </Card>
