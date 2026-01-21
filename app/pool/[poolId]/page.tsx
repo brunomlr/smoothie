@@ -1389,7 +1389,12 @@ export default function PoolDetailsPage() {
 
   // Render content based on state
   const renderContent = () => {
-    if (isLoading) {
+    // Show loading if:
+    // 1. Query is actively loading
+    // 2. Query is not enabled yet because pools metadata is still loading
+    const isWaitingForPools = !!activeWallet?.publicKey && trackedPools.length === 0;
+
+    if (isLoading || isWaitingForPools) {
       return (
         <div className="min-h-screen bg-background">
           <PageHeader title="Pool Details" />
