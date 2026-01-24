@@ -23,8 +23,13 @@ interface TokenSparklineProps {
 }
 
 async function fetchTokenPriceHistory(tokenAddress: string, period: SparklinePeriod = "1mo"): Promise<PriceDataPoint[]> {
+  // Note: We request 2 days for 24h period to handle timezone differences between
+  // server (UTC) and user's local time. The server generates dates using CURRENT_DATE (UTC),
+  // but the client filters using user's local timezone. If user is behind UTC,
+  // server's "today" becomes "tomorrow" for user and gets filtered out, leaving only 1 point.
+  // With 2 days, we ensure at least 2 data points remain after timezone filtering.
   const daysMap = {
-    "24h": "1",
+    "24h": "2",
     "7d": "7",
     "1mo": "30",
   }
@@ -153,7 +158,14 @@ export function TokenSparkline({
     return data
   }, [priceHistory, currentPrice, tokenAddress, period])
 
-  const { trend } = useMemo(() => calculatePriceChange(chartData), [chartData])
+  // For 24h, compare only the last 2 data points (yesterday vs today)
+  // For longer periods, compare first vs last to show full period change
+  const { trend } = useMemo(() => {
+    if (period === "24h" && chartData.length > 2) {
+      return calculatePriceChange(chartData.slice(-2))
+    }
+    return calculatePriceChange(chartData)
+  }, [chartData, period])
 
   if (!chartData?.length) {
     return null
@@ -243,7 +255,14 @@ export function Token30dChange({
     return data
   }, [priceHistory, currentPrice, tokenAddress, period])
 
-  const { percentage, trend } = useMemo(() => calculatePriceChange(chartData), [chartData])
+  // For 24h, compare only the last 2 data points (yesterday vs today)
+  // For longer periods, compare first vs last to show full period change
+  const { percentage, trend } = useMemo(() => {
+    if (period === "24h" && chartData.length > 2) {
+      return calculatePriceChange(chartData.slice(-2))
+    }
+    return calculatePriceChange(chartData)
+  }, [chartData, period])
 
   if (!chartData?.length) {
     return null

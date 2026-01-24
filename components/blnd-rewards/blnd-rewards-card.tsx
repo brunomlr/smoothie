@@ -114,10 +114,12 @@ export function BlndRewardsCard({
     if (!backstopClaimsData?.backstop_claims) {
       return 0
     }
-    return backstopClaimsData.backstop_claims.reduce(
+    const total = backstopClaimsData.backstop_claims.reduce(
       (total: number, claim: { total_claimed_lp: number }) => total + (claim.total_claimed_lp || 0),
       0
     )
+    // Ensure non-negative
+    return Math.max(0, total)
   }, [backstopClaimsData])
 
   // Calculate backstop claimed USD based on preference (historical vs current price)
@@ -133,7 +135,7 @@ export function BlndRewardsCard({
   // Calculate total pending LP from backstop emissions
   const totalPendingLp = useMemo(() => {
     // Sum simulatedEmissionsLp from backstop positions, fallback to claimableBlnd converted
-    return backstopPositions.reduce((sum, bp) => {
+    const total = backstopPositions.reduce((sum, bp) => {
       if (bp.simulatedEmissionsLp != null && bp.simulatedEmissionsLp > 0) {
         return sum + bp.simulatedEmissionsLp
       }
@@ -143,6 +145,8 @@ export function BlndRewardsCard({
       }
       return sum
     }, 0)
+    // Ensure non-negative (can go slightly negative after claiming due to tx fees)
+    return Math.max(0, total)
   }, [backstopPositions, blndPerLpToken])
 
   // Calculate combined weighted APY (BLND from supply/borrow + LP emissions from backstop)
