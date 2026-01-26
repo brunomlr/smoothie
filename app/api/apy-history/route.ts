@@ -43,7 +43,6 @@ function calculateApyFromRates(
 
   const result: ApyDataPoint[] = []
   let lastRealEventIndex = 0 // Track the last row with actual on-chain data
-  let pendingDaysStartIndex = -1 // Track start of forward-filled days
 
   // Find first row with real data to use as baseline
   for (let i = 0; i < sorted.length; i++) {
@@ -58,7 +57,7 @@ function calculateApyFromRates(
     const currHasRealData = sorted[i].rate_timestamp !== null
 
     if (currHasRealData && currRate !== null) {
-      // This row has actual on-chain data
+      // This row has actual on-chain data - calculate APY
       const prevRate = sorted[lastRealEventIndex].b_rate
 
       let apy = 0
@@ -77,15 +76,6 @@ function calculateApyFromRates(
         apy = Math.max(0, (Math.pow(dailyReturn, 365) - 1) * 100)
       }
 
-      // Retroactively update any pending forward-filled days with this APY
-      if (pendingDaysStartIndex >= 0) {
-        for (let j = pendingDaysStartIndex; j < result.length; j++) {
-          result[j].apy = apy
-        }
-        pendingDaysStartIndex = -1
-      }
-
-      // Add current day
       result.push({
         date: sorted[i].rate_date,
         apy: apy,
@@ -93,31 +83,11 @@ function calculateApyFromRates(
 
       lastRealEventIndex = i
     } else {
-      // Forward-filled day - mark as pending, will be updated when next real data arrives
-      if (pendingDaysStartIndex < 0) {
-        pendingDaysStartIndex = result.length
-      }
-      // Temporarily use 0 for pending days (will be updated retroactively)
+      // Forward-filled day - no real event, so 0% APY (no interest accrued)
       result.push({
         date: sorted[i].rate_date,
         apy: 0,
       })
-    }
-  }
-
-  // If there are trailing pending days (no real data after them), use the last calculated APY
-  // by looking at the last real data point's APY
-  if (pendingDaysStartIndex >= 0 && result.length > 0) {
-    // Find the last non-zero APY before the pending section
-    let lastKnownApy = 0
-    for (let j = pendingDaysStartIndex - 1; j >= 0; j--) {
-      if (result[j].apy > 0) {
-        lastKnownApy = result[j].apy
-        break
-      }
-    }
-    for (let j = pendingDaysStartIndex; j < result.length; j++) {
-      result[j].apy = lastKnownApy
     }
   }
 
