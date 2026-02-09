@@ -10,7 +10,7 @@ export interface NavItem {
 export const primaryNavItems: NavItem[] = [
   {
     title: "Home",
-    href: "/",
+    href: "/home",
     icon: Home,
   },
   {

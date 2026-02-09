@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useRouter } from "next/navigation"
 import { StrKey } from "@stellar/stellar-sdk"
 import { WALLETS_STORAGE_KEY, ACTIVE_WALLET_STORAGE_KEY } from "@/lib/constants"
 import type { Wallet } from "@/types/wallet"
@@ -98,6 +99,8 @@ function initializeWallets(): { wallets: Wallet[]; activeId: string | null } {
 }
 
 export function WalletProvider({ children }: { children: React.ReactNode }) {
+  const router = useRouter()
+
   // Start with empty values to match server-side rendering
   const [wallets, setWallets] = React.useState<Wallet[]>([])
   const [activeWalletId, setActiveWalletId] = React.useState<string | null>(null)
@@ -170,7 +173,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     })
 
     setActiveWalletId(newWallet.id)
-  }, [])
+
+    // Redirect to /home after connecting wallet
+    router.push('/home')
+  }, [router])
 
   const handleConnectDemoWallet = React.useCallback((alias: string) => {
     // For demo wallets, we store the alias (e.g., "demo-1") instead of the real address
@@ -191,23 +197,31 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     })
 
     setActiveWalletId(demoWallet.id)
-  }, [])
+
+    // Redirect to /home after connecting demo wallet
+    router.push('/home')
+  }, [router])
 
   const handleDisconnect = React.useCallback((walletId: string) => {
     setWallets((prev) => {
       const remaining = prev.filter((w) => w.id !== walletId)
 
-      // If we're disconnecting the active wallet, select the first remaining one
-      if (activeWalletId === walletId && remaining.length > 0) {
-        setActiveWalletId(remaining[0].id)
-        return remaining.map((w, idx) => ({ ...w, isActive: idx === 0 }))
-      } else if (activeWalletId === walletId) {
-        setActiveWalletId(null)
+      // If we're disconnecting the active wallet
+      if (activeWalletId === walletId) {
+        if (remaining.length > 0) {
+          // Switch to first remaining wallet (no redirect)
+          setActiveWalletId(remaining[0].id)
+          return remaining.map((w, idx) => ({ ...w, isActive: idx === 0 }))
+        } else {
+          // Last wallet disconnected - redirect to landing
+          setActiveWalletId(null)
+          router.push('/')
+        }
       }
 
       return remaining
     })
-  }, [activeWalletId])
+  }, [activeWalletId, router])
 
   const value = React.useMemo(
     () => ({

@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useRouter } from "next/navigation"
 import { Wallet, Check, Plus, LogOut, Copy, ChevronDown, Eye, Smile, Pencil } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -47,6 +48,7 @@ export function WalletSelector({
   fullWidth = false,
   isHydrated = true,
 }: WalletSelectorProps) {
+  const router = useRouter()
   const [showConnectionModal, setShowConnectionModal] = React.useState(false)
   const [showFollowAddressModal, setShowFollowAddressModal] = React.useState(false)
   const [copiedAddress, setCopiedAddress] = React.useState<string | null>(null)
@@ -187,8 +189,24 @@ export function WalletSelector({
     )
   }
 
-  // Landing variant: render a button that directly opens the connection modal
-  if (variant === "landing" && !activeWallet) {
+  // Landing variant: render different buttons based on wallet connection status
+  if (variant === "landing") {
+    // If wallet is connected, show "Go to App" button
+    if (activeWallet) {
+      return (
+        <Button
+          variant="default"
+          size="lg"
+          className="gap-2 h-12 px-8 text-base font-semibold bg-black text-white shadow-lg border border-white/20 cursor-pointer transition-all duration-200 hover:bg-zinc-900 hover:border-white/40 hover:scale-[1.02]"
+          onClick={() => router.push('/home')}
+        >
+          Go to App
+          <ChevronDown className="h-5 w-5 -rotate-90" />
+        </Button>
+      )
+    }
+
+    // No wallet connected - show "Connect Wallet" button
     return (
       <>
         <Button

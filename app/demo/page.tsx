@@ -18,7 +18,7 @@ export default function DemoPage() {
         handleConnectDemoWallet(demoAlias)
       }
 
-      router.replace("/")
+      router.replace("/home")
     }
 
     loadDemoWallet()

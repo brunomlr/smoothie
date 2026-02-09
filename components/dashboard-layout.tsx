@@ -31,11 +31,11 @@ export function DashboardLayout({
   } = useWalletState()
 
   // Get page title for non-home pages
-  const isHomePage = pathname === "/"
+  const isHomePage = pathname === "/home"
   const isSettingsPage = pathname === "/settings" || pathname.startsWith("/settings/")
   const showFooter = isHomePage || isSettingsPage
   const currentNavItem = navItems.find(
-    (item) => item.href !== "/" && pathname.startsWith(item.href)
+    (item) => item.href !== "/home" && pathname.startsWith(item.href)
   )
   const pageTitle = currentNavItem?.title
 

@@ -1,5 +1,7 @@
 "use client"
 
+import { useEffect } from "react"
+import { useRouter, usePathname } from "next/navigation"
 import { LandingPage } from "@/components/landing-page"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { PullToRefresh } from "@/components/pull-to-refresh"
@@ -19,6 +21,8 @@ export function AuthenticatedPage({
   error,
   withLayout = true,
 }: AuthenticatedPageProps) {
+  const router = useRouter()
+  const pathname = usePathname()
   const {
     wallets,
     activeWallet,
@@ -29,13 +33,20 @@ export function AuthenticatedPage({
     isHydrated,
   } = useWalletState()
 
+  // Redirect to landing if no wallet (except on landing itself)
+  useEffect(() => {
+    if (isHydrated && !activeWallet && pathname !== '/') {
+      router.replace('/')
+    }
+  }, [isHydrated, activeWallet, pathname, router])
+
   // Wait for hydration before deciding what to show
   if (!isHydrated) {
     return null
   }
 
-  // Show landing page for non-logged-in users
-  if (!activeWallet) {
+  // Show landing page ONLY if on landing route
+  if (!activeWallet && pathname === '/') {
     return (
       <LandingPage
         wallets={wallets}
@@ -47,6 +58,11 @@ export function AuthenticatedPage({
         isHydrated={isHydrated}
       />
     )
+  }
+
+  // Show nothing if no wallet (will redirect)
+  if (!activeWallet) {
+    return null
   }
 
   if (!withLayout) {
