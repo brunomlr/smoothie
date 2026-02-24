@@ -658,6 +658,14 @@ function RealizedYieldContent() {
     if (!data) return 0
     return unrealizedData.totalCurrentUsd + data.totalWithdrawnUsd - data.totalDepositedUsd
   }, [data, unrealizedData.totalCurrentUsd])
+  const poolsCashflowPnl = useMemo(() => {
+    if (!data) return 0
+    return unrealizedData.poolsCurrentUsd + data.pools.withdrawn - data.pools.deposited
+  }, [data, unrealizedData.poolsCurrentUsd])
+  const backstopCashflowPnl = useMemo(() => {
+    if (!data) return 0
+    return unrealizedData.backstopCurrentUsd + data.backstop.withdrawn - data.backstop.deposited
+  }, [data, unrealizedData.backstopCurrentUsd])
   const displayTotalPnl = hasBorrows ? displayPnl.totalPnl : cashflowTotalPnl
   const totalPnlPositive = displayTotalPnl >= 0
   const hasOrHadYieldBloxExposure = useMemo(() => {
@@ -1128,15 +1136,15 @@ function RealizedYieldContent() {
                           </div>
                           <div className="flex justify-between items-center font-semibold text-base pt-2 border-t border-border/50">
                             <span>
-                              <InfoLabel label="P&L" tooltip="Profit from lending yield. Pool emissions shown in summary below." />
+                              <InfoLabel label="P&L" tooltip="Total profit: (Current Balance + Withdrawn) - Deposited" />
                             </span>
                             <div className="flex items-center gap-2">
-                              <span className={`tabular-nums ${displayPnl.poolsUnrealized >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                                {displayPnl.poolsUnrealized >= 0 ? "+" : ""}{formatUsd(displayPnl.poolsUnrealized)}
+                              <span className={`tabular-nums ${poolsCashflowPnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                                {poolsCashflowPnl >= 0 ? "+" : ""}{formatUsd(poolsCashflowPnl)}
                               </span>
                               {data.pools.deposited > 0 && (
-                                <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${displayPnl.poolsUnrealized >= 0 ? "text-emerald-400 border-emerald-400/30" : "text-red-400 border-red-400/30"}`}>
-                                  {displayPnl.poolsUnrealized >= 0 ? "+" : ""}{((displayPnl.poolsUnrealized / data.pools.deposited) * 100).toFixed(1)}%
+                                <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${poolsCashflowPnl >= 0 ? "text-emerald-400 border-emerald-400/30" : "text-red-400 border-red-400/30"}`}>
+                                  {poolsCashflowPnl >= 0 ? "+" : ""}{((poolsCashflowPnl / data.pools.deposited) * 100).toFixed(1)}%
                                 </Badge>
                               )}
                             </div>
@@ -1242,15 +1250,15 @@ function RealizedYieldContent() {
                           </div>
                           <div className="flex justify-between items-center font-semibold text-base pt-2 border-t border-border/50">
                             <span>
-                              <InfoLabel label="P&L" tooltip="Total profit: Unrealized P&L + Realized P&L" />
+                              <InfoLabel label="P&L" tooltip="Total profit: (Current Balance + Withdrawn) - Deposited" />
                             </span>
                             <div className="flex items-center gap-2">
-                              <span className={`tabular-nums ${(displayPnl.backstopUnrealized + emissionsBySource.backstop.usd) >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                                {(displayPnl.backstopUnrealized + emissionsBySource.backstop.usd) >= 0 ? "+" : ""}{formatUsd(displayPnl.backstopUnrealized + emissionsBySource.backstop.usd)}
+                              <span className={`tabular-nums ${backstopCashflowPnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                                {backstopCashflowPnl >= 0 ? "+" : ""}{formatUsd(backstopCashflowPnl)}
                               </span>
                               {data.backstop.deposited > 0 && (
-                                <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${(displayPnl.backstopUnrealized + emissionsBySource.backstop.usd) >= 0 ? "text-emerald-400 border-emerald-400/30" : "text-red-400 border-red-400/30"}`}>
-                                  {(displayPnl.backstopUnrealized + emissionsBySource.backstop.usd) >= 0 ? "+" : ""}{(((displayPnl.backstopUnrealized + emissionsBySource.backstop.usd) / data.backstop.deposited) * 100).toFixed(1)}%
+                                <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${backstopCashflowPnl >= 0 ? "text-emerald-400 border-emerald-400/30" : "text-red-400 border-red-400/30"}`}>
+                                  {backstopCashflowPnl >= 0 ? "+" : ""}{((backstopCashflowPnl / data.backstop.deposited) * 100).toFixed(1)}%
                                 </Badge>
                               )}
                             </div>
@@ -1432,15 +1440,24 @@ function RealizedYieldContent() {
                       ? (poolBorrow?.totalCostUsd ?? 0)
                       : (poolBorrow?.interestAccruedUsd ?? 0) // Exclude price change when setting is off
 
-                    // Total P&L = Yield + Emissions - Borrow Cost
-                    // Note: Pool emissions (from lending.emissionsClaimed) are shown at pool level
-                    // since we can't distinguish between supply vs borrow emissions
-                    const lendingTotalPnl = lendingYield // Emissions shown separately at pool level
-                    const backstopTotalPnl = backstopYield + poolData.backstop.emissionsClaimed
+                    // Cashflow P&L for each source
+                    const lendingCashflowPnl = lendingCurrentBalance + poolData.lending.withdrawn - poolData.lending.deposited
+                    const backstopCashflowPnl = backstopCurrentBalance + poolData.backstop.withdrawn - poolData.backstop.deposited
+
+                    // Net P&L uses yield/emissions/borrow cost components when borrows exist.
+                    // For non-borrow pools, display cashflow-based Total P&L.
+                    const lendingTotalPnl = lendingYield // Diagnostic breakdown metric
+                    const backstopTotalPnl = backstopYield + poolData.backstop.emissionsClaimed // Diagnostic breakdown metric
                     const poolEmissions = poolData.lending.emissionsClaimed // Pool-level emissions (supply + borrow combined)
 
-                    const poolTotalPnl = lendingTotalPnl + backstopTotalPnl + poolEmissions - poolBorrowCost
+                    const poolNetPnl = lendingTotalPnl + backstopTotalPnl + poolEmissions - poolBorrowCost
                     const poolTotalCurrentBalance = lendingCurrentBalance + backstopCurrentBalance
+                    const poolTotalCashflowPnl =
+                      poolTotalCurrentBalance +
+                      poolData.lending.withdrawn +
+                      poolData.backstop.withdrawn -
+                      totalDeposited
+                    const poolDisplayPnl = poolBorrow && poolBorrow.currentDebtUsd > 0 ? poolNetPnl : poolTotalCashflowPnl
 
                     return (
                       <div
@@ -1509,15 +1526,15 @@ function RealizedYieldContent() {
                               {/* P&L Section */}
                               <div className="flex justify-between items-center font-semibold text-base pt-2 border-t border-border/50">
                                 <span>
-                                  <InfoLabel label="P&L" tooltip="Profit from lending yield. Pool emissions shown separately below." />
+                                  <InfoLabel label="P&L" tooltip="Total profit: (Current Balance + Withdrawn) - Deposited" />
                                 </span>
                                 <div className="flex items-center gap-2">
-                                  <span className={`tabular-nums ${lendingTotalPnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                                    {lendingTotalPnl >= 0 ? "+" : ""}{formatUsd(lendingTotalPnl)}
+                                  <span className={`tabular-nums ${lendingCashflowPnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                                    {lendingCashflowPnl >= 0 ? "+" : ""}{formatUsd(lendingCashflowPnl)}
                                   </span>
                                   {poolData.lending.deposited > 0 && (
-                                    <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${lendingTotalPnl >= 0 ? "text-emerald-400 border-emerald-400/30" : "text-red-400 border-red-400/30"}`}>
-                                      {lendingTotalPnl >= 0 ? "+" : ""}{((lendingTotalPnl / poolData.lending.deposited) * 100).toFixed(1)}%
+                                    <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${lendingCashflowPnl >= 0 ? "text-emerald-400 border-emerald-400/30" : "text-red-400 border-red-400/30"}`}>
+                                      {lendingCashflowPnl >= 0 ? "+" : ""}{((lendingCashflowPnl / poolData.lending.deposited) * 100).toFixed(1)}%
                                     </Badge>
                                   )}
                                 </div>
@@ -1587,15 +1604,15 @@ function RealizedYieldContent() {
                               {/* P&L Section */}
                               <div className="flex justify-between items-center font-semibold text-base pt-2 border-t border-border/50">
                                 <span>
-                                  <InfoLabel label="P&L" tooltip="Total profit: Yield + Emissions" />
+                                  <InfoLabel label="P&L" tooltip="Total profit: (Current Balance + Withdrawn) - Deposited" />
                                 </span>
                                 <div className="flex items-center gap-2">
-                                  <span className={`tabular-nums ${backstopTotalPnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                                    {backstopTotalPnl >= 0 ? "+" : ""}{formatUsd(backstopTotalPnl)}
+                                  <span className={`tabular-nums ${backstopCashflowPnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                                    {backstopCashflowPnl >= 0 ? "+" : ""}{formatUsd(backstopCashflowPnl)}
                                   </span>
                                   {poolData.backstop.deposited > 0 && (
-                                    <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${backstopTotalPnl >= 0 ? "text-emerald-400 border-emerald-400/30" : "text-red-400 border-red-400/30"}`}>
-                                      {backstopTotalPnl >= 0 ? "+" : ""}{((backstopTotalPnl / poolData.backstop.deposited) * 100).toFixed(1)}%
+                                    <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${backstopCashflowPnl >= 0 ? "text-emerald-400 border-emerald-400/30" : "text-red-400 border-red-400/30"}`}>
+                                      {backstopCashflowPnl >= 0 ? "+" : ""}{((backstopCashflowPnl / poolData.backstop.deposited) * 100).toFixed(1)}%
                                     </Badge>
                                   )}
                                 </div>
@@ -1692,8 +1709,8 @@ function RealizedYieldContent() {
                           )}
                           <div className="flex justify-between items-center bg-muted/50 -mx-4 px-4 py-2 rounded-md mt-3">
                             <span className="font-semibold">{poolBorrow && poolBorrow.currentDebtUsd > 0 ? "Net P&L" : "Total P&L"}</span>
-                            <p className={`text-lg font-bold tabular-nums ${poolTotalPnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                              {poolTotalPnl >= 0 ? "+" : ""}{formatUsd(poolTotalPnl)}
+                            <p className={`text-lg font-bold tabular-nums ${poolDisplayPnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                              {poolDisplayPnl >= 0 ? "+" : ""}{formatUsd(poolDisplayPnl)}
                             </p>
                           </div>
                         </div>
