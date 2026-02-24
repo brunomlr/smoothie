@@ -75,7 +75,7 @@ export const GET = createApiHandler<UserActionsResponse>({
   analytics: {
     event: 'user_actions_fetched',
     getUserAddress: (request) => request.nextUrl.searchParams.get('user') || undefined,
-    getProperties: (result, userAddress) => ({
+    getProperties: (result) => ({
       action_count: result.count,
       has_filters: result.count !== result.actions.length,
     }),

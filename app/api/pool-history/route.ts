@@ -59,6 +59,7 @@ async function getLiveTvlData(): Promise<Record<string, { tvlUsd: number; borrow
 
       let tvlUsd = 0
       let borrowedUsd = 0
+      let hasPricedReserve = false
 
       for (const [assetId, reserve] of pool.reserves) {
         try {
@@ -66,13 +67,23 @@ async function getLiveTvlData(): Promise<Record<string, { tvlUsd: number; borrow
           const totalBorrowedTokens = reserve.totalLiabilitiesFloat()
 
           if (oracle) {
-            const priceFloat = oracle.getPriceFloat(assetId) ?? 0
+            const priceFloat = oracle.getPriceFloat(assetId)
+            if (priceFloat === null || priceFloat === undefined) {
+              continue
+            }
+            hasPricedReserve = true
             tvlUsd += totalSuppliedTokens * priceFloat
             borrowedUsd += totalBorrowedTokens * priceFloat
           }
         } catch {
           // Skip this reserve
         }
+      }
+
+      // Avoid publishing false zeroes when live oracle pricing is unavailable.
+      if (!hasPricedReserve) {
+        console.warn(`[Pool History API] Skipping live point for ${tracked.id}: no priced reserves`)
+        continue
       }
 
       result[tracked.id] = { tvlUsd, borrowedUsd }
@@ -134,11 +145,6 @@ export const GET = createApiHandler<PoolHistoryData>({
         }
       }
 
-      // Skip today's historical data - we'll use live SDK data instead
-      if (point.date === today) {
-        continue
-      }
-
       poolsMap[point.poolId].history.push({
         date: point.date,
         tvlUsd: point.tvlUsd,
@@ -157,11 +163,17 @@ export const GET = createApiHandler<PoolHistoryData>({
         }
       }
 
-      poolsMap[poolId].history.push({
+      const todayIndex = poolsMap[poolId].history.findIndex((point) => point.date === today)
+      const livePoint = {
         date: today,
         tvlUsd: liveData.tvlUsd,
         borrowedUsd: liveData.borrowedUsd,
-      })
+      }
+      if (todayIndex >= 0) {
+        poolsMap[poolId].history[todayIndex] = livePoint
+      } else {
+        poolsMap[poolId].history.push(livePoint)
+      }
 
       // Sort by date to ensure today is at the end
       poolsMap[poolId].history.sort((a, b) => a.date.localeCompare(b.date))

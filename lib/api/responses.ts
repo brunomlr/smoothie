@@ -3,7 +3,7 @@
  */
 
 import { NextResponse } from 'next/server'
-import { ApiError, isApiError } from './errors'
+import { isApiError } from './errors'
 
 export interface ApiErrorResponse {
   error: string
@@ -74,7 +74,10 @@ export function errorResponse(
   }
 
   // Handle unknown errors
-  const message = error instanceof Error ? error.message : 'Unknown error'
+  const isDev = process.env.NODE_ENV === 'development'
+  const message = isDev && error instanceof Error
+    ? error.message
+    : 'An unexpected error occurred'
   return NextResponse.json(
     {
       error: 'Internal server error',

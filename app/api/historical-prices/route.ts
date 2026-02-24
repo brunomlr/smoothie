@@ -103,14 +103,12 @@ export async function GET(request: NextRequest) {
 
         // Forward-fill: find most recent price before this date
         let forwardFillPrice: number | null = null
-        let forwardFillDate: string | null = null
 
         if (tokenPrices) {
           // tokenPrices is ordered by date DESC, so first match <= date is our forward-fill
           for (const [priceDate, price] of tokenPrices) {
             if (priceDate <= date) {
               forwardFillPrice = price
-              forwardFillDate = priceDate
               break
             }
           }

@@ -34,7 +34,20 @@ const BalanceBarChart = dynamic(
   }
 )
 
-const WalletBalanceComponent = ({ data, chartData, publicKey, balanceHistoryData, loading, usdcPrice = 1, poolInputs = [], yieldBreakdown, balanceHistoryDataMap, historicalPrices, blendPositions, backstopPositions, lpTokenPrice, totalBorrowUsd }: WalletBalanceProps) => {
+const WalletBalanceComponent = ({
+  data,
+  chartData,
+  publicKey,
+  balanceHistoryData,
+  loading,
+  usdcPrice = 1,
+  poolInputs = [],
+  yieldBreakdown,
+  blendPositions,
+  backstopPositions,
+  lpTokenPrice,
+  totalBorrowUsd,
+}: WalletBalanceProps) => {
   // State for time period selection with localStorage persistence
   const [selectedPeriod, setSelectedPeriod] = useState<TimePeriod>(() => {
     if (typeof window !== 'undefined') {
@@ -54,7 +67,7 @@ const WalletBalanceComponent = ({ data, chartData, publicKey, balanceHistoryData
   }, [selectedPeriod])
 
   // Currency preference for multi-currency display
-  const { currency, format: formatInCurrency, convert: convertToCurrency } = useCurrencyPreference()
+  const { format: formatInCurrency } = useCurrencyPreference()
 
   // Display preferences (show price changes toggle)
   const { preferences: displayPreferences } = useDisplayPreferences()
@@ -65,7 +78,10 @@ const WalletBalanceComponent = ({ data, chartData, publicKey, balanceHistoryData
     : 0
 
   // Use balance history data from props if available
-  const historyChartData = balanceHistoryData?.chartData || []
+  const historyChartData = useMemo(
+    () => balanceHistoryData?.chartData ?? [],
+    [balanceHistoryData?.chartData]
+  )
 
   // Map TimePeriod to API PeriodType for period yield breakdown
   const apiPeriodTypeMap: Record<TimePeriod, APIPeriodType> = {
@@ -216,95 +232,6 @@ const WalletBalanceComponent = ({ data, chartData, publicKey, balanceHistoryData
     // Period Yield = SDK Total Yield - Historical Yield at Start
     return totalYield - yieldAtPeriodStart
   }, [displayChartData, selectedPeriod, totalYield])
-
-  // Period breakdown - use CHART DATA directly (it already has correct values)
-  const chartBasedPeriodBreakdown = useMemo(() => {
-    if (displayChartData.length === 0) {
-      return {
-        valueAtStart: 0,
-        valueNow: initialBalance,
-        protocolYield: totalYield,
-        priceChange: 0,
-        totalEarned: totalYield,
-        periodStartDate: '',
-        isLoading: true,
-      }
-    }
-
-    // Get period start date
-    const today = new Date()
-    let periodStartDate: Date
-
-    switch (selectedPeriod) {
-      case "1W":
-        periodStartDate = new Date(today)
-        periodStartDate.setDate(periodStartDate.getDate() - 7)
-        break
-      case "1M":
-        periodStartDate = new Date(today)
-        periodStartDate.setDate(periodStartDate.getDate() - 30)
-        break
-      case "1Y":
-        periodStartDate = new Date(today)
-        periodStartDate.setFullYear(periodStartDate.getFullYear() - 1)
-        break
-      default:
-        periodStartDate = new Date(displayChartData[0].date)
-        break
-    }
-
-    // Use local date formatting to match chart data format (avoids UTC conversion issues)
-    const periodStartStr = `${periodStartDate.getFullYear()}-${String(periodStartDate.getMonth() + 1).padStart(2, '0')}-${String(periodStartDate.getDate()).padStart(2, '0')}`
-
-    // Find the chart point at or before the period start
-    const sortedHistory = [...displayChartData].sort((a, b) => a.date.localeCompare(b.date))
-    let chartPointAtStart = sortedHistory[0]
-
-    for (const point of sortedHistory) {
-      if (point.date <= periodStartStr) {
-        chartPointAtStart = point
-      } else {
-        break
-      }
-    }
-
-    // Values directly from chart data
-    const valueAtStart = chartPointAtStart?.total || 0
-    const yieldAtStart = chartPointAtStart?.yield || 0
-    const depositAtStart = chartPointAtStart?.deposit || 0
-    const valueNow = initialBalance
-
-    // Get current deposit from the latest chart point (or use SDK cost basis)
-    const latestPoint = sortedHistory[sortedHistory.length - 1]
-    const depositNow = latestPoint?.deposit || depositAtStart
-
-    // Net deposited in period = deposits made during this period
-    const netDepositedInPeriod = depositNow - depositAtStart
-
-    // Protocol Yield = current SDK yield - chart yield at period start
-    // The chart's yield field is cumulative interest earned, so this gives period interest
-    const protocolYield = totalYield - yieldAtStart
-
-    // Total Change = value now - value at start
-    const totalChange = valueNow - valueAtStart
-
-    // Price Change = Total Change - Protocol Yield - Net Deposits in Period
-    // This isolates the price appreciation/depreciation component
-    const priceChange = totalChange - protocolYield - netDepositedInPeriod
-
-    // Total Earned = Protocol Yield + Price Change (excludes deposits)
-    const totalEarned = protocolYield + priceChange
-
-    return {
-      valueAtStart,
-      valueNow,
-      protocolYield,
-      priceChange,
-      totalEarned,
-      periodStartDate: chartPointAtStart?.date || periodStartStr,
-      isLoading: false,
-    }
-  }, [displayChartData, selectedPeriod, initialBalance, totalYield])
 
   // Display yield based on selected period and display preferences
   // When showPriceChanges is OFF, show only protocol yield; when ON, show total (yield + price change)

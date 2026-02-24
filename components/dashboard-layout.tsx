@@ -70,7 +70,7 @@ export function DashboardLayout({
       <header className="md:hidden fixed top-0 left-0 right-0 z-[60] bg-background shadow-[0_4px_6px_0px_oklch(0.145_0_0),0_8px_20px_-2px_oklch(0.145_0_0)] dark:shadow-[0_4px_6px_0px_oklch(0.145_0_0),0_8px_20px_-2px_oklch(0.145_0_0)]">
         <div className="px-4 pt-1.5 pb-1 flex items-center justify-between gap-2">
           {isHomePage ? (
-            <Link href="/">
+            <Link href="/?from=logo">
               <Image
                 src="/logo/logo-icon.png"
                 alt="Smoothie"

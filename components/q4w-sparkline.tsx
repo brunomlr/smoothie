@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useMemo } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { fetchWithTimeout } from "@/lib/fetch-utils"
 import { getUserTimezone, getTodayInUserTimezone } from "@/lib/date-utils"
@@ -49,13 +49,6 @@ export function Q4wSparkline({
   currentQ4w,
   className = "",
 }: Q4wSparklineProps) {
-  // Track if component has mounted (client-side)
-  const [mounted, setMounted] = useState(false)
-
-  useEffect(() => {
-    setMounted(true)
-  }, [])
-
   const { data: q4wHistory, isLoading } = useQuery({
     queryKey: ["backstop-q4w-history", poolId],
     queryFn: () => fetchQ4wHistory(poolId),
@@ -63,14 +56,11 @@ export function Q4wSparkline({
     refetchInterval: false,
   })
 
-  // Compute today's date only on the client (after mount)
-  const today = mounted ? getTodayInUserTimezone() : null
+  const today = getTodayInUserTimezone()
 
-  // Filter data for SSR compatibility
+  // Filter out future dates relative to the user's timezone.
   const filteredData = useMemo(() => {
     if (!q4wHistory?.length) return []
-    // During SSR (today is null), just return the raw history
-    if (!today) return q4wHistory
     return q4wHistory.filter(d => d.date <= today)
   }, [q4wHistory, today])
 

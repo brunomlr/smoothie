@@ -17,7 +17,6 @@ import {
   BackstopPoolEst,
   TokenMetadata,
   FixedMath,
-  Version,
 } from '@blend-capital/blend-sdk'
 import { metadataRepository } from '@/lib/db/repositories/metadata-repository'
 import { ratesRepository } from '@/lib/db/repositories/rates-repository'
@@ -135,7 +134,7 @@ async function buildSupplyItems(
   const tokenMap = new Map(dbTokens.map((t) => [t.asset_address, t]))
 
   // Get historical APY if needed
-  let historicalApy: Map<string, number | null> = new Map()
+  const historicalApy: Map<string, number | null> = new Map()
   if (period !== 'current') {
     const days = PERIOD_DAYS[period]
     const rates = await ratesRepository.getPeriodApyAll(days)
@@ -250,7 +249,7 @@ async function buildBackstopItems(
   const items: BackstopExploreItem[] = []
 
   // Get historical APY if needed (calculated from share_rate changes)
-  let historicalApy: Map<string, number | null> = new Map()
+  const historicalApy: Map<string, number | null> = new Map()
   if (period !== 'current') {
     const days = PERIOD_DAYS[period]
     const rates = await eventsRepository.getPeriodBackstopApyAll(days)

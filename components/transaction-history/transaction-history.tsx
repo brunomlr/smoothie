@@ -35,7 +35,6 @@ export function TransactionHistory({
   assetAddress,
   poolId,
   limit = 50,
-  hideToggle = false,
   showControls = true,
   title,
   isDemoWallet,
@@ -52,14 +51,19 @@ export function TransactionHistory({
   const { tokens } = useTokensOnly()
 
   // Build tokens map for pegged currency lookup and find BLND token address
-  const tokensMap = new Map<string, { pegged_currency: string | null }>()
-  let blndTokenAddress: string | undefined
-  tokens.forEach((t) => {
-    tokensMap.set(t.asset_address, { pegged_currency: t.pegged_currency })
-    if (t.symbol === 'BLND') {
-      blndTokenAddress = t.asset_address
-    }
-  })
+  const { tokensMap, blndTokenAddress } = useMemo(() => {
+    const map = new Map<string, { pegged_currency: string | null }>()
+    let blndAddress: string | undefined
+
+    tokens.forEach((token) => {
+      map.set(token.asset_address, { pegged_currency: token.pegged_currency })
+      if (token.symbol === "BLND") {
+        blndAddress = token.asset_address
+      }
+    })
+
+    return { tokensMap: map, blndTokenAddress: blndAddress }
+  }, [tokens])
 
   // Convert filter values to API parameters
   const actionTypes = selectedActionTypes.length === 0 ? undefined : selectedActionTypes

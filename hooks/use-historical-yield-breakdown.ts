@@ -166,7 +166,7 @@ export function useHistoricalYieldBreakdown(
     })
 
     return balances
-  }, [blendPositions, addressArray.length])
+  }, [blendPositions])
 
   // MULTI-WALLET FIX: Fetch cost basis PER WALLET separately
   // This is critical because weighted average prices don't commute with aggregation.
@@ -505,7 +505,7 @@ export function useHistoricalYieldBreakdown(
       isLoading: isCostBasisLoading || isBackstopLoading,
       error: costBasisError,
     }
-  }, [isMultiWallet, perWalletCostBasisQueries, singleWalletCostBasisQuery.data, singleWalletCostBasisQuery.isLoading, singleWalletCostBasisQuery.error, singleWalletCostBasisQuery.isPending, backstopEventsQuery.data, backstopEventsQuery.isLoading, backstopEventsQuery.isPending, currentBalances, backstopPositions, lpTokenPrice, isCostBasisQueryEnabled, isBackstopQueryEnabled, sdkPrices, addressArray, perWalletSupplyAmounts])
+  }, [isMultiWallet, perWalletCostBasisQueries, singleWalletCostBasisQuery, backstopEventsQuery, currentBalances, backstopPositions, lpTokenPrice, isCostBasisQueryEnabled, isBackstopQueryEnabled, addressArray, perWalletSupplyAmounts])
 
   return yieldBreakdowns
 }

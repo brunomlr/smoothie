@@ -63,8 +63,9 @@ export function useWalletCustomNames(): UseWalletCustomNamesReturn {
     const trimmed = name.trim()
     setCustomNames((prev) => {
       if (!trimmed) {
-        const { [walletId]: _, ...rest } = prev
-        return rest
+        const next = { ...prev }
+        delete next[walletId]
+        return next
       }
       return { ...prev, [walletId]: trimmed }
     })
@@ -72,8 +73,9 @@ export function useWalletCustomNames(): UseWalletCustomNamesReturn {
 
   const clearCustomName = React.useCallback((walletId: string) => {
     setCustomNames((prev) => {
-      const { [walletId]: _, ...rest } = prev
-      return rest
+      const next = { ...prev }
+      delete next[walletId]
+      return next
     })
   }, [])
 

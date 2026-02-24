@@ -142,6 +142,7 @@ function BackstopRow({ item, sortBy, lpTokenPrice, lpPriceHistory }: { item: Bac
         {/* Left side: Pool info */}
         <div className="flex items-center gap-3 min-w-0 flex-1">
           {item.iconUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
             <img
               src={item.iconUrl}
               alt={item.poolName}

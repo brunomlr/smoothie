@@ -114,14 +114,12 @@ export function TokenSparkline({
   period = "1mo",
   className = "",
 }: TokenSparklineProps) {
-  // Don't show sparkline for 24h period
-  if (period === "24h") {
-    return null
-  }
+  const shouldRenderSparkline = period !== "24h"
 
   const { data: priceHistory } = useQuery({
     queryKey: ["token-sparkline", tokenAddress, period],
     queryFn: () => fetchTokenPriceHistory(tokenAddress, period),
+    enabled: shouldRenderSparkline,
     staleTime: 5 * 60 * 1000, // 5 minutes - match oracle refresh rate
     refetchInterval: false,
   })
@@ -156,12 +154,12 @@ export function TokenSparkline({
     }
 
     return data
-  }, [priceHistory, currentPrice, tokenAddress, period])
+  }, [priceHistory, currentPrice])
 
-  // TokenSparkline is not rendered for 24h (returns null above), so always compare first vs last
+  // For this component we compare first vs last for trend.
   const { trend } = useMemo(() => calculatePriceChange(chartData), [chartData])
 
-  if (!chartData?.length) {
+  if (!shouldRenderSparkline || !chartData?.length) {
     return null
   }
 
@@ -247,7 +245,7 @@ export function Token30dChange({
     }
 
     return data
-  }, [priceHistory, currentPrice, tokenAddress, period])
+  }, [priceHistory, currentPrice])
 
   // For 24h, compare only the last 2 data points (yesterday vs today)
   // For longer periods, compare first vs last to show full period change

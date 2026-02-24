@@ -45,6 +45,15 @@ export interface PeriodYieldBreakdownAPIResult {
   periodDays: number
 }
 
+const DEFAULT_TOTALS: PeriodYieldBreakdownAPIResult["totals"] = {
+  valueAtStart: 0,
+  valueNow: 0,
+  protocolYieldUsd: 0,
+  priceChangeUsd: 0,
+  totalEarnedUsd: 0,
+  totalEarnedPercent: 0,
+}
+
 async function fetchPeriodYieldBreakdown(
   userAddress: string,
   period: PeriodType,
@@ -167,19 +176,9 @@ export function usePeriodYieldBreakdownAPI({
     gcTime: 5 * 60 * 1000, // 5 minutes
   })
 
-  // Default totals when no data
-  const defaultTotals = {
-    valueAtStart: 0,
-    valueNow: 0,
-    protocolYieldUsd: 0,
-    priceChangeUsd: 0,
-    totalEarnedUsd: 0,
-    totalEarnedPercent: 0,
-  }
-
   // Return API totals directly (includes both supply and backstop positions)
   const combinedTotals = useMemo(() => {
-    if (!query.data?.totals) return defaultTotals
+    if (!query.data?.totals) return DEFAULT_TOTALS
     return query.data.totals
   }, [query.data?.totals])
 

@@ -38,7 +38,7 @@ function HistoryContent() {
       queryClient.invalidateQueries({ queryKey: ["wallet-operations", activeWallet.publicKey] }),
       queryClient.invalidateQueries({ queryKey: ["historical-prices"] }),
     ])
-  }, [activeWallet?.publicKey, queryClient, capture])
+  }, [activeWallet, queryClient, capture])
 
   // Guard against null activeWallet during static generation
   // AuthenticatedPage will show the landing page if no wallet is connected

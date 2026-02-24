@@ -177,7 +177,7 @@ export function FollowAddressModal({
             <div className="space-y-1">
               <div className="font-medium text-foreground">Read-only access</div>
               <div className="text-sm text-muted-foreground">
-                You can view balances and activity without connecting your wallet. This is safe and doesn't require any permissions.
+                You can view balances and activity without connecting your wallet. This is safe and does not require any permissions.
               </div>
             </div>
           </div>
@@ -202,4 +202,3 @@ export function FollowAddressModal({
     </Dialog>
   )
 }
-

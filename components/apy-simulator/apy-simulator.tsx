@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   TrendingUp,
@@ -12,7 +12,6 @@ import {
 } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -89,7 +88,7 @@ export function ApySimulatorContent({
   initialData,
 }: ApySimulatorContentProps) {
   const [action, setAction] = useState<SimulationAction>("deposit");
-  const [amount, setAmount] = useState<number>(10000);
+  const [amount, setAmount] = useState<number>(0);
   const [customAmount, setCustomAmount] = useState<string>("");
 
   // Fetch reserve config data
@@ -114,13 +113,13 @@ export function ApySimulatorContent({
     return getSliderAmounts(totalSupply);
   }, [data?.totalSupply, initialData?.totalSupply]);
 
-  // Set initial amount to middle of slider
-  useEffect(() => {
-    if (sliderAmounts.length > 0) {
-      const middleIndex = Math.floor(sliderAmounts.length / 2);
-      setAmount(sliderAmounts[middleIndex]);
-    }
+  const defaultAmount = useMemo(() => {
+    if (sliderAmounts.length === 0) return 10000;
+    const middleIndex = Math.floor(sliderAmounts.length / 2);
+    return sliderAmounts[middleIndex];
   }, [sliderAmounts]);
+
+  const effectiveAmount = amount > 0 ? amount : defaultAmount;
 
   // Run simulation
   const simulation = useMemo(() => {
@@ -130,7 +129,7 @@ export function ApySimulatorContent({
       currentTotalSupply: data.totalSupply,
       currentTotalBorrow: data.totalBorrow,
       action,
-      amount,
+      amount: effectiveAmount,
       reserveConfig: data.reserveConfig,
       irModifier: data.irModifier,
       backstopTakeRate: data.backstopTakeRate,
@@ -138,7 +137,7 @@ export function ApySimulatorContent({
       blndPrice: data.blndPrice ?? undefined,
       assetPrice: data.assetPrice ?? undefined,
     });
-  }, [data, action, amount]);
+  }, [data, action, effectiveAmount]);
 
   // Handle slider change
   const handleSliderChange = (values: number[]) => {
@@ -159,7 +158,7 @@ export function ApySimulatorContent({
   };
 
   // Get current slider index
-  const currentSliderIndex = sliderAmounts.indexOf(amount);
+  const currentSliderIndex = sliderAmounts.indexOf(effectiveAmount);
 
   if (isLoading) {
     return (
@@ -176,7 +175,7 @@ export function ApySimulatorContent({
     return (
       <div className="p-4 text-center text-muted-foreground">
         <AlertTriangle className="h-8 w-8 mx-auto mb-2 text-yellow-500" />
-        <p>Failed to load reserve data</p>
+        <p>Failed to load reserve data for {poolName}</p>
       </div>
     );
   }
@@ -227,7 +226,7 @@ export function ApySimulatorContent({
             {sliderAmounts.map((amt) => (
               <span
                 key={amt}
-                className={amt === amount ? "text-foreground font-medium" : ""}
+                className={amt === effectiveAmount ? "text-foreground font-medium" : ""}
               >
                 {formatAmountCompact(amt)}
               </span>
@@ -241,9 +240,9 @@ export function ApySimulatorContent({
             </span>
             <Input
               type="text"
-              value={customAmount || (currentSliderIndex < 0 ? amount.toLocaleString() : "")}
+              value={customAmount || (currentSliderIndex < 0 ? effectiveAmount.toLocaleString() : "")}
               onChange={(e) => handleCustomAmountChange(e.target.value)}
-              placeholder={amount.toLocaleString()}
+              placeholder={effectiveAmount.toLocaleString()}
               className="h-8 text-sm"
             />
           </div>
@@ -446,7 +445,7 @@ export function ApySimulatorContent({
           <p>
             {getApyChangeExplanation(
               action,
-              amount,
+              effectiveAmount,
               tokenSymbol,
               simulation.utilizationChange
             )}

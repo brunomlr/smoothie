@@ -18,6 +18,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getHorizonServer } from "@/lib/stellar/horizon"
 import { existsSync } from "fs"
+import { isIP } from "net"
 import { join } from "path"
 
 // Cache for 1 week
@@ -26,6 +27,10 @@ const CACHE_MAX_AGE = 60 * 60 * 24 * 7
 // In-memory cache for resolved icon URLs (persists across requests in same instance)
 const iconUrlCache = new Map<string, { url: string | null; timestamp: number }>()
 const MEMORY_CACHE_TTL = 60 * 60 * 1000 // 1 hour in ms
+const MAX_MEMORY_CACHE_ENTRIES = 1000
+
+const ASSET_CODE_REGEX = /^[A-Za-z0-9]{1,12}$/
+const ISSUER_REGEX = /^G[A-Z2-7]{55}$/
 
 function getCacheKey(code: string, issuer: string): string {
   return `${code}-${issuer}`
@@ -40,7 +45,59 @@ function getFromMemoryCache(key: string): string | null | undefined {
 }
 
 function setMemoryCache(key: string, url: string | null): void {
+  if (iconUrlCache.size >= MAX_MEMORY_CACHE_ENTRIES) {
+    const oldestKey = iconUrlCache.keys().next().value
+    if (oldestKey) {
+      iconUrlCache.delete(oldestKey)
+    }
+  }
   iconUrlCache.set(key, { url, timestamp: Date.now() })
+}
+
+function isPrivateOrLoopbackIp(hostname: string): boolean {
+  const version = isIP(hostname)
+  if (version === 4) {
+    const [a, b] = hostname.split(".").map(Number)
+    return (
+      a === 10 ||
+      a === 127 ||
+      (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168) ||
+      a === 0
+    )
+  }
+
+  if (version === 6) {
+    const lower = hostname.toLowerCase()
+    return lower === "::1" || lower.startsWith("fc") || lower.startsWith("fd") || lower.startsWith("fe80")
+  }
+
+  return false
+}
+
+function isSafeRedirectUrl(value: string): string | null {
+  try {
+    const parsed = new URL(value)
+    const hostname = parsed.hostname.toLowerCase()
+
+    if (parsed.protocol !== "https:") return null
+    if (!hostname || hostname === "localhost" || hostname.endsWith(".localhost")) return null
+    if (isPrivateOrLoopbackIp(parsed.hostname)) return null
+
+    return parsed.toString()
+  } catch {
+    return null
+  }
+}
+
+function buildStellarTomlUrl(homeDomain: string): string | null {
+  const normalized = homeDomain.trim().toLowerCase()
+  if (!normalized) return null
+  if (!/^[a-z0-9.-]+$/.test(normalized) || normalized.includes("..")) return null
+  if (normalized === "localhost" || normalized.endsWith(".localhost")) return null
+  if (isPrivateOrLoopbackIp(normalized)) return null
+  return `https://${normalized}/.well-known/stellar.toml`
 }
 
 // Check if a local icon exists for the given asset code
@@ -141,12 +198,19 @@ function parseTomlForImage(tomlContent: string, assetCode: string, issuer: strin
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
-  const code = searchParams.get("code")
-  const issuer = searchParams.get("issuer")
+  const code = searchParams.get("code")?.trim() ?? ""
+  const issuer = searchParams.get("issuer")?.trim() ?? ""
 
   if (!code || !issuer) {
     return NextResponse.json(
       { error: "Missing code or issuer parameter" },
+      { status: 400 }
+    )
+  }
+
+  if (!ASSET_CODE_REGEX.test(code) || !ISSUER_REGEX.test(issuer)) {
+    return NextResponse.json(
+      { error: "Invalid code or issuer format" },
       { status: 400 }
     )
   }
@@ -181,8 +245,21 @@ export async function GET(request: NextRequest) {
         }
       )
     }
+    const safeCachedUrl = isSafeRedirectUrl(cachedUrl)
+    if (!safeCachedUrl) {
+      setMemoryCache(cacheKey, null)
+      return NextResponse.json(
+        { error: "No icon found for this asset" },
+        {
+          status: 404,
+          headers: {
+            "Cache-Control": `public, max-age=${CACHE_MAX_AGE}`,
+          },
+        }
+      )
+    }
     // Redirect to cached URL
-    return NextResponse.redirect(cachedUrl, {
+    return NextResponse.redirect(safeCachedUrl, {
       status: 302,
       headers: {
         "Cache-Control": `public, max-age=${CACHE_MAX_AGE}`,
@@ -193,9 +270,10 @@ export async function GET(request: NextRequest) {
   try {
     // Step 3: Try Stellar Expert API first (faster, aggregated data)
     const stellarExpertUrl = await getIconFromStellarExpert(code, issuer)
-    if (stellarExpertUrl) {
-      setMemoryCache(cacheKey, stellarExpertUrl)
-      return NextResponse.redirect(stellarExpertUrl, {
+    const safeStellarExpertUrl = stellarExpertUrl ? isSafeRedirectUrl(stellarExpertUrl) : null
+    if (safeStellarExpertUrl) {
+      setMemoryCache(cacheKey, safeStellarExpertUrl)
+      return NextResponse.redirect(safeStellarExpertUrl, {
         status: 302,
         headers: {
           "Cache-Control": `public, max-age=${CACHE_MAX_AGE}`,
@@ -238,7 +316,19 @@ export async function GET(request: NextRequest) {
     }
 
     // Step 4b: Fetch stellar.toml from home_domain
-    const tomlUrl = `https://${homeDomain}/.well-known/stellar.toml`
+    const tomlUrl = buildStellarTomlUrl(homeDomain)
+    if (!tomlUrl) {
+      setMemoryCache(cacheKey, null)
+      return NextResponse.json(
+        { error: "Invalid issuer home_domain" },
+        {
+          status: 404,
+          headers: {
+            "Cache-Control": `public, max-age=${CACHE_MAX_AGE}`,
+          },
+        }
+      )
+    }
     let tomlContent: string
 
     try {
@@ -270,8 +360,9 @@ export async function GET(request: NextRequest) {
 
     // Step 4c: Parse TOML to find image URL
     const imageUrl = parseTomlForImage(tomlContent, code, issuer)
+    const safeImageUrl = imageUrl ? isSafeRedirectUrl(imageUrl) : null
 
-    if (!imageUrl) {
+    if (!safeImageUrl) {
       setMemoryCache(cacheKey, null)
       return NextResponse.json(
         { error: "No icon found in stellar.toml" },
@@ -285,8 +376,8 @@ export async function GET(request: NextRequest) {
     }
 
     // Cache and redirect to image URL
-    setMemoryCache(cacheKey, imageUrl)
-    return NextResponse.redirect(imageUrl, {
+    setMemoryCache(cacheKey, safeImageUrl)
+    return NextResponse.redirect(safeImageUrl, {
       status: 302,
       headers: {
         "Cache-Control": `public, max-age=${CACHE_MAX_AGE}`,

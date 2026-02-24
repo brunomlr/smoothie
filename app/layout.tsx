@@ -25,7 +25,7 @@ export const metadata: Metadata = {
     default: "Smoothie – Track Your Stellar Blend DeFi Positions",
     template: "%s | Smoothie",
   },
-  description: "Track your Stellar Blend DeFi positions, monitor your yields, and stay on top of your lending and borrowing portfolio. Real-time analytics for BLND emissions, supply APY, and backstop rewards.",
+  description: "Track your Stellar Blend DeFi positions and lending/borrowing activity with real-time analytics for BLND emissions, supply APY, and backstop data.",
   keywords: [
     "Stellar",
     "Blend Protocol",
@@ -65,7 +65,7 @@ export const metadata: Metadata = {
   category: "finance",
   openGraph: {
     title: "Smoothie – Track Your Stellar Blend DeFi Positions",
-    description: "Track your Stellar Blend DeFi positions, monitor your yields, and stay on top of your lending and borrowing portfolio. Real-time analytics for BLND emissions and backstop rewards.",
+    description: "Track your Stellar Blend DeFi positions and lending/borrowing activity with real-time analytics for BLND emissions and backstop data.",
     type: "website",
     siteName: "Smoothie",
     locale: "en_US",
@@ -82,7 +82,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "Smoothie – Track Your Stellar Blend DeFi Positions",
-    description: "Track your Stellar Blend DeFi positions, monitor yields, and maximize your BLND rewards on Stellar.",
+    description: "Track your Stellar Blend DeFi positions and protocol metrics on Stellar.",
     images: ["/share.png"],
   },
   icons: {

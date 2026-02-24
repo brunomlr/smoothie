@@ -16,11 +16,9 @@
 
 import { NextRequest, NextResponse } from "next/server"
 import {
-  getOraclePrice,
   getOraclePrices,
   assetToContractId,
   getOracleSupportedAssets,
-  type OraclePriceResult
 } from "@/lib/stellar/reflector-oracle"
 
 /**

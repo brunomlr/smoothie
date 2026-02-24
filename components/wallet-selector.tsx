@@ -168,9 +168,6 @@ export function WalletSelector({
   const isWatched = (wallet: WalletType) =>
     wallet.name?.toLowerCase().includes('watch')
 
-  const isAddressAlreadyAdded = (address: string) =>
-    wallets.some((w) => w.publicKey.toLowerCase() === address.toLowerCase())
-
   const findExistingWallet = (address: string) =>
     wallets.find((w) => w.publicKey.toLowerCase() === address.toLowerCase())
 

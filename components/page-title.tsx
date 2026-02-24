@@ -8,5 +8,7 @@ interface PageTitleProps {
 // Desktop title is now shown in the fixed header of DashboardLayout
 // This component is kept for API compatibility but renders nothing
 export function PageTitle({ children, badge }: PageTitleProps) {
+  void children
+  void badge
   return null
 }

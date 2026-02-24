@@ -107,13 +107,14 @@ export function WalletConnectionModal({
                       "active:scale-95",
                       !wallet.isAvailable && "opacity-50"
                     )}
-                  >
-                    <div className="relative">
-                      <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted overflow-hidden shadow-sm transition-transform group-hover:scale-105">
-                        <img
-                          src={wallet.icon}
-                          alt={wallet.name}
-                          className="h-10 w-10 object-contain"
+                    >
+                      <div className="relative">
+                        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted overflow-hidden shadow-sm transition-transform group-hover:scale-105">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={wallet.icon}
+                            alt={wallet.name}
+                            className="h-10 w-10 object-contain"
                         />
                       </div>
                       {!wallet.isAvailable && (

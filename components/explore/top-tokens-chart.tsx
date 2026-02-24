@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo } from "react"
+import type { ComponentProps } from "react"
 import {
   BarChart,
   Bar,
@@ -82,17 +83,21 @@ interface ChartDataPoint {
   total: number
 }
 
+type ChartTooltipPayload = Array<{ payload: ChartDataPoint }>
+
 // Custom shape for APY bar - full rounded corners when no BLND, bottom only when BLND exists
-function ApyBarShape(props: any) {
-  const { x, y, width, height, payload } = props
-  const hasBlnd = payload.blnd > 0
-  const radius = hasBlnd ? [0, 0, 4, 4] : [4, 4, 4, 4]
-  return <Rectangle {...props} radius={radius} />
+function ApyBarShape(props: unknown) {
+  const shapeProps = props as ComponentProps<typeof Rectangle> & { payload?: ChartDataPoint }
+  const { payload, ...rectangleProps } = shapeProps
+  const hasBlnd = (payload?.blnd ?? 0) > 0
+  const radius: [number, number, number, number] = hasBlnd ? [0, 0, 4, 4] : [4, 4, 4, 4]
+  return <Rectangle {...rectangleProps} radius={radius} />
 }
 
 // Custom shape for BLND bar - top rounded corners
-function BlndBarShape(props: any) {
-  return <Rectangle {...props} radius={[4, 4, 0, 0]} />
+function BlndBarShape(props: unknown) {
+  const shapeProps = props as ComponentProps<typeof Rectangle> & { payload?: ChartDataPoint }
+  return <Rectangle {...shapeProps} radius={[4, 4, 0, 0]} />
 }
 
 function CustomTooltip({
@@ -100,7 +105,7 @@ function CustomTooltip({
   payload,
 }: {
   active?: boolean
-  payload?: any[]
+  payload?: ChartTooltipPayload
 }) {
   if (!active || !payload || !payload.length) {
     return null

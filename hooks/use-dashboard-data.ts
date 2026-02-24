@@ -72,7 +72,7 @@ export function useDashboardData(
     }
 
     return map
-  }, [positions.data?.positions, positions.lpTokenPrice])
+  }, [positions.data, positions.lpTokenPrice])
 
   // 4. Extract all unique dates from balance history
   const chartDates = useMemo(() => {

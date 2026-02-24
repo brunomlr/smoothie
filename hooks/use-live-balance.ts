@@ -89,19 +89,26 @@ export function useLiveBalance(
   const ANIMATION_INTERVAL_MS = 66
 
   useEffect(() => {
+    let cancelled = false
+
     if (animationIntervalRef.current) {
       clearInterval(animationIntervalRef.current)
       animationIntervalRef.current = null
     }
 
-    setDisplayBalance(initialBalance)
-    setActualBalance(initialBalance)
-    setLastSync(Date.now())
-    setIsWarning(false)
-    setWarningMessage("")
+    queueMicrotask(() => {
+      if (cancelled) return
+      setDisplayBalance(initialBalance)
+      setActualBalance(initialBalance)
+      setLastSync(Date.now())
+      setIsWarning(false)
+      setWarningMessage("")
+    })
 
     if (!apyDecimal || isPaused) {
-      return
+      return () => {
+        cancelled = true
+      }
     }
 
     // Use setInterval at 66ms (15 updates/sec) instead of RAF (60/sec)
@@ -119,6 +126,7 @@ export function useLiveBalance(
     }, ANIMATION_INTERVAL_MS)
 
     return () => {
+      cancelled = true
       if (animationIntervalRef.current) {
         clearInterval(animationIntervalRef.current)
         animationIntervalRef.current = null

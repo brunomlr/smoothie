@@ -110,9 +110,9 @@ export async function GET(request: NextRequest) {
 
     const byAsset: Record<string, AssetBorrowBreakdown> = {}
     let totalBorrowCostBasisUsd = 0
-    let totalInterestAccruedUsd = 0
-    let totalPriceChangeOnDebtUsd = 0
-    let totalCostUsd = 0
+    const totalInterestAccruedUsd = 0
+    const totalPriceChangeOnDebtUsd = 0
+    const totalCostUsd = 0
 
     // Fetch all borrow/repay events for ALL addresses and combine
     const allEventsMaps = await Promise.all(

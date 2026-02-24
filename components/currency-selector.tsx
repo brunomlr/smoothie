@@ -28,10 +28,8 @@ export function CurrencySelector({
   value,
   onChange,
   className,
-}: CurrencySelectorProps) {
+  }: CurrencySelectorProps) {
   const [open, setOpen] = React.useState(false)
-
-  const selectedCurrency = SUPPORTED_CURRENCIES.find(c => c.code === value)
 
   return (
     <Popover open={open} onOpenChange={setOpen}>

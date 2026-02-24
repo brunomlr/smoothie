@@ -278,7 +278,7 @@ export async function GET(request: NextRequest) {
       cumLendingTokensByAsset.set(assetAddress, { depositedTokens: 0, withdrawnTokens: 0, depositedUsd: 0 })
     }
 
-    let cumBackstopTokens = { depositedTokens: 0, withdrawnTokens: 0, depositedUsd: 0 }
+    const cumBackstopTokens = { depositedTokens: 0, withdrawnTokens: 0, depositedUsd: 0 }
 
     // Include events BEFORE first balance date in initial values
     const firstDate = allDates[0]

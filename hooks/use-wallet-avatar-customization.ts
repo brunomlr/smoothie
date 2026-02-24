@@ -89,8 +89,9 @@ export function useWalletAvatarCustomization(): UseWalletAvatarCustomizationRetu
 
   const clearCustomization = React.useCallback((walletId: string) => {
     setCustomizations((prev) => {
-      const { [walletId]: _, ...rest } = prev
-      return rest
+      const next = { ...prev }
+      delete next[walletId]
+      return next
     })
   }, [])
 

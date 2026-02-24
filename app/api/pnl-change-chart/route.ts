@@ -137,8 +137,6 @@ export async function GET(request: NextRequest) {
   const currentBorrowBalancesParam = searchParams.get('currentBorrowBalances')
   const backstopPositionsParam = searchParams.get('backstopPositions')
   const useHistoricalBlndPrices = searchParams.get('useHistoricalBlndPrices') === 'true'
-  const blndApyParam = searchParams.get('blndApy') // Current BLND APY from SDK (%)
-  const backstopBlndApyParam = searchParams.get('backstopBlndApy') // Current backstop BLND APY from SDK (%)
 
   // Support both single address and multiple addresses
   let userAddresses: string[] = []

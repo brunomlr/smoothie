@@ -8,7 +8,7 @@ import type { FormatCurrencyOptions } from "@/lib/currency/format"
 
 interface BalanceChartTooltipProps {
   active?: boolean
-  payload?: any[]
+  payload?: Array<{ payload: BarChartDataPoint }>
   period: TimePeriod
   formatCurrency: (amount: number, options?: FormatCurrencyOptions) => string
 }
@@ -43,7 +43,6 @@ export function formatEventAmount(
 export function BalanceChartTooltip({
   active,
   payload,
-  period,
   formatCurrency,
 }: BalanceChartTooltipProps) {
   if (!active || !payload || !payload.length) {

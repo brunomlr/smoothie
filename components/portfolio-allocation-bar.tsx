@@ -69,7 +69,7 @@ export function PortfolioAllocationBar({
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })
-  const { poolAllocations, totalValue } = useMemo(() => {
+  const { poolAllocations } = useMemo(() => {
     // Group positions by pool
     const poolMap = new Map<string, PoolAllocation>()
 
@@ -192,19 +192,25 @@ export function PortfolioAllocationBar({
     }
   }
 
-  // Calculate pool boundary positions (for the gray line)
-  let cumulative = 0
-  const poolBoundaries = poolAllocations.map((pool) => {
-    const start = cumulative
-    cumulative += pool.percentage
-    return {
+  // Calculate pool boundary positions (for the gray line).
+  const poolBoundaries = poolAllocations.reduce<Array<{
+    poolId: string
+    poolName: string
+    percentage: number
+    start: number
+    end: number
+  }>>((acc, pool) => {
+    const start = acc.length > 0 ? acc[acc.length - 1].end : 0
+    const end = start + pool.percentage
+    acc.push({
       poolId: pool.poolId,
       poolName: pool.poolName,
       percentage: pool.percentage,
       start,
-      end: cumulative,
-    }
-  })
+      end,
+    })
+    return acc
+  }, [])
 
   return (
     <Card className="p-4 gap-0">

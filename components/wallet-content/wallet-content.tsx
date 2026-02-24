@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState, useEffect } from "react"
+import { useMemo, useState, useEffect, useCallback } from "react"
 import { useQueries, useQuery } from "@tanstack/react-query"
 import { useWalletState } from "@/hooks/use-wallet-state"
 import { useHorizonBalances, type TokenBalance, type TokenPriceInfo } from "@/hooks/use-horizon-balances"
@@ -40,34 +40,32 @@ export function WalletContent({
   const publicKey = activeWallet?.publicKey
   const { format: formatCurrency } = useCurrencyPreference()
 
-  // Initialize state with defaults (avoid localStorage in useState to prevent hydration mismatch)
-  const [selectedPeriod, setSelectedPeriod] = useState<SparklinePeriod>("1mo")
-  const [showPrice, setShowPrice] = useState(false)
-  const [hasLoadedFromStorage, setHasLoadedFromStorage] = useState(false)
-
-  // Load from localStorage after mount (client-side only)
-  useEffect(() => {
+  const [selectedPeriod, setSelectedPeriod] = useState<SparklinePeriod>(() => {
+    if (typeof window === "undefined") return "1mo"
     const savedPeriod = localStorage.getItem(STORAGE_KEY_PERIOD)
     if (savedPeriod === "24h" || savedPeriod === "7d" || savedPeriod === "1mo") {
-      setSelectedPeriod(savedPeriod)
+      return savedPeriod
     }
-    setShowPrice(localStorage.getItem(STORAGE_KEY_SHOW_PRICE) === "true")
-    setHasLoadedFromStorage(true)
-  }, [])
+    return "1mo"
+  })
+  const [showPrice, setShowPrice] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false
+    return localStorage.getItem(STORAGE_KEY_SHOW_PRICE) === "true"
+  })
 
-  // Persist selectedPeriod to localStorage (only after initial load)
+  // Persist selectedPeriod to localStorage
   useEffect(() => {
-    if (hasLoadedFromStorage) {
+    if (typeof window !== "undefined") {
       localStorage.setItem(STORAGE_KEY_PERIOD, selectedPeriod)
     }
-  }, [selectedPeriod, hasLoadedFromStorage])
+  }, [selectedPeriod])
 
-  // Persist showPrice to localStorage (only after initial load)
+  // Persist showPrice to localStorage
   useEffect(() => {
-    if (hasLoadedFromStorage) {
+    if (typeof window !== "undefined") {
       localStorage.setItem(STORAGE_KEY_SHOW_PRICE, String(showPrice))
     }
-  }, [showPrice, hasLoadedFromStorage])
+  }, [showPrice])
 
   // Toggle between showing price and percentage for all items
   const handlePriceToggle = () => setShowPrice((prev) => !prev)
@@ -175,10 +173,10 @@ export function WalletContent({
   const isLoadingMultiHorizon = isLoadingMultiBalances || isLoadingSharedPrices
 
   // Helper to get price info from shared price map
-  const getPriceInfo = (assetCode: string): { price: number; address: string } | undefined => {
+  const getPriceInfo = useCallback((assetCode: string): { price: number; address: string } | undefined => {
     if (!sharedPriceMap) return undefined
     // Try exact match first
-    let priceInfo = sharedPriceMap.get(assetCode)
+    const priceInfo = sharedPriceMap.get(assetCode)
     if (priceInfo) return priceInfo
     // Try case-insensitive match
     const upperCode = assetCode.toUpperCase()
@@ -188,7 +186,7 @@ export function WalletContent({
       }
     }
     return undefined
-  }
+  }, [sharedPriceMap])
 
   // Aggregate multi-wallet data and enrich with shared prices
   const multiWalletData = useMemo(() => {
@@ -261,7 +259,7 @@ export function WalletContent({
     })
 
     return { balances, priceMap, perWalletTotals, totalValue }
-  }, [isMultiWallet, isLoadingMultiHorizon, sharedPriceMap, multiWalletQueries])
+  }, [isMultiWallet, isLoadingMultiHorizon, sharedPriceMap, multiWalletQueries, getPriceInfo])
 
   // Unified data based on mode
   const horizonData = isMultiWallet ? (multiWalletData ? { balances: multiWalletData.balances, priceMap: multiWalletData.priceMap } : undefined) : singleHorizonData

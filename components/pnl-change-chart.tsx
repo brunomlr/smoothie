@@ -49,16 +49,40 @@ function formatCompact(value: number): string {
   return `${sign}$${absValue.toFixed(0)}`
 }
 
+interface NegativeLabelProps {
+  x?: number | string
+  y?: number | string
+  width?: number | string
+  height?: number | string
+  value?: number | string
+}
+
+function getNumericValue(value: number | string | undefined): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value
+  if (typeof value === "string") {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+  return null
+}
+
 // Custom label renderer for negative totals - positions below each bar's actual bottom
-function NegativeLabel(props: any) {
+function NegativeLabel(props: NegativeLabelProps) {
   const { x, y, width, height, value } = props
-  if (!value || value >= 0) return null
+  const valueAmount = getNumericValue(value)
+  if (valueAmount === null || valueAmount >= 0) return null
+
+  const xValue = getNumericValue(x)
+  const yValue = getNumericValue(y)
+  const widthValue = getNumericValue(width)
+  const heightValue = getNumericValue(height)
+  if (xValue === null || yValue === null || widthValue === null || heightValue === null) return null
 
   // For negative bars, height can be negative (bar extends upward from y)
   // Get the visual bottom of the bar (largest Y value)
-  const barBottom = height >= 0 ? y + height : y
+  const barBottom = heightValue >= 0 ? yValue + heightValue : yValue
   const labelY = barBottom + 6
-  const labelX = x + width / 2
+  const labelX = xValue + widthValue / 2
 
   return (
     <text
@@ -68,7 +92,7 @@ function NegativeLabel(props: any) {
       dominantBaseline="hanging"
       style={{ fontSize: 9, fill: "white", fontWeight: 500 }}
     >
-      {formatCompact(value)}
+      {formatCompact(valueAmount)}
     </text>
   )
 }
@@ -76,15 +100,27 @@ function NegativeLabel(props: any) {
 // Custom label renderer for positive totals with Live tag
 // Note: This is a factory function that creates a renderer with access to chart data
 function createPositiveLabelRenderer(chartData: Array<{ isLive: boolean }>) {
-  return function PositiveLabel(props: any) {
+  return function PositiveLabel(props: {
+    x?: number | string
+    y?: number | string
+    width?: number | string
+    value?: number | string
+    index?: number
+  }) {
     const { x, y, width, value, index } = props
-    if (!value || value <= 0) return null
+    const valueAmount = getNumericValue(value)
+    if (valueAmount === null || valueAmount <= 0) return null
+
+    const xValue = getNumericValue(x)
+    const yValue = getNumericValue(y)
+    const widthValue = getNumericValue(width)
+    if (xValue === null || yValue === null || widthValue === null) return null
 
     // Access isLive from the chart data using index
-    const isLive = chartData[index]?.isLive
+    const isLive = typeof index === "number" ? chartData[index]?.isLive : false
 
-    const labelX = x + width / 2
-    const labelY = y - 6
+    const labelX = xValue + widthValue / 2
+    const labelY = yValue - 6
 
     return (
       <g>
@@ -116,7 +152,7 @@ function createPositiveLabelRenderer(chartData: Array<{ isLive: boolean }>) {
           dominantBaseline="auto"
           style={{ fontSize: 9, fill: "white", fontWeight: 500 }}
         >
-          {formatCompact(value)}
+          {formatCompact(valueAmount)}
         </text>
       </g>
     )
@@ -124,7 +160,15 @@ function createPositiveLabelRenderer(chartData: Array<{ isLive: boolean }>) {
 }
 
 // Custom bar shape that applies rounding based on position in stack
-function RoundedBar(props: any) {
+function RoundedBar(props: {
+  x: number
+  y: number
+  width: number
+  height: number
+  fill?: string
+  dataKey: string
+  payload?: { topPositiveBar: string | null }
+}) {
   const { x, y, width, height, fill, dataKey, payload } = props
   if (!height || height === 0) return null
 
@@ -155,7 +199,7 @@ function RoundedBar(props: any) {
     Z
   `
 
-  return <path d={path} fill={fill} />
+  return <path d={path} fill={fill ?? "currentColor"} />
 }
 
 // Transform data for yield chart (without price changes)
@@ -253,7 +297,7 @@ function YieldTooltip({
   formatCurrency,
 }: {
   active?: boolean
-  payload?: any[]
+  payload?: Array<{ payload: ReturnType<typeof transformDataForYieldChart>[number] }>
   formatCurrency: (amount: number, options?: FormatCurrencyOptions) => string
 }) {
   if (!active || !payload || !payload.length) {
@@ -386,7 +430,7 @@ function PriceChangeTooltip({
   formatCurrency,
 }: {
   active?: boolean
-  payload?: any[]
+  payload?: Array<{ payload: ReturnType<typeof transformDataForPriceChart>[number] }>
   formatCurrency: (amount: number, options?: FormatCurrencyOptions) => string
 }) {
   if (!active || !payload || !payload.length) {
@@ -578,11 +622,11 @@ export const PnlChangeChart = memo(function PnlChangeChart({
                   <ReferenceLine y={0} stroke="white" strokeOpacity={0.05} />
                 )}
 
-                <Bar dataKey="supplyApyBar" stackId="yield" fill="url(#supplyApyGradient)" shape={(props: any) => <RoundedBar {...props} dataKey="supplyApyBar" />} maxBarSize={barSize} isAnimationActive={false} />
-                <Bar dataKey="supplyBlndApyBar" stackId="yield" fill="url(#supplyBlndGradient)" shape={(props: any) => <RoundedBar {...props} dataKey="supplyBlndApyBar" />} maxBarSize={barSize} isAnimationActive={false} />
-                <Bar dataKey="backstopYieldPositiveBar" stackId="yield" fill="url(#backstopYieldGradient)" shape={(props: any) => <RoundedBar {...props} dataKey="backstopYieldPositiveBar" />} maxBarSize={barSize} isAnimationActive={false} />
-                <Bar dataKey="backstopBlndApyBar" stackId="yield" fill="url(#backstopBlndGradient)" shape={(props: any) => <RoundedBar {...props} dataKey="backstopBlndApyBar" />} maxBarSize={barSize} isAnimationActive={false} />
-                <Bar dataKey="borrowBlndApyBar" stackId="yield" fill="url(#borrowBlndGradient)" shape={(props: any) => <RoundedBar {...props} dataKey="borrowBlndApyBar" />} maxBarSize={barSize} isAnimationActive={false}>
+                <Bar dataKey="supplyApyBar" stackId="yield" fill="url(#supplyApyGradient)" shape={(props: unknown) => <RoundedBar {...(props as Omit<Parameters<typeof RoundedBar>[0], "dataKey">)} dataKey="supplyApyBar" />} maxBarSize={barSize} isAnimationActive={false} />
+                <Bar dataKey="supplyBlndApyBar" stackId="yield" fill="url(#supplyBlndGradient)" shape={(props: unknown) => <RoundedBar {...(props as Omit<Parameters<typeof RoundedBar>[0], "dataKey">)} dataKey="supplyBlndApyBar" />} maxBarSize={barSize} isAnimationActive={false} />
+                <Bar dataKey="backstopYieldPositiveBar" stackId="yield" fill="url(#backstopYieldGradient)" shape={(props: unknown) => <RoundedBar {...(props as Omit<Parameters<typeof RoundedBar>[0], "dataKey">)} dataKey="backstopYieldPositiveBar" />} maxBarSize={barSize} isAnimationActive={false} />
+                <Bar dataKey="backstopBlndApyBar" stackId="yield" fill="url(#backstopBlndGradient)" shape={(props: unknown) => <RoundedBar {...(props as Omit<Parameters<typeof RoundedBar>[0], "dataKey">)} dataKey="backstopBlndApyBar" />} maxBarSize={barSize} isAnimationActive={false} />
+                <Bar dataKey="borrowBlndApyBar" stackId="yield" fill="url(#borrowBlndGradient)" shape={(props: unknown) => <RoundedBar {...(props as Omit<Parameters<typeof RoundedBar>[0], "dataKey">)} dataKey="borrowBlndApyBar" />} maxBarSize={barSize} isAnimationActive={false}>
                   {period !== "1M" && (
                     <LabelList
                       dataKey="positiveTotal"
@@ -652,8 +696,8 @@ export const PnlChangeChart = memo(function PnlChangeChart({
         </div>
       )}
 
-      {/* Price Change Chart */}
-      <div ref={priceContainerRef} className="space-y-1 mt-8">
+      {showPriceChanges && (
+        <div ref={priceContainerRef} className="space-y-1 mt-8">
           <div className="text-[10px] text-muted-foreground font-medium tracking-wide px-1">
             Price Changes
           </div>
@@ -719,7 +763,8 @@ export const PnlChangeChart = memo(function PnlChangeChart({
               </ResponsiveContainer>
             </div>
           )}
-      </div>
+        </div>
+      )}
 
       {/* Time period tabs */}
       <div className="flex justify-center pt-1">

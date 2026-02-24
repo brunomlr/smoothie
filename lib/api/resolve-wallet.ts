@@ -8,6 +8,12 @@
 import { getDemoWalletByAlias, isValidDemoAlias } from '@/lib/config/demo-wallet-server'
 import { ValidationError } from './errors'
 
+const STELLAR_ADDRESS_REGEX = /^[GC][A-Z2-7]{55}$/
+
+function isValidStellarAddress(address: string): boolean {
+  return STELLAR_ADDRESS_REGEX.test(address)
+}
+
 /**
  * Resolve a wallet parameter to a real Stellar address
  *
@@ -23,17 +29,23 @@ import { ValidationError } from './errors'
  * resolveWalletAddress("demo-1") // returns the mapped address like "GAOLK..."
  */
 export function resolveWalletAddress(walletParam: string): string {
+  const normalized = walletParam.trim()
+
   // Check if this is a demo wallet alias
-  if (walletParam.startsWith('demo-')) {
-    const address = getDemoWalletByAlias(walletParam)
+  if (normalized.startsWith('demo-')) {
+    const address = getDemoWalletByAlias(normalized)
     if (!address) {
-      throw new ValidationError(`Invalid demo wallet alias: ${walletParam}`)
+      throw new ValidationError(`Invalid demo wallet alias: ${normalized}`)
     }
     return address
   }
 
-  // Regular address - pass through as-is
-  return walletParam
+  if (!isValidStellarAddress(normalized)) {
+    throw new ValidationError('Invalid wallet address format', 'wallet')
+  }
+
+  // Regular address
+  return normalized
 }
 
 /**

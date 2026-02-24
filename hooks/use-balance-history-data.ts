@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query"
 import { fetchWithTimeout } from "@/lib/fetch-utils"
 import { fillMissingDates, detectPositionChanges, calculateEarningsStats } from "@/lib/balance-history-utils"
 import type { AssetCardData } from "@/types/asset-card"
+import type { BalanceHistoryRecord, ChartDataPoint, EarningsStats, PositionChange } from "@/types/balance-history"
 
 // localStorage cache for instant repeat loads
 const HISTORY_CACHE_KEY = "balance-history-cache"
@@ -48,38 +49,27 @@ function setCachedHistory(publicKey: string, assets: string, data: { results: Ba
 
 interface BalanceHistoryResult {
   asset_address: string
-  history: unknown[]
+  history: BalanceHistoryRecordWithBorrow[]
   firstEventDate: string | null
   error: string | null
 }
 
 interface BalanceHistoryQueryResult {
-  data: { history: unknown[]; firstEventDate: string | null } | undefined
+  data: { history: BalanceHistoryRecordWithBorrow[]; firstEventDate: string | null } | undefined
   isLoading: boolean
   isError: boolean
   error: Error | null
 }
 
-interface BalanceChartDataPoint {
-  date: string
-  total?: number
-  deposit?: number
-  yield?: number
-  borrow?: number
-  pools?: Array<{
-    balance: number
-    deposit: number
-    yield: number
-    borrow?: number
-  }>
-  [key: string]: unknown
+interface BalanceHistoryRecordWithBorrow extends BalanceHistoryRecord {
+  borrow_cost_basis?: number | null
 }
 
 interface BalanceHistoryDataEntry {
-  chartData: BalanceChartDataPoint[]
-  positionChanges: unknown[]
-  earningsStats: unknown
-  rawData: unknown[]
+  chartData: ChartDataPoint[]
+  positionChanges: PositionChange[]
+  earningsStats: EarningsStats
+  rawData: BalanceHistoryRecordWithBorrow[]
   isLoading: boolean
   error: Error | null
 }
@@ -148,7 +138,7 @@ export function useBalanceHistoryData(
 
   // Batch fetch balance history for all assets in a single request
   // This reduces HTTP overhead by consolidating multiple requests into one
-  const balanceHistoryBatchQuery = useQuery({
+  const balanceHistoryBatchQuery = useQuery<{ results: BalanceHistoryResult[] }, Error>({
     queryKey: ["balance-history-batch", publicKey || '', assetsKey, 365, userTimezone],
     queryFn: async ({ signal }) => {
       if (uniqueAssetAddresses.length === 0) {
@@ -169,7 +159,7 @@ export function useBalanceHistoryData(
         throw new Error(error.message || "Failed to fetch balance history")
       }
 
-      return response.json()
+      return response.json() as Promise<{ results: BalanceHistoryResult[] }>
     },
     enabled: !!publicKey && uniqueAssetAddresses.length > 0,
     staleTime: 5 * 60 * 1000, // 5 minutes (historical data doesn't change frequently)
@@ -205,7 +195,7 @@ export function useBalanceHistoryData(
 
     // Create a map for quick lookup
     const resultMap = new Map<string, BalanceHistoryResult>(
-      (balanceHistoryBatchQuery.data.results as BalanceHistoryResult[]).map((r) => [r.asset_address, r])
+      balanceHistoryBatchQuery.data.results.map((r) => [r.asset_address, r])
     )
 
     return uniqueAssetAddresses.map((assetAddress) => {
@@ -267,7 +257,7 @@ export function useBalanceHistoryData(
 
       // Get latest cost_basis for each pool from this asset's history
       const latestByPool = new Map<string, number>()
-      query.data.history.forEach((record: any) => {
+      query.data.history.forEach((record) => {
         if (record.total_cost_basis !== null && record.total_cost_basis !== undefined) {
           // Since records are sorted newest first, first occurrence is the latest
           if (!latestByPool.has(record.pool_id)) {
@@ -297,7 +287,7 @@ export function useBalanceHistoryData(
 
       // Get latest borrow_cost_basis for each pool from this asset's history
       const latestByPool = new Map<string, number>()
-      query.data.history.forEach((record: any) => {
+      query.data.history.forEach((record) => {
         if (record.borrow_cost_basis !== null && record.borrow_cost_basis !== undefined) {
           // Since records are sorted newest first, first occurrence is the latest
           if (!latestByPool.has(record.pool_id)) {
@@ -324,17 +314,16 @@ export function useBalanceHistoryData(
     uniqueAssetAddresses.forEach((assetAddress, index) => {
       const query = balanceHistoryQueries[index]
       if (query?.data) {
-        // Cast history to any[] for the utility functions that expect specific types
-        const historyData = query.data.history as any[]
-        const chartData = fillMissingDates(historyData, true, query.data.firstEventDate) as unknown as BalanceChartDataPoint[]
+        const historyData = query.data.history
+        const chartData = fillMissingDates(historyData, true, query.data.firstEventDate)
         const positionChanges = detectPositionChanges(historyData)
-        const earningsStats = calculateEarningsStats(chartData as any, positionChanges)
+        const earningsStats = calculateEarningsStats(chartData, positionChanges)
 
         map.set(assetAddress, {
           chartData,
           positionChanges,
           earningsStats,
-          rawData: query.data.history as unknown[],
+          rawData: query.data.history,
           isLoading: query.isLoading,
           error: query.error,
         })

@@ -41,7 +41,7 @@ export function HomeContent() {
       queryClient.invalidateQueries({ queryKey: ["backstop-balance-history", activeWallet.publicKey] }),
       queryClient.invalidateQueries({ queryKey: ["transactions", activeWallet.publicKey] }),
     ])
-  }, [activeWallet?.publicKey, queryClient, capture])
+  }, [activeWallet, queryClient, capture])
 
   // Track page view
   useEffect(() => {
@@ -87,7 +87,7 @@ export function HomeContent() {
     }
 
     return map
-  }, [blendSnapshot?.positions, lpTokenPrice])
+  }, [blendSnapshot, lpTokenPrice])
 
   // Extract all unique dates from balance history for historical price lookups
   const chartDates = useMemo(() => {
@@ -321,7 +321,7 @@ export function HomeContent() {
         supplyApy: pe.supplyApy || 0,
         blndApy: poolBlndApyMap.get(pe.poolId) || 0,
       }))
-  }, [blendSnapshot?.poolEstimates, blendSnapshot?.positions])
+  }, [blendSnapshot])
 
   // Check if there are no positions AND no history (empty account)
   const hasNoPositions = !isLoading && assetCards.length === 0 && backstopPositions.length === 0

@@ -5,9 +5,8 @@
  * Returns reserve config, current state, and computed simulation results.
  */
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import {
-  Pool,
   PoolV2,
   PoolMetadata,
   Backstop,
@@ -20,7 +19,7 @@ import {
   type SimulationAction,
   type ReserveConfig,
 } from "@/lib/blend/apy-simulator";
-import { createApiHandler, requireString, CACHE_CONFIGS } from "@/lib/api";
+import { createApiHandler, requireString } from "@/lib/api";
 
 interface ReserveConfigResponse {
   poolId: string;

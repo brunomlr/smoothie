@@ -7,11 +7,9 @@ import { NextRequest } from 'next/server'
 import { eventsRepository } from '@/lib/db/events-repository'
 import {
   createApiHandler,
-  requireString,
   optionalString,
   CACHE_CONFIGS,
   resolveWalletAddress,
-  resolveWalletAddresses,
 } from '@/lib/api'
 import { cacheKey, CACHE_TTL } from '@/lib/redis'
 

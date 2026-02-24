@@ -66,23 +66,39 @@ interface BalanceBarChartProps {
   poolInputs?: PoolProjectionInput[] // Per-pool data for projection breakdown
 }
 
+interface MarkerRenderProps {
+  xAxisMap?: Record<number, {
+    scale?: ((value: string) => number) & {
+      bandwidth?: () => number
+    }
+  }>
+  yAxisMap?: Record<number, { height: number }>
+  offset?: { top: number; width: number }
+  formattedGraphicalItems?: Array<{
+    props?: {
+      data?: BarChartDataPoint[]
+    }
+  }>
+}
+
 // Custom event markers renderer for Recharts Customized component
 // Renders native SVG icon paths extracted from lucide icons
-function renderEventMarkers(props: any) {
+function renderEventMarkers(props: MarkerRenderProps) {
   const { xAxisMap, yAxisMap, offset } = props
 
   if (!xAxisMap || !yAxisMap) return null
 
   const xAxis = xAxisMap[0]
   const yAxis = yAxisMap[0]
+  const scale = xAxis?.scale
 
-  if (!xAxis || !yAxis || !xAxis.scale) return null
+  if (!xAxis || !yAxis || !scale) return null
 
   const data = props.formattedGraphicalItems?.[0]?.props?.data as BarChartDataPoint[] | undefined
   if (!data) return null
 
-  const bandwidth = xAxis.scale.bandwidth ? xAxis.scale.bandwidth() : 20
-  const yBottom = offset?.top + yAxis.height
+  const bandwidth = scale.bandwidth ? scale.bandwidth() : 20
+  const yBottom = (offset?.top ?? 0) + yAxis.height
 
   // Calculate number of bars to properly position icons under the first bar
   const numBars = props.formattedGraphicalItems?.length || 1
@@ -96,7 +112,7 @@ function renderEventMarkers(props: any) {
       {data.map((bar, idx) => {
         if (bar.events.length === 0) return null
 
-        const x = xAxis.scale(bar.period)
+        const x = scale(bar.period)
         if (x === undefined) return null
 
         // Center of the first bar (balance bar), accounting for multiple bars in the same category
@@ -116,7 +132,7 @@ function renderEventMarkers(props: any) {
         }
         // Get unique icon categories and their representative event types
         const uniqueCategories = Array.from(eventsByCategory.entries())
-        const displayEvents = uniqueCategories.slice(0, 4).map(([_, type]) => type)
+        const displayEvents = uniqueCategories.slice(0, 4).map(([, type]) => type)
         const numIcons = displayEvents.length
 
         // Background circle size (same for all, smaller on mobile)
@@ -279,30 +295,27 @@ export const BalanceBarChart = memo(function BalanceBarChart({
   poolInputs = [],
 }: BalanceBarChartProps) {
   const [internalPeriod, setInternalPeriod] = useState<TimePeriod>("All")
-  const [error, setError] = useState<Error | null>(null)
 
   // Currency preference for multi-currency display
   const { format: formatCurrency } = useCurrencyPreference()
   const { containerRef, shouldRenderTooltip } = useTooltipDismiss()
 
   // Projection settings state with localStorage persistence
-  const [projectionSettings, setProjectionSettings] = useState<ProjectionSettings>(DEFAULT_PROJECTION_SETTINGS)
-
-  // Load settings from localStorage on mount
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = localStorage.getItem(PROJECTION_SETTINGS_KEY)
-        if (saved) {
-          const parsed = JSON.parse(saved) as Partial<ProjectionSettings>
-          // Merge with defaults to handle new properties for existing users
-          setProjectionSettings({ ...DEFAULT_PROJECTION_SETTINGS, ...parsed })
-        }
-      } catch {
-        // Ignore parse errors, use defaults
-      }
+  const [projectionSettings, setProjectionSettings] = useState<ProjectionSettings>(() => {
+    if (typeof window === 'undefined') {
+      return DEFAULT_PROJECTION_SETTINGS
     }
-  }, [])
+    try {
+      const saved = localStorage.getItem(PROJECTION_SETTINGS_KEY)
+      if (!saved) {
+        return DEFAULT_PROJECTION_SETTINGS
+      }
+      const parsed = JSON.parse(saved) as Partial<ProjectionSettings>
+      return { ...DEFAULT_PROJECTION_SETTINGS, ...parsed }
+    } catch {
+      return DEFAULT_PROJECTION_SETTINGS
+    }
+  })
 
   // Save settings to localStorage when they change
   const updateProjectionSettings = useCallback((newSettings: Partial<ProjectionSettings>) => {
@@ -337,9 +350,8 @@ export const BalanceBarChart = memo(function BalanceBarChart({
     return latestData.borrow || 0
   }, [currentBorrowProp, historyData])
 
-  // Aggregate data based on selected period with error handling
-  // Note: We explicitly include projectionSettings properties in deps to ensure React detects changes
-  const chartData = useMemo(() => {
+  // Aggregate data based on selected period with error handling.
+  const chartResult = useMemo(() => {
     try {
       const data = aggregateDataByPeriod(
         historyData,
@@ -355,22 +367,21 @@ export const BalanceBarChart = memo(function BalanceBarChart({
         currentDeposit  // Pass SDK cost basis to fix current month yield calculation
       )
 
-      return data
+      return { data, error: null as Error | null }
     } catch (err) {
-      setError(err instanceof Error ? err : new Error('Failed to aggregate chart data'))
-      return []
+      return {
+        data: [] as BarChartDataPoint[],
+        error: err instanceof Error ? err : new Error('Failed to aggregate chart data'),
+      }
     }
-  }, [historyData, userActions, selectedPeriod, currentBalance, currentDeposit, apy, firstEventDate, currentBorrow, blndApy, projectionSettings.blndReinvestment, projectionSettings.compoundFrequency, projectionSettings.projectionYears, poolInputs])
+  }, [historyData, userActions, selectedPeriod, currentBalance, currentDeposit, apy, firstEventDate, currentBorrow, blndApy, projectionSettings, poolInputs])
+  const chartData = chartResult.data
 
   // Calculate max value for Y axis (include balance + borrow for proper scaling)
-  const maxBalance = useMemo(() => {
-    try {
-      return Math.max(...chartData.map((d) => d.balance + d.borrow), 1)
-    } catch (err) {
-      setError(err instanceof Error ? err : new Error('Failed to calculate max balance'))
-      return 1
-    }
-  }, [chartData])
+  const maxBalance = useMemo(
+    () => Math.max(...chartData.map((d) => d.balance + d.borrow), 1),
+    [chartData]
+  )
 
   // Check if there's any borrow data to render the borrow bar
   const hasBorrowData = useMemo(() => {
@@ -489,12 +500,12 @@ export const BalanceBarChart = memo(function BalanceBarChart({
     )
   }
 
-  if (error) {
+  if (chartResult.error) {
     return (
       <div className="space-y-3">
         <div className="aspect-[2/1] md:aspect-[7/2] flex flex-col items-center justify-center text-destructive gap-2">
           <p className="font-medium">Failed to load chart</p>
-          <p className="text-sm text-muted-foreground">{error.message}</p>
+          <p className="text-sm text-muted-foreground">{chartResult.error.message}</p>
         </div>
       </div>
     )

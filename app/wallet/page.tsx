@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useState, useMemo, useEffect } from "react"
+import { useCallback, useState, useMemo } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { AuthenticatedPage } from "@/components/authenticated-page"
 import { PageTitle } from "@/components/page-title"
@@ -12,66 +12,69 @@ import { useAnalytics } from "@/hooks/use-analytics"
 
 const STORAGE_KEY = "wallet-page-selected-wallet-ids"
 
+interface StoredSelection {
+  activeWalletId?: string
+  selectedIds?: string[]
+}
+
+function readStoredSelection(): { selectedIds: string[] | null; activeWalletId: string | null } {
+  if (typeof window === "undefined") {
+    return { selectedIds: null, activeWalletId: null }
+  }
+
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) {
+      return { selectedIds: null, activeWalletId: null }
+    }
+
+    const parsed = JSON.parse(raw) as StoredSelection
+    const selectedIds = Array.isArray(parsed.selectedIds) && parsed.selectedIds.length > 0
+      ? parsed.selectedIds
+      : null
+
+    return {
+      selectedIds,
+      activeWalletId: parsed.activeWalletId ?? null,
+    }
+  } catch {
+    return { selectedIds: null, activeWalletId: null }
+  }
+}
+
 export default function WalletPage() {
   const queryClient = useQueryClient()
   const { activeWallet } = useWalletState()
   const { wallets } = useWalletContext()
   const { capture } = useAnalytics()
+  const activeWalletId = activeWallet?.id ?? null
 
   // Track which wallets are selected for aggregation
-  const [selectedWalletIds, setSelectedWalletIds] = useState<string[] | null>(null)
+  const [{ selectedIds: selectedWalletIds, activeWalletId: storedActiveWalletId }, setStoredSelection] = useState(readStoredSelection)
 
-  // Load selection from localStorage on mount, reset if active wallet changed
-  useEffect(() => {
-    if (!activeWallet?.id || wallets.length === 0) return
-
-    const stored = localStorage.getItem(STORAGE_KEY)
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored)
-        // Check if stored selection was for a different active wallet
-        if (parsed.activeWalletId && parsed.activeWalletId !== activeWallet.id) {
-          // Active wallet changed, reset to just the new active wallet
-          setSelectedWalletIds([activeWallet.id])
-          localStorage.setItem(
-            STORAGE_KEY,
-            JSON.stringify({
-              activeWalletId: activeWallet.id,
-              selectedIds: [activeWallet.id],
-            })
-          )
-          return
-        }
-        // Load stored selection if valid
-        if (Array.isArray(parsed.selectedIds) && parsed.selectedIds.length > 0) {
-          const validIds = parsed.selectedIds.filter((id: string) =>
-            wallets.some((w) => w.id === id)
-          )
-          if (validIds.length > 0) {
-            setSelectedWalletIds(validIds)
-            return
-          }
-        }
-      } catch {
-        // Invalid JSON, ignore
-      }
-    }
-  }, [wallets, activeWallet?.id])
-
-  // Derive effective selection: if null (not yet set), default to just active wallet
+  // Derive effective selection.
   const effectiveSelectedWalletIds = useMemo(() => {
-    if (selectedWalletIds === null && activeWallet?.id) {
-      return [activeWallet.id]
+    if (!activeWalletId) {
+      return []
     }
-    return selectedWalletIds ?? []
-  }, [selectedWalletIds, activeWallet?.id])
+
+    if (storedActiveWalletId && storedActiveWalletId !== activeWalletId) {
+      return [activeWalletId]
+    }
+
+    const validIds = (selectedWalletIds ?? []).filter((id) => wallets.some((w) => w.id === id))
+    return validIds.length > 0 ? validIds : [activeWalletId]
+  }, [selectedWalletIds, storedActiveWalletId, wallets, activeWalletId])
 
   const handleWalletSelectionApply = (walletIds: string[]) => {
-    setSelectedWalletIds(walletIds)
+    setStoredSelection({
+      selectedIds: walletIds,
+      activeWalletId: activeWalletId,
+    })
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
-        activeWalletId: activeWallet?.id,
+        activeWalletId: activeWalletId,
         selectedIds: walletIds,
       })
     )
@@ -109,7 +112,7 @@ export default function WalletPage() {
       }),
       queryClient.invalidateQueries({ queryKey: ["token-sparkline"] }),
     ])
-  }, [activeWallet?.publicKey, selectedWalletAddresses, queryClient, capture])
+  }, [activeWallet, selectedWalletAddresses, queryClient, capture])
 
   return (
     <AuthenticatedPage onRefresh={handleRefresh}>
@@ -122,7 +125,7 @@ export default function WalletPage() {
           wallets.length > 1 ? (
             <WalletAggregationSelector
               wallets={wallets}
-              activeWalletId={activeWallet?.id ?? null}
+              activeWalletId={activeWalletId}
               selectedWalletIds={effectiveSelectedWalletIds}
               onApply={handleWalletSelectionApply}
             />

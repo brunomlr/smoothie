@@ -5,7 +5,6 @@
  * Maps symbol -> USD price for easy lookup.
  */
 
-import { NextRequest } from "next/server"
 import {
   createApiHandler,
   CACHE_CONFIGS,
@@ -29,7 +28,7 @@ export const GET = createApiHandler<CurrentPricesResponse>({
   logPrefix: "[Current Token Prices API]",
   cache: CACHE_CONFIGS.SHORT, // 1 minute cache
 
-  async handler(_request: NextRequest) {
+  async handler() {
     if (!pool) {
       throw new Error("Database pool not initialized")
     }

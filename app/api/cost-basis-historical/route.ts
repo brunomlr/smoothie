@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { eventsRepository } from '@/lib/db/events-repository'
-import { calculateHistoricalYieldBreakdown, HistoricalYieldBreakdown } from '@/lib/balance-history-utils'
+import { HistoricalYieldBreakdown } from '@/lib/balance-history-utils'
 import { resolveWalletAddress } from '@/lib/api'
 
 export interface AssetYieldBreakdown extends HistoricalYieldBreakdown {
@@ -104,9 +104,9 @@ export async function GET(request: NextRequest) {
 
     const byAsset: Record<string, AssetYieldBreakdown> = {}
     let totalCostBasisHistorical = 0
-    let totalProtocolYieldUsd = 0
-    let totalPriceChangeUsd = 0
-    let totalEarnedUsd = 0
+    const totalProtocolYieldUsd = 0
+    const totalPriceChangeUsd = 0
+    const totalEarnedUsd = 0
 
     // Fetch all deposit/withdrawal events for ALL addresses and combine
     const allEventsMaps = await Promise.all(

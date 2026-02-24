@@ -39,12 +39,14 @@ interface ChartDataPoint {
   total: number
 }
 
+type ChartTooltipPayload = Array<{ payload: ChartDataPoint }>
+
 function CustomTooltip({
   active,
   payload,
 }: {
   active?: boolean
-  payload?: any[]
+  payload?: ChartTooltipPayload
 }) {
   if (!active || !payload || !payload.length) {
     return null

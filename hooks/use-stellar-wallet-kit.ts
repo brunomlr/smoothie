@@ -127,14 +127,14 @@ export function useStellarWalletKit(network: Networks = getDefaultNetwork()) {
     try {
       StellarWalletsKit.setWallet(walletId)
       // Access the selected module directly and request access
-      const module = StellarWalletsKit.selectedModule
-      if (!module) {
+      const selectedModule = StellarWalletsKit.selectedModule
+      if (!selectedModule) {
         throw new Error("Wallet module not found")
       }
       // For Ledger wallets, we need to provide a BIP44 path
       // Standard Stellar path is 44'/148'/0' (first account)
       const isLedger = walletId === "LEDGER"
-      const { address } = await module.getAddress({
+      const { address } = await selectedModule.getAddress({
         skipRequestAccess: false,
         ...(isLedger && { path: "44'/148'/0'" }),
       })
@@ -176,11 +176,12 @@ export function useStellarWalletKit(network: Networks = getDefaultNetwork()) {
     await ensureInitialized(network)
 
     try {
-      const result = await StellarWalletsKit.authModal({
+      const authModalOptions = {
         onWalletSelected: async (wallet: SupportedWallet) => {
           StellarWalletsKit.setWallet(wallet.id)
         },
-      } as any)
+      } as unknown as Parameters<typeof StellarWalletsKit.authModal>[0]
+      const result = await StellarWalletsKit.authModal(authModalOptions)
 
       if (onWalletSelected && result.address) {
         await onWalletSelected(result.address)

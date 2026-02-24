@@ -13,7 +13,7 @@ export function Sidebar() {
     <aside className="hidden md:flex fixed left-0 top-0 z-40 h-screen w-56 flex-col border-r border-border bg-background">
       {/* Logo */}
       <div className="flex h-16 items-center px-6">
-        <Link href="/" className="flex items-center">
+        <Link href="/?from=logo" className="flex items-center">
           <Image
             src="/logo/logo.png"
             alt="Smoothie"

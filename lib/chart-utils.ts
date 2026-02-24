@@ -452,13 +452,13 @@ export function generateProjectionData(
       const blndYield = actualBalance - regularOnlyBalance // Pure BLND contribution
 
       // Calculate per-pool breakdown
-      const poolBreakdown: PoolYieldBreakdown[] = hasPoolData ? poolTrackers.map(tracker => ({
+      const poolBreakdown: PoolYieldBreakdown[] | undefined = hasPoolData ? poolTrackers.map(tracker => ({
         poolId: tracker.poolId,
         poolName: tracker.poolName,
         balance: tracker.actualBalance,
         yieldEarned: tracker.regularOnlyBalance - tracker.initialBalance,
         blndYield: tracker.actualBalance - tracker.regularOnlyBalance,
-      })) : undefined as any
+      })) : undefined
 
       const futureDate = new Date(today)
       futureDate.setMonth(futureDate.getMonth() + month)
@@ -535,13 +535,13 @@ export function generateProjectionData(
       const blndYield = actualBalance - regularOnlyBalance // Pure BLND contribution
 
       // Calculate per-pool breakdown
-      const poolBreakdown: PoolYieldBreakdown[] = hasPoolData ? poolTrackers.map(tracker => ({
+      const poolBreakdown: PoolYieldBreakdown[] | undefined = hasPoolData ? poolTrackers.map(tracker => ({
         poolId: tracker.poolId,
         poolName: tracker.poolName,
         balance: tracker.actualBalance,
         yieldEarned: tracker.regularOnlyBalance - tracker.initialBalance,
         blndYield: tracker.actualBalance - tracker.regularOnlyBalance,
-      })) : undefined as any
+      })) : undefined
 
       const futureDate = new Date(today)
       futureDate.setFullYear(futureDate.getFullYear() + year)

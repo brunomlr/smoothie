@@ -64,7 +64,7 @@ export function WalletAllocationBar({
       maximumFractionDigits: 2,
     })
 
-  const { allocations, totalValue } = useMemo(() => {
+  const { allocations } = useMemo(() => {
     // Calculate total value
     let total = 0
     for (const wallet of perWalletTotals) {

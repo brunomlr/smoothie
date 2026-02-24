@@ -38,6 +38,7 @@ export function PoolLogo({ poolName, size = 24, className }: PoolLogoProps) {
   }
 
   return (
+    // eslint-disable-next-line @next/next/no-img-element
     <img
       src={src}
       alt={`${poolName} pool logo`}

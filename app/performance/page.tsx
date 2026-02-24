@@ -37,6 +37,36 @@ function formatDate(dateStr: string): string {
   })
 }
 
+interface StoredSelection {
+  activeWalletId?: string
+  selectedIds?: string[]
+}
+
+function readStoredSelection(): { selectedIds: string[] | null; activeWalletId: string | null } {
+  if (typeof window === "undefined") {
+    return { selectedIds: null, activeWalletId: null }
+  }
+
+  try {
+    const raw = localStorage.getItem("performance-selected-wallet-ids")
+    if (!raw) {
+      return { selectedIds: null, activeWalletId: null }
+    }
+
+    const parsed = JSON.parse(raw) as StoredSelection
+    const selectedIds = Array.isArray(parsed.selectedIds) && parsed.selectedIds.length > 0
+      ? parsed.selectedIds
+      : null
+
+    return {
+      selectedIds,
+      activeWalletId: parsed.activeWalletId ?? null,
+    }
+  } catch {
+    return { selectedIds: null, activeWalletId: null }
+  }
+}
+
 
 function RealizedYieldContent() {
   const queryClient = useQueryClient()
@@ -50,56 +80,32 @@ function RealizedYieldContent() {
 
   const { activeWallet } = useWalletState()
   const { wallets } = useWalletContext()
+  const activeWalletId = activeWallet?.id ?? null
 
   // Track which wallets are selected for aggregation
-  // null means "not yet initialized" - will default to active wallet only
-  const [selectedWalletIds, setSelectedWalletIds] = useState<string[] | null>(null)
+  const [{ selectedIds: selectedWalletIds, activeWalletId: storedActiveWalletId }, setStoredSelection] = useState(readStoredSelection)
 
-  // Load selection from localStorage on mount, reset if active wallet changed
-  useEffect(() => {
-    if (!activeWallet?.id || wallets.length === 0) return
-
-    const stored = localStorage.getItem('performance-selected-wallet-ids')
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored)
-        // Check if stored selection was for a different active wallet
-        if (parsed.activeWalletId && parsed.activeWalletId !== activeWallet.id) {
-          // Active wallet changed, reset to just the new active wallet
-          setSelectedWalletIds([activeWallet.id])
-          localStorage.setItem('performance-selected-wallet-ids', JSON.stringify({
-            activeWalletId: activeWallet.id,
-            selectedIds: [activeWallet.id]
-          }))
-          return
-        }
-        // Load stored selection if valid
-        if (Array.isArray(parsed.selectedIds) && parsed.selectedIds.length > 0) {
-          const validIds = parsed.selectedIds.filter((id: string) => wallets.some(w => w.id === id))
-          if (validIds.length > 0) {
-            setSelectedWalletIds(validIds)
-            return
-          }
-        }
-      } catch {
-        // Invalid JSON, ignore
-      }
-    }
-  }, [wallets, activeWallet?.id])
-
-  // Derive effective selection: if null (not yet set), default to just active wallet
+  // Derive effective selection.
   const effectiveSelectedWalletIds = useMemo(() => {
-    if (selectedWalletIds === null && activeWallet?.id) {
-      return [activeWallet.id]
+    if (!activeWalletId) {
+      return []
     }
-    return selectedWalletIds ?? []
-  }, [selectedWalletIds, activeWallet?.id])
+
+    if (storedActiveWalletId && storedActiveWalletId !== activeWalletId) {
+      return [activeWalletId]
+    }
+
+    const validIds = (selectedWalletIds ?? []).filter((id) => wallets.some((w) => w.id === id))
+    return validIds.length > 0 ? validIds : [activeWalletId]
+  }, [selectedWalletIds, storedActiveWalletId, wallets, activeWalletId])
 
   const handleWalletSelectionApply = (walletIds: string[]) => {
-    setSelectedWalletIds(walletIds)
-    // Persist to localStorage with active wallet context
+    setStoredSelection({
+      selectedIds: walletIds,
+      activeWalletId: activeWalletId,
+    })
     localStorage.setItem('performance-selected-wallet-ids', JSON.stringify({
-      activeWalletId: activeWallet?.id,
+      activeWalletId: activeWalletId,
       selectedIds: walletIds
     }))
   }
@@ -164,7 +170,7 @@ function RealizedYieldContent() {
     })
 
     return record
-  }, [isMultiWallet, multiBlendPositions.sdkPrices, blendSnapshot?.positions])
+  }, [isMultiWallet, multiBlendPositions.sdkPrices, blendSnapshot])
 
   // Wait for SDK prices to be ready before fetching performance data
   const sdkReady = !isLoadingPositions && blendSnapshot !== undefined
@@ -204,7 +210,7 @@ function RealizedYieldContent() {
   const borrowPositions = useMemo(() => {
     if (!blendSnapshot?.positions) return []
     return blendSnapshot.positions.filter(pos => pos.borrowAmount > 0)
-  }, [blendSnapshot?.positions])
+  }, [blendSnapshot])
 
   // Borrow cost breakdown (similar to yield breakdown but for debt)
   // Pass all selected addresses for multi-wallet aggregation
@@ -282,7 +288,7 @@ function RealizedYieldContent() {
     }
 
     return result
-  }, [data?.transactions, useHistoricalBlndPrices, blndPrice])
+  }, [data, useHistoricalBlndPrices, blndPrice])
 
 
   // Aggregate by pool for per-pool breakdown (grouped by pool with lending/backstop sub-items)
@@ -330,7 +336,7 @@ function RealizedYieldContent() {
         const bTotal = b.lending.deposited + b.backstop.deposited
         return bTotal - aTotal
       })
-  }, [data?.transactions, useHistoricalBlndPrices, blndPrice])
+  }, [data, useHistoricalBlndPrices, blndPrice])
 
   // Calculate current positions and unrealized P&L from SDK
   const unrealizedData = useMemo(() => {
@@ -410,7 +416,7 @@ function RealizedYieldContent() {
     }
 
     return balances
-  }, [blendSnapshot?.positions, backstopPositions])
+  }, [blendSnapshot, backstopPositions])
 
   // Calculate per-pool yield data from yieldBreakdown (consistent with source breakdown)
   const perPoolYieldData = useMemo(() => {
@@ -558,7 +564,7 @@ function RealizedYieldContent() {
     }
 
     return { pools: poolsRealizedYield, backstop: backstopRealizedYield }
-  }, [data?.transactions, perPoolCurrentBalances])
+  }, [data, perPoolCurrentBalances])
 
   // Display P&L values based on showPriceChanges setting
   // Uses yieldBreakdown (same as home page) for consistency
@@ -1346,7 +1352,6 @@ function RealizedYieldContent() {
                   <CardContent className="space-y-4">
                   {perPoolBreakdown.map((poolData, poolIndex) => {
                     const totalDeposited = poolData.lending.deposited + poolData.backstop.deposited
-                    const totalEmissions = poolData.lending.emissionsClaimed + poolData.backstop.emissionsClaimed
 
                     // Get actual per-pool current balances from SDK positions
                     const poolBalances = perPoolCurrentBalances.get(poolData.poolId)

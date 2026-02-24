@@ -1,13 +1,9 @@
 "use client"
 
-import * as React from "react"
 import dynamic from "next/dynamic"
 import Image from "next/image"
 import { WalletSelector } from "@/components/wallet-selector"
 import { Footer } from "@/components/footer"
-import { Button } from "@/components/ui/button"
-import { fetchDemoWallets, getRandomDemoWalletAliasSync, isDemoWalletEnabledSync } from "@/lib/config/demo-wallet"
-import { useAnalytics } from "@/hooks/use-analytics"
 import type { Wallet } from "@/types/wallet"
 
 // Dynamically import Dither to avoid SSR issues with three.js
@@ -28,28 +24,9 @@ export function LandingPage({
   activeWallet,
   onSelectWallet,
   onConnectWallet,
-  onConnectDemoWallet,
   onDisconnect,
   isHydrated = true,
 }: LandingPageProps) {
-  const { capture } = useAnalytics()
-  const [showDemoButton, setShowDemoButton] = React.useState(false)
-
-  // Fetch demo wallet data on mount
-  React.useEffect(() => {
-    fetchDemoWallets().then(() => {
-      setShowDemoButton(isDemoWalletEnabledSync())
-    })
-  }, [])
-
-  const handleDemoClick = () => {
-    const demoAlias = getRandomDemoWalletAliasSync()
-    if (demoAlias) {
-      capture('demo_wallet_clicked')
-      capture('demo_wallet_connected', { demo_alias: demoAlias })
-      onConnectDemoWallet(demoAlias)
-    }
-  }
   return (
     <div className="min-h-screen relative overflow-hidden bg-black">
       {/* Dither Background */}
@@ -70,6 +47,15 @@ export function LandingPage({
 
       {/* Content */}
       <div className="relative z-10 min-h-screen flex flex-col p-4 sm:p-6 md:p-8">
+        {/* Informational disclaimer */}
+        <div className="mx-auto w-full max-w-4xl rounded-xl border border-white/20 bg-black/50 px-4 py-3 text-left text-xs sm:text-sm text-white/90 backdrop-blur">
+          <p>
+            Informational use only. Smoothie does not provide financial, investment, legal, or tax advice.
+            Data may be delayed, incomplete, or out of date, and no accuracy or completeness is guaranteed.
+            Verify information independently before taking any on-chain action.
+          </p>
+        </div>
+
         {/* Main Content */}
         <main className="flex-1 flex flex-col items-center justify-center px-4 text-center">
           {/* Circular blur backdrop */}
@@ -98,7 +84,7 @@ export function LandingPage({
             </h1>
 
             <p className="text-lg sm:text-xl text-white/80 max-w-lg mx-auto">
-              Track your Stellar Blend DeFi positions, monitor your yields, and stay on top of your portfolio.
+              View your Stellar Blend positions and portfolio metrics in one place.
             </p>
 
             {/* CTA */}
@@ -112,15 +98,6 @@ export function LandingPage({
                 variant="landing"
                 isHydrated={isHydrated}
               />
-              {showDemoButton && (
-                <Button
-                  variant="ghost"
-                  onClick={handleDemoClick}
-                  className="text-white/70 hover:text-white hover:bg-white/10"
-                >
-                  Try Demo Wallet
-                </Button>
-              )}
             </div>
           </div>
         </main>

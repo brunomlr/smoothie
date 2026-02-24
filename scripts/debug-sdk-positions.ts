@@ -7,10 +7,8 @@
 
 import { config } from 'dotenv'
 import {
-  Pool,
   PoolMetadata,
-  PoolV2,
-  Version
+  PoolV2
 } from '@blend-capital/blend-sdk'
 
 import { Networks } from '@stellar/stellar-sdk'
@@ -60,7 +58,7 @@ async function main() {
 
     // List all reserves
     console.log('\n=== Pool Reserves ===')
-    for (const [assetId, reserve] of pool.reserves) {
+    for (const assetId of pool.reserves.keys()) {
       const symbol = assetId.endsWith('O7SJMI75') ? 'USDC' :
                      assetId.endsWith('H34XOWMA') ? 'XLM' :
                      assetId.slice(-8)

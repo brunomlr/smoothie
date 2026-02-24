@@ -85,12 +85,6 @@ export function WalletAggregationSelector({
     return `${address.slice(0, 4)}...${address.slice(-4)}`
   }
 
-  // Count of additional wallets selected (beyond the active one)
-  const additionalCount = selectedWalletIds.filter((id) => id !== activeWalletId).length
-
-  // Get the active wallet for display
-  const activeWallet = wallets.find((w) => w.id === activeWalletId)
-
   // Get selected wallets for stacked avatars (up to 5)
   const selectedWallets = wallets.filter((w) => selectedWalletIds.includes(w.id))
   const displayWallets = selectedWallets.slice(0, 5)

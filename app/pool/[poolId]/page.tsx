@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -15,7 +15,6 @@ import {
   Clock,
   Calculator,
   DollarSign,
-  Info,
 } from "lucide-react";
 import { ApySparkline } from "@/components/apy-sparkline";
 import { BackstopApySparkline } from "@/components/backstop-apy-sparkline";
@@ -38,9 +37,7 @@ import {
   type BlendReservePosition,
   type BlendPoolEstimate,
   type BlendBackstopPosition,
-  type BlendWalletSnapshot,
 } from "@/lib/blend/positions";
-import { FixedMath } from "@blend-capital/blend-sdk";
 import { fetchWithTimeout } from "@/lib/fetch-utils";
 import type { BackstopCostBasis } from "@/lib/db/types";
 import { toTrackedPools } from "@/lib/blend/pools";
@@ -244,10 +241,7 @@ function AssetRow({
   formatYield: (value: number) => string;
 }) {
   const [simulatorOpen, setSimulatorOpen] = useState(false);
-  const hasCollateral = position.collateralAmount > 0;
-  const hasNonCollateral = position.nonCollateralAmount > 0;
   const hasBorrow = position.borrowAmount > 0;
-  const hasYield = position.earnedYield !== 0;
 
   // Calculate total supply for display
   const totalSupplyAmount =
@@ -481,10 +475,7 @@ function MobileAssetCard({
   formatYield: (value: number) => string;
 }) {
   const [simulatorOpen, setSimulatorOpen] = useState(false);
-  const hasCollateral = position.collateralAmount > 0;
-  const hasNonCollateral = position.nonCollateralAmount > 0;
   const hasBorrow = position.borrowAmount > 0;
-  const hasYield = position.earnedYield !== 0;
 
   // Calculate total supply for display
   const totalSupplyAmount =
@@ -1359,9 +1350,6 @@ export default function PoolDetailsPage() {
     yieldBreakdowns,
   ]);
 
-  // Get pool info from tracked pools for explorer link
-  const poolInfo = trackedPools.find((p) => p.id === poolId);
-
   const handleRefresh = useCallback(async () => {
     if (!activeWallet?.publicKey) return;
 
@@ -1385,7 +1373,7 @@ export default function PoolDetailsPage() {
         queryKey: ["claimed-blnd", activeWallet.publicKey],
       }),
     ]);
-  }, [activeWallet?.publicKey, poolId, queryClient, capture]);
+  }, [activeWallet, poolId, queryClient, capture]);
 
   // Render content based on state
   const renderContent = () => {

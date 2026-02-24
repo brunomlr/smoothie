@@ -1,13 +1,14 @@
 "use client"
 
-import { useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useEffect, useLayoutEffect } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { LandingPage } from "@/components/landing-page"
 import { useWalletState } from "@/hooks/use-wallet-state"
 import { useAnalytics } from "@/hooks/use-analytics"
 
 export default function Landing() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { capture } = useAnalytics()
   const {
     wallets,
@@ -18,18 +19,27 @@ export default function Landing() {
     handleDisconnect,
     isHydrated,
   } = useWalletState()
+  const shouldStayOnLanding = searchParams.get("from") === "logo"
+  const shouldRedirectToHome = isHydrated && !!activeWallet && !shouldStayOnLanding
 
   // Auto-redirect to /home if wallet is connected
-  useEffect(() => {
-    if (isHydrated && activeWallet) {
-      router.replace('/home')
+  useLayoutEffect(() => {
+    if (shouldRedirectToHome) {
+      router.replace("/home")
     }
-  }, [isHydrated, activeWallet, router])
+  }, [shouldRedirectToHome, router])
 
-  // Track page view
+  // Track landing page view only when this page is actually shown
   useEffect(() => {
-    capture('page_viewed', { page: 'landing' })
-  }, [capture])
+    if (isHydrated && (!activeWallet || shouldStayOnLanding)) {
+      capture("page_viewed", { page: "landing" })
+    }
+  }, [capture, isHydrated, activeWallet, shouldStayOnLanding])
+
+  // Avoid rendering landing UI before hydration or when redirecting to /home
+  if (!isHydrated || shouldRedirectToHome) {
+    return null
+  }
 
   return (
     <LandingPage

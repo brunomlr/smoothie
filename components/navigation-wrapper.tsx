@@ -13,8 +13,8 @@ export function NavigationWrapper({ children }: NavigationWrapperProps) {
   const pathname = usePathname()
   const { activeWallet, isHydrated } = useWalletState()
 
-  // Pages that don't need navigation (landing, privacy, terms, blend-101, etc.)
-  const noNavigationPages = ["/", "/privacy", "/terms", "/blend-101"]
+  // Pages that don't need navigation (landing, privacy, terms, etc.)
+  const noNavigationPages = ["/", "/privacy", "/terms"]
   const isNoNavPage = pathname === "/" || noNavigationPages.slice(1).some(page => pathname.startsWith(page))
 
   // Don't show navigation if on a no-nav page OR if user is not signed in (after hydration)

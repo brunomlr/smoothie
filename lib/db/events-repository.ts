@@ -1950,7 +1950,7 @@ export class EventsRepository {
     const endDateObj = new Date(endYear, endMonth - 1, endDay)
 
     // Iterate through dates using local date arithmetic
-    let currentDate = new Date(startYear, startMonth - 1, startDay)
+    const currentDate = new Date(startYear, startMonth - 1, startDay)
     while (currentDate <= endDateObj) {
       const year = currentDate.getFullYear()
       const month = String(currentDate.getMonth() + 1).padStart(2, '0')
@@ -2784,9 +2784,6 @@ export class EventsRepository {
     if (poolAssetPairs.length === 0) {
       return new Map()
     }
-
-    // Get unique asset addresses for the price lookup
-    const uniqueAssets = [...new Set(poolAssetPairs.map(p => p.assetAddress))]
 
     // Build WHERE clause for all pool-asset combinations
     // Using (pool_id, asset_address) IN (VALUES ...) for efficient filtering

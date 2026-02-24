@@ -26,7 +26,7 @@ import { getBlendNetwork } from "./network";
 import { type TrackedPool } from "./pools";
 import { simulateCometDeposit } from "./comet";
 import type { PriceQuote } from "@/lib/pricing/types";
-import { getPoolName as getConfigPoolName, POOLS } from "@/lib/config/pools";
+import { POOLS } from "@/lib/config/pools";
 
 // Helper to resolve pool name: use config if available, otherwise SDK metadata
 function resolvePoolName(poolId: string, sdkName: string): string {
@@ -373,8 +373,10 @@ async function ensureUserLoaded(
 async function getTokenMetadata(
   network: Network,
   assetId: string,
-  _cache?: Map<string, TokenMetadata> // Legacy parameter, now using global cache
+  cache?: Map<string, TokenMetadata> // Legacy parameter, now using global cache
 ): Promise<TokenMetadata | null> {
+  void cache;
+
   // Check global cache first
   const cached = getCachedValue(tokenMetadataGlobalCache, assetId);
   if (cached) {
@@ -399,8 +401,10 @@ async function getPriceQuote(
   snapshot: PoolSnapshot,
   reserve: Reserve,
   metadata: TokenMetadata | null,
-  _cache?: Map<string, PriceQuote | null> // Legacy parameter, now using global cache
+  cache?: Map<string, PriceQuote | null> // Legacy parameter, now using global cache
 ): Promise<PriceQuote | null> {
+  void cache;
+
   const symbol = metadata?.symbol;
   const cacheKey = `${snapshot.tracked.id}:${reserve.assetId}:${symbol ?? ""}`;
 
@@ -1090,7 +1094,7 @@ async function fetchWalletBlendSnapshotInternal(
         }
         perReserveEmissions.set(snapshot.tracked.id, poolEmissions);
       }
-    } catch (e) {
+    } catch {
       // Failed to estimate emissions for pool
     }
   }

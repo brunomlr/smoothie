@@ -499,7 +499,7 @@ export function fillMissingDates(
   })
 
   // Build chart data - backend already filled missing dates with recalculated rates
-  const chartData: ChartDataPoint[] = allDates.map((date, index) => {
+  const chartData: ChartDataPoint[] = allDates.map((date) => {
     const dateRecords = datePoolMap.get(date)!
     const pools: ChartDataPoint['pools'] = []
     let total = 0
@@ -695,6 +695,8 @@ export function calculateEarningsStats(
   chartData: ChartDataPoint[],
   positionChanges: PositionChange[],
 ): EarningsStats {
+  void positionChanges
+
   if (chartData.length <= 1) {
     return {
       totalInterest: 0,

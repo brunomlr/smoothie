@@ -25,14 +25,6 @@ interface RealizedYieldCardProps {
   isLoading?: boolean
 }
 
-function formatNumber(value: number, decimals = 2): string {
-  if (!Number.isFinite(value)) return "0.00"
-  return value.toLocaleString("en-US", {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  })
-}
-
 export function RealizedYieldCard({
   publicKey,
   blndPrice = 0,

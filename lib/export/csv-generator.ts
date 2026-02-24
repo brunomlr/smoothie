@@ -23,11 +23,13 @@ const ACTION_TYPE_LABELS: Record<ActionType, string> = {
 function escapeCSV(value: string | number | null | undefined): string {
   if (value === null || value === undefined) return ''
   const str = String(value)
+  // Prevent CSV formula injection in spreadsheet apps.
+  const safe = /^\s*[=+\-@]/.test(str) ? `'${str}` : str
   // Escape quotes and wrap in quotes if contains comma, quote, or newline
-  if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-    return `"${str.replace(/"/g, '""')}"`
+  if (safe.includes(',') || safe.includes('"') || safe.includes('\n')) {
+    return `"${safe.replace(/"/g, '""')}"`
   }
-  return str
+  return safe
 }
 
 function formatDateUTC(dateString: string): string {

@@ -38,7 +38,7 @@ export const GET = createApiHandler<BackstopCostBasisResponse>({
   analytics: {
     event: 'backstop_cost_basis_fetched',
     getUserAddress: (request) => request.nextUrl.searchParams.get('user') || undefined,
-    getProperties: (result, _userAddress) => ({
+    getProperties: (result) => ({
       pool_count: result.cost_bases.length,
       has_position: result.cost_bases.length > 0,
     }),

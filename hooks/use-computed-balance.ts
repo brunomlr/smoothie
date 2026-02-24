@@ -104,7 +104,7 @@ export function useComputedBalance(
     })
 
     return map
-  }, [blendSnapshot?.positions])
+  }, [blendSnapshot])
 
   // Enrich asset cards with yield calculated as: SDK Balance (USD) - Database Cost Basis (token amount × USD price)
   const enrichedAssetCards = useMemo(() => {
@@ -186,7 +186,7 @@ export function useComputedBalance(
     }
 
     return totalCostBasisUsd > 0 ? totalCostBasisUsd : undefined
-  }, [blendSnapshot?.positions, poolAssetCostBasisMap, backstopPositions, lpTokenPrice])
+  }, [blendSnapshot, poolAssetCostBasisMap, backstopPositions, lpTokenPrice])
 
   // Recalculate balanceData with correct total cost basis and yield
   const balanceData = useMemo(() => {
@@ -383,7 +383,7 @@ export function useComputedBalance(
 
     // Calculate combined position changes and earnings stats
     const positionChanges = detectPositionChanges([]) as PositionChange[]
-    const earningsStats = calculateEarningsStats(aggregatedChartData as any, positionChanges) as EarningsStats
+    const earningsStats = calculateEarningsStats(aggregatedChartData as ChartDataPoint[], positionChanges) as EarningsStats
 
     return {
       chartData: aggregatedChartData as unknown as ChartDataPoint[],
@@ -393,7 +393,7 @@ export function useComputedBalance(
       isLoading: balanceHistoryQueries.some(q => q.isLoading) || backstopBalanceHistoryQuery.isLoading,
       error: balanceHistoryQueries.find(q => q.error)?.error || backstopBalanceHistoryQuery.error || null,
     } as AggregatedHistoryData
-  }, [balanceHistoryDataMap, assetPriceMap, uniqueAssetAddresses, balanceHistoryQueries, backstopBalanceHistoryQuery, lpTokenPrice, backstopPositions, historicalPrices, showPriceChanges])
+  }, [balanceHistoryDataMap, assetPriceMap, uniqueAssetAddresses, balanceHistoryQueries, backstopBalanceHistoryQuery, lpTokenPrice, backstopPositions, historicalPrices, showPriceChanges, historicalBackstopCostBasis])
 
   return {
     assetPriceMap,
