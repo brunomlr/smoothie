@@ -873,14 +873,29 @@ export async function GET(request: NextRequest) {
           sharesAtEnd = endPosition.shares
         }
 
+        // Derive the current SDK share rate for consistency validation
+        // Used to cap the event-based rate which can drift above the on-chain rate
+        // due to over-counted events in the backstop_events table
+        let sdkShareRate: number | null = null
+        if (isLive && sdkPosition?.lpTokens !== undefined && sdkPosition?.shares !== undefined && sdkPosition.shares > 0) {
+          sdkShareRate = sdkPosition.lpTokens / sdkPosition.shares
+        }
+
         let lpAtStart: number
         const sharesAtStart = positionAtStart.shares
 
         // For live bar, use event-based share rate for more accurate starting LP value
         // This avoids timezone mismatch between balance history and user's timezone
         if (isLive) {
-          const eventShareRate = eventBasedBackstopRates.get(poolAddress)
+          let eventShareRate = eventBasedBackstopRates.get(poolAddress)
           if (eventShareRate !== null && eventShareRate !== undefined) {
+            // Cap event-based rate at the SDK share rate. The backstop share rate is
+            // monotonically non-decreasing (absent draw events), so start-of-day rate
+            // cannot exceed the current rate. If the event-derived rate is higher, it
+            // indicates cumulative drift in the backstop_events table vs on-chain state.
+            if (sdkShareRate !== null && eventShareRate > sdkShareRate) {
+              eventShareRate = sdkShareRate
+            }
             lpAtStart = sharesAtStart * eventShareRate
           } else {
             lpAtStart = positionAtStart.lpValue
