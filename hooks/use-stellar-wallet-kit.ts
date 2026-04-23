@@ -82,6 +82,15 @@ async function ensureInitialized(network: Networks): Promise<void> {
           allowedChains: network === Networks.PUBLIC
             ? [WalletConnectTargetChain.PUBLIC]
             : [WalletConnectTargetChain.TESTNET],
+          // Kit's default Freighter id is stale in the live Reown Explorer; override here.
+          // Cast is needed because appKitOptions is typed as the full CreateAppKit shape,
+          // but the kit spreads it over its own projectId/networks at runtime.
+          appKitOptions: {
+            featuredWalletIds: [
+              "997a355c8f682468706a76cff1b004a7115f505fb962dac54b6e9b442dd1c380", // Freighter
+              "76a3d548a08cf402f5c7d021f24fd2881d767084b387a5325df88bc3d4b6f21b", // Lobstr
+            ],
+          } as unknown as ConstructorParameters<typeof WalletConnectModule>[0]["appKitOptions"],
         })
         modules.push(walletConnectModule)
       }
