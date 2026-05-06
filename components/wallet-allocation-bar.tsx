@@ -4,7 +4,6 @@ import { useMemo } from "react"
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { WalletAvatar } from "@/components/wallet-avatar"
@@ -107,8 +106,7 @@ export function WalletAllocationBar({
   }
 
   return (
-    <TooltipProvider>
-      <div className="space-y-2">
+    <div className="space-y-2">
         {/* Wallet icons row */}
         <div className="relative h-6 flex items-center">
           {allocations.map((allocation, index) => {
@@ -196,6 +194,5 @@ export function WalletAllocationBar({
           })}
         </div>
       </div>
-    </TooltipProvider>
   )
 }

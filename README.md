@@ -16,7 +16,7 @@ A Stellar wallet dashboard for tracking your [Blend Protocol](https://blend.capi
 - **Framework**: Next.js 16 (App Router) + TypeScript
 - **UI**: shadcn/ui + Tailwind CSS
 - **Blockchain**: Stellar SDK + Blend SDK
-- **State**: Zustand + TanStack Query
+- **State**: React Context + TanStack Query
 - **Database**: PostgreSQL (Neon) for balance history
 
 ## Getting Started
@@ -69,6 +69,6 @@ Open [http://localhost:3000](http://localhost:3000)
 │   ├── blend/          # Blend Protocol SDK utilities
 │   ├── stellar/        # Stellar network helpers
 │   └── db/             # Database queries
-├── stores/             # Zustand state stores
+├── contexts/           # React context providers (wallet, currency, prefs)
 └── types/              # TypeScript definitions
 ```

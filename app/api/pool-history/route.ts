@@ -43,55 +43,62 @@ async function getLiveTvlData(): Promise<Record<string, { tvlUsd: number; borrow
   const dbPools = await metadataRepository.getPools()
   const trackedPools = toTrackedPools(dbPools)
 
-  const result: Record<string, { tvlUsd: number; borrowedUsd: number }> = {}
-
-  for (const tracked of trackedPools) {
-    try {
-      const metadata = await PoolMetadata.load(network, tracked.id)
-      const pool = await PoolV2.loadWithMetadata(network, tracked.id, metadata)
-
-      let oracle: PoolOracle | null = null
+  // Load all pools in parallel. Per-pool work is still sequential within
+  // (loadOracle depends on pool, which depends on metadata), but pools
+  // themselves are independent.
+  const poolResults = await Promise.all(
+    trackedPools.map(async (tracked) => {
       try {
-        oracle = await pool.loadOracle()
-      } catch {
-        // Oracle load failed
-      }
+        const metadata = await PoolMetadata.load(network, tracked.id)
+        const pool = await PoolV2.loadWithMetadata(network, tracked.id, metadata)
 
-      let tvlUsd = 0
-      let borrowedUsd = 0
-      let hasPricedReserve = false
-
-      for (const [assetId, reserve] of pool.reserves) {
+        let oracle: PoolOracle | null = null
         try {
-          const totalSuppliedTokens = reserve.totalSupplyFloat()
-          const totalBorrowedTokens = reserve.totalLiabilitiesFloat()
-
-          if (oracle) {
-            const priceFloat = oracle.getPriceFloat(assetId)
-            if (priceFloat === null || priceFloat === undefined) {
-              continue
-            }
-            hasPricedReserve = true
-            tvlUsd += totalSuppliedTokens * priceFloat
-            borrowedUsd += totalBorrowedTokens * priceFloat
-          }
+          oracle = await pool.loadOracle()
         } catch {
-          // Skip this reserve
+          // Oracle load failed
         }
-      }
 
-      // Avoid publishing false zeroes when live oracle pricing is unavailable.
-      if (!hasPricedReserve) {
-        console.warn(`[Pool History API] Skipping live point for ${tracked.id}: no priced reserves`)
-        continue
-      }
+        let tvlUsd = 0
+        let borrowedUsd = 0
+        let hasPricedReserve = false
 
-      result[tracked.id] = { tvlUsd, borrowedUsd }
-    } catch (error) {
-      console.error(`[Pool History API] Failed to load pool ${tracked.id}:`, error)
-    }
+        for (const [assetId, reserve] of pool.reserves) {
+          try {
+            const totalSuppliedTokens = reserve.totalSupplyFloat()
+            const totalBorrowedTokens = reserve.totalLiabilitiesFloat()
+
+            if (oracle) {
+              const priceFloat = oracle.getPriceFloat(assetId)
+              if (priceFloat === null || priceFloat === undefined) {
+                continue
+              }
+              hasPricedReserve = true
+              tvlUsd += totalSuppliedTokens * priceFloat
+              borrowedUsd += totalBorrowedTokens * priceFloat
+            }
+          } catch {
+            // Skip this reserve
+          }
+        }
+
+        if (!hasPricedReserve) {
+          console.warn(`[Pool History API] Skipping live point for ${tracked.id}: no priced reserves`)
+          return null
+        }
+
+        return { id: tracked.id, tvlUsd, borrowedUsd }
+      } catch (error) {
+        console.error(`[Pool History API] Failed to load pool ${tracked.id}:`, error)
+        return null
+      }
+    })
+  )
+
+  const result: Record<string, { tvlUsd: number; borrowedUsd: number }> = {}
+  for (const r of poolResults) {
+    if (r) result[r.id] = { tvlUsd: r.tvlUsd, borrowedUsd: r.borrowedUsd }
   }
-
   return result
 }
 

@@ -11,7 +11,6 @@ import { Badge } from "@/components/ui/badge"
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import {
@@ -112,53 +111,51 @@ const AssetCardComponent = ({ data, onAction }: AssetCardProps) => {
               </span>
               {hasSignificantYield && (
                 hasBreakdown ? (
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span className={`text-sm font-medium tabular-nums cursor-pointer flex items-center gap-1 ${yieldToShow >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
-                          {formattedYield} yield{formattedYieldPercentage}
-                          <Info className="h-3 w-3" />
-                        </span>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom" className="max-w-xs p-2.5">
-                        <div className="space-y-1.5 text-[11px]">
-                          <div className="font-semibold text-xs text-zinc-200 mb-2">Breakdown</div>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className={`text-sm font-medium tabular-nums cursor-pointer flex items-center gap-1 ${yieldToShow >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                        {formattedYield} yield{formattedYieldPercentage}
+                        <Info className="h-3 w-3" />
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="max-w-xs p-2.5">
+                      <div className="space-y-1.5 text-[11px]">
+                        <div className="font-semibold text-xs text-zinc-200 mb-2">Breakdown</div>
+                        <div className="flex justify-between gap-4">
+                          <span className="text-zinc-400">Yield:</span>
+                          <span className={breakdown.protocolYieldUsd >= 0 ? "text-emerald-400" : "text-red-400"}>
+                            {formatInCurrency(breakdown.protocolYieldUsd, { showSign: true })}
+                          </span>
+                        </div>
+                        <div className="text-zinc-500 text-[10px]">
+                          ({breakdown.protocolYieldTokens.toFixed(4)} {data.assetName} earned)
+                        </div>
+                        <div className="flex justify-between gap-4">
+                          <span className="text-zinc-400">Price Change:</span>
+                          <span className={breakdown.priceChangeUsd >= 0 ? "text-emerald-400" : "text-red-400"}>
+                            {formatInCurrency(breakdown.priceChangeUsd, { showSign: true })}
+                            {breakdown.priceChangePercent !== 0 && ` (${breakdown.priceChangePercent >= 0 ? '+' : ''}${breakdown.priceChangePercent.toFixed(1)}%)`}
+                          </span>
+                        </div>
+                        <div className="border-t border-zinc-700 pt-1 flex justify-between gap-4 font-medium">
+                          <span className="text-zinc-300">Total:</span>
+                          <span className={breakdown.totalEarnedUsd >= 0 ? "text-emerald-400" : "text-red-400"}>
+                            {formatInCurrency(breakdown.totalEarnedUsd, { showSign: true })}
+                          </span>
+                        </div>
+                        <div className="border-t border-zinc-700 pt-1 text-zinc-500">
                           <div className="flex justify-between gap-4">
-                            <span className="text-zinc-400">Yield:</span>
-                            <span className={breakdown.protocolYieldUsd >= 0 ? "text-emerald-400" : "text-red-400"}>
-                              {formatInCurrency(breakdown.protocolYieldUsd, { showSign: true })}
-                            </span>
-                          </div>
-                          <div className="text-zinc-500 text-[10px]">
-                            ({breakdown.protocolYieldTokens.toFixed(4)} {data.assetName} earned)
+                            <span>Cost Basis:</span>
+                            <span className="text-zinc-300">{formatInCurrency(breakdown.costBasisHistorical)}</span>
                           </div>
                           <div className="flex justify-between gap-4">
-                            <span className="text-zinc-400">Price Change:</span>
-                            <span className={breakdown.priceChangeUsd >= 0 ? "text-emerald-400" : "text-red-400"}>
-                              {formatInCurrency(breakdown.priceChangeUsd, { showSign: true })}
-                              {breakdown.priceChangePercent !== 0 && ` (${breakdown.priceChangePercent >= 0 ? '+' : ''}${breakdown.priceChangePercent.toFixed(1)}%)`}
-                            </span>
-                          </div>
-                          <div className="border-t border-zinc-700 pt-1 flex justify-between gap-4 font-medium">
-                            <span className="text-zinc-300">Total:</span>
-                            <span className={breakdown.totalEarnedUsd >= 0 ? "text-emerald-400" : "text-red-400"}>
-                              {formatInCurrency(breakdown.totalEarnedUsd, { showSign: true })}
-                            </span>
-                          </div>
-                          <div className="border-t border-zinc-700 pt-1 text-zinc-500">
-                            <div className="flex justify-between gap-4">
-                              <span>Cost Basis:</span>
-                              <span className="text-zinc-300">{formatInCurrency(breakdown.costBasisHistorical)}</span>
-                            </div>
-                            <div className="flex justify-between gap-4">
-                              <span>Avg Price:</span>
-                              <span className="text-zinc-300">${breakdown.weightedAvgDepositPrice.toFixed(4)}</span>
-                            </div>
+                            <span>Avg Price:</span>
+                            <span className="text-zinc-300">${breakdown.weightedAvgDepositPrice.toFixed(4)}</span>
                           </div>
                         </div>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
                 ) : (
                   <span className={`text-sm font-medium tabular-nums ${yieldToShow >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
                     {formattedYield} yield{formattedYieldPercentage}
@@ -168,34 +165,30 @@ const AssetCardComponent = ({ data, onAction }: AssetCardProps) => {
             </div>
 
             <div className="flex gap-1.5">
-              <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger>
+                  <Badge variant="secondary" className="text-xs">
+                    <TrendingUp className="mr-1 h-3 w-3" />
+                    {formatPercentage(data.apyPercentage)}% APY
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Annual Percentage Yield</p>
+                </TooltipContent>
+              </Tooltip>
+
+              {hasNonZeroPercentage(data.growthPercentage) && (
                 <Tooltip>
                   <TooltipTrigger>
                     <Badge variant="secondary" className="text-xs">
-                      <TrendingUp className="mr-1 h-3 w-3" />
-                      {formatPercentage(data.apyPercentage)}% APY
+                      <Flame className="mr-1 h-3 w-3" />
+                      {formatSignedPercentage(data.growthPercentage)}% BLND APY
                     </Badge>
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p>Annual Percentage Yield</p>
+                    <p>BLND emissions APY</p>
                   </TooltipContent>
                 </Tooltip>
-              </TooltipProvider>
-
-              {hasNonZeroPercentage(data.growthPercentage) && (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger>
-                      <Badge variant="secondary" className="text-xs">
-                        <Flame className="mr-1 h-3 w-3" />
-                        {formatSignedPercentage(data.growthPercentage)}% BLND APY
-                      </Badge>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>BLND emissions APY</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
               )}
             </div>
           </div>

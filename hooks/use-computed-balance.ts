@@ -253,6 +253,17 @@ export function useComputedBalance(
       } as AggregatedHistoryData
     }
 
+    // Build per-asset date->point lookup once. Avoids O(n_assets * n_dates)
+    // .find() scans inside the per-date aggregation below.
+    const pointsByAsset = new Map<string, Map<string, BalanceChartDataPoint>>()
+    balanceHistoryDataMap.forEach((historyData, assetAddress) => {
+      const dateMap = new Map<string, BalanceChartDataPoint>()
+      historyData.chartData.forEach((point) => {
+        dateMap.set(point.date, point)
+      })
+      pointsByAsset.set(assetAddress, dateMap)
+    })
+
     // Collect all dates across all assets
     const allDatesSet = new Set<string>()
     balanceHistoryDataMap.forEach((historyData) => {
@@ -274,6 +285,16 @@ export function useComputedBalance(
       backstopByDate.set(point.date, point.lp_tokens || 0)
     })
 
+    // Hoist invariants used by the per-date loop's fallback branch.
+    // Both are independent of `date`, so we'd otherwise recompute them per iteration.
+    const sortedHistoricalCostBasisDates = historicalBackstopCostBasis && historicalBackstopCostBasis.size > 0
+      ? Array.from(historicalBackstopCostBasis.keys()).sort()
+      : null
+    const fallbackBackstopCostBasisLp = backstopPositions.reduce(
+      (sum, bp) => sum + (bp.costBasisLp || 0),
+      0
+    )
+
     // For each date, sum up all assets' values (converted to USD)
     const aggregatedChartData = allDates.map(date => {
       let totalBalance = 0
@@ -284,10 +305,10 @@ export function useComputedBalance(
 
       // Sum across all assets
       uniqueAssetAddresses.forEach(assetAddress => {
-        const historyData = balanceHistoryDataMap.get(assetAddress)
-        if (!historyData) return
+        const dateMap = pointsByAsset.get(assetAddress)
+        if (!dateMap) return
 
-        const point = historyData.chartData.find((p) => p.date === date)
+        const point = dateMap.get(date)
         if (!point) return
 
         // Get USD price for this asset
@@ -329,15 +350,14 @@ export function useComputedBalance(
       // Historical cost basis tracks the actual cumulative deposits/withdrawals over time
       let effectiveBackstopCostBasisLp: number
 
-      if (historicalBackstopCostBasis && historicalBackstopCostBasis.size > 0) {
+      if (sortedHistoricalCostBasisDates && historicalBackstopCostBasis) {
         // Use historical cost basis - find the cost basis as of this date
         // The map contains cumulative cost basis at each date
         effectiveBackstopCostBasisLp = historicalBackstopCostBasis.get(date) ?? 0
 
         // If no exact date match, find the most recent date before this one
         if (effectiveBackstopCostBasisLp === 0 && backstopLpTokens > 0) {
-          const sortedDates = Array.from(historicalBackstopCostBasis.keys()).sort()
-          for (const histDate of sortedDates) {
+          for (const histDate of sortedHistoricalCostBasisDates) {
             if (histDate <= date) {
               effectiveBackstopCostBasisLp = historicalBackstopCostBasis.get(histDate) ?? 0
             } else {
@@ -346,13 +366,10 @@ export function useComputedBalance(
           }
         }
       } else {
-        // Fall back to current cost basis from SDK positions
-        const backstopCostBasisLp = backstopPositions.reduce((sum, bp) => sum + (bp.costBasisLp || 0), 0)
-
         // Clamp cost basis to not exceed the LP tokens at this date
         // This prevents showing negative yield when current cost basis includes recent deposits
-        effectiveBackstopCostBasisLp = backstopCostBasisLp > 0
-          ? Math.min(backstopCostBasisLp, backstopLpTokens)
+        effectiveBackstopCostBasisLp = fallbackBackstopCostBasisLp > 0
+          ? Math.min(fallbackBackstopCostBasisLp, backstopLpTokens)
           : backstopLpTokens  // If no cost basis data, use LP tokens as deposit (conservative - 0 yield)
       }
 

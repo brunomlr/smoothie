@@ -20,6 +20,7 @@ import {
   assetToContractId,
   getOracleSupportedAssets,
 } from "@/lib/stellar/reflector-oracle"
+import { getOrSet, CACHE_TTL } from "@/lib/redis"
 
 /**
  * Validate that the request is from the same origin
@@ -71,24 +72,34 @@ function addCorsHeaders(response: NextResponse, request: NextRequest): NextRespo
   return response
 }
 
-// Cache supported assets for 5 minutes
+// Two-layer cache for oracle supported assets:
+//   1. In-memory (per instance)  — fastest, avoids Redis round-trip on hot path
+//   2. Redis (cross-instance)    — avoids each serverless instance hitting the
+//      RPC oracle independently for the same data
+const SUPPORTED_ASSETS_MEMORY_TTL = 5 * 60 * 1000 // 5 minutes
+const SUPPORTED_ASSETS_REDIS_KEY = 'oracle-supported-assets:stellar'
 let supportedAssetsCache: Set<string> | null = null
 let supportedAssetsCacheTime = 0
-const SUPPORTED_ASSETS_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
 
 async function getSupportedAssetsSet(): Promise<Set<string>> {
   const now = Date.now()
-  if (supportedAssetsCache && now - supportedAssetsCacheTime < SUPPORTED_ASSETS_CACHE_TTL) {
+  if (supportedAssetsCache && now - supportedAssetsCacheTime < SUPPORTED_ASSETS_MEMORY_TTL) {
     return supportedAssetsCache
   }
 
   try {
-    const assets = await getOracleSupportedAssets()
-    supportedAssetsCache = new Set(
-      assets
-        .filter((a) => a.type === "Stellar")
-        .map((a) => a.id)
+    // Redis layer: shared across instances. Stored as string[] (Set is not
+    // JSON-serializable), reconstructed into a Set in memory.
+    const ids = await getOrSet<string[]>(
+      SUPPORTED_ASSETS_REDIS_KEY,
+      async () => {
+        const assets = await getOracleSupportedAssets()
+        return assets.filter((a) => a.type === "Stellar").map((a) => a.id)
+      },
+      { ttl: CACHE_TTL.MEDIUM } // 5 minutes
     )
+
+    supportedAssetsCache = new Set(ids)
     supportedAssetsCacheTime = now
     return supportedAssetsCache
   } catch (error) {

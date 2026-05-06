@@ -6,7 +6,6 @@ import { Skeleton } from "@/components/ui/skeleton"
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import type { BlendReservePosition, BlendBackstopPosition } from "@/lib/blend/positions"
@@ -214,8 +213,7 @@ export function PortfolioAllocationBar({
 
   return (
     <Card className="p-4 gap-0">
-      <TooltipProvider>
-        {/* Pool labels row */}
+      {/* Pool labels row */}
         <div className="relative h-5 mb-1">
           {poolBoundaries.map((pool, index) => {
             const poolData = poolAllocations.find(p => p.poolId === pool.poolId)
@@ -313,7 +311,6 @@ export function PortfolioAllocationBar({
             </div>
           ))}
         </div>
-      </TooltipProvider>
     </Card>
   )
 }

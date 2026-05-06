@@ -7,7 +7,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Separator } from "@/components/ui/separator"
-import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
 import { useRealizedYield } from "@/hooks/use-realized-yield"
 import { useRealizedYieldMulti } from "@/hooks/use-realized-yield-multi"
 import { useBlendPositions } from "@/hooks/use-blend-positions"
@@ -702,7 +702,6 @@ function RealizedYieldContent() {
 
   return (
     <AuthenticatedPage onRefresh={handleRefresh}>
-      <TooltipProvider>
       <div>
         <PageTitle badge="Beta">Performance</PageTitle>
 
@@ -1726,7 +1725,6 @@ function RealizedYieldContent() {
         )}
         </div>
       </div>
-      </TooltipProvider>
     </AuthenticatedPage>
   )
 }

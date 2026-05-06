@@ -7,6 +7,7 @@ import { CurrencyProvider } from "@/contexts/currency-context"
 import { DisplayPreferencesProvider } from "@/contexts/display-preferences-context"
 import { WalletProvider } from "@/contexts/wallet-context"
 import { NavigationWrapper } from "@/components/navigation-wrapper"
+import { TooltipProvider } from "@/components/ui/tooltip"
 import posthog from "posthog-js"
 
 if (typeof window !== "undefined" && process.env.NEXT_PUBLIC_POSTHOG_KEY) {
@@ -47,11 +48,13 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <CurrencyProvider>
           <DisplayPreferencesProvider>
             <WalletProvider>
-              <React.Suspense fallback={<div className="min-h-screen bg-background" />}>
-                <NavigationWrapper>
-                  {children}
-                </NavigationWrapper>
-              </React.Suspense>
+              <TooltipProvider>
+                <React.Suspense fallback={<div className="min-h-screen bg-background" />}>
+                  <NavigationWrapper>
+                    {children}
+                  </NavigationWrapper>
+                </React.Suspense>
+              </TooltipProvider>
             </WalletProvider>
           </DisplayPreferencesProvider>
         </CurrencyProvider>

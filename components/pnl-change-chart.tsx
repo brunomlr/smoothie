@@ -15,8 +15,12 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useCurrencyPreference } from "@/hooks/use-currency-preference"
 import { useTooltipDismiss } from "@/hooks/use-tooltip-dismiss"
-import type { FormatCurrencyOptions } from "@/lib/currency/format"
 import type { PnlChangeDataPoint, PnlPeriodType } from "@/hooks/use-pnl-change-chart"
+import { transformDataForYieldChart, transformDataForPriceChart } from "./pnl-change-chart/transforms"
+import { NegativeLabel, createPositiveLabelRenderer } from "./pnl-change-chart/labels"
+import { RoundedBar } from "./pnl-change-chart/rounded-bar"
+import { YieldTooltip, PriceChangeTooltip } from "./pnl-change-chart/tooltips"
+import { formatCompact } from "./pnl-change-chart/format-utils"
 
 interface PnlChangeChartProps {
   data: PnlChangeDataPoint[] | undefined
@@ -33,450 +37,6 @@ const TIME_PERIODS: { value: PnlPeriodType; label: string }[] = [
   // { value: "6M", label: "6M" },
 ]
 
-// Compact currency formatter for bar labels
-function formatCompact(value: number): string {
-  if (value === 0) return ""
-  const absValue = Math.abs(value)
-  // Skip values that would round to 0 (avoids displaying "-$0" or "+$0")
-  if (absValue < 0.5) return ""
-  const sign = value >= 0 ? "+" : "-"
-  if (absValue >= 1000000) {
-    return `${sign}$${(absValue / 1000000).toFixed(1)}M`
-  }
-  if (absValue >= 1000) {
-    return `${sign}$${(absValue / 1000).toFixed(1)}K`
-  }
-  return `${sign}$${absValue.toFixed(0)}`
-}
-
-interface NegativeLabelProps {
-  x?: number | string
-  y?: number | string
-  width?: number | string
-  height?: number | string
-  value?: number | string
-}
-
-function getNumericValue(value: number | string | undefined): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) return value
-  if (typeof value === "string") {
-    const parsed = Number(value)
-    return Number.isFinite(parsed) ? parsed : null
-  }
-  return null
-}
-
-// Custom label renderer for negative totals - positions below each bar's actual bottom
-function NegativeLabel(props: NegativeLabelProps) {
-  const { x, y, width, height, value } = props
-  const valueAmount = getNumericValue(value)
-  if (valueAmount === null || valueAmount >= 0) return null
-
-  const xValue = getNumericValue(x)
-  const yValue = getNumericValue(y)
-  const widthValue = getNumericValue(width)
-  const heightValue = getNumericValue(height)
-  if (xValue === null || yValue === null || widthValue === null || heightValue === null) return null
-
-  // For negative bars, height can be negative (bar extends upward from y)
-  // Get the visual bottom of the bar (largest Y value)
-  const barBottom = heightValue >= 0 ? yValue + heightValue : yValue
-  const labelY = barBottom + 6
-  const labelX = xValue + widthValue / 2
-
-  return (
-    <text
-      x={labelX}
-      y={labelY}
-      textAnchor="middle"
-      dominantBaseline="hanging"
-      style={{ fontSize: 9, fill: "white", fontWeight: 500 }}
-    >
-      {formatCompact(valueAmount)}
-    </text>
-  )
-}
-
-// Custom label renderer for positive totals with Live tag
-// Note: This is a factory function that creates a renderer with access to chart data
-function createPositiveLabelRenderer(chartData: Array<{ isLive: boolean }>) {
-  return function PositiveLabel(props: {
-    x?: number | string
-    y?: number | string
-    width?: number | string
-    value?: number | string
-    index?: number
-  }) {
-    const { x, y, width, value, index } = props
-    const valueAmount = getNumericValue(value)
-    if (valueAmount === null || valueAmount <= 0) return null
-
-    const xValue = getNumericValue(x)
-    const yValue = getNumericValue(y)
-    const widthValue = getNumericValue(width)
-    if (xValue === null || yValue === null || widthValue === null) return null
-
-    // Access isLive from the chart data using index
-    const isLive = typeof index === "number" ? chartData[index]?.isLive : false
-
-    const labelX = xValue + widthValue / 2
-    const labelY = yValue - 6
-
-    return (
-      <g>
-        {isLive && (
-          <g>
-            <rect
-              x={labelX - 16}
-              y={labelY - 26}
-              width={32}
-              height={13}
-              rx={3}
-              fill="rgba(16, 185, 129, 0.15)"
-            />
-            <text
-              x={labelX}
-              y={labelY - 19}
-              textAnchor="middle"
-              dominantBaseline="middle"
-              style={{ fontSize: 9, fill: "#10b981", fontWeight: 600 }}
-            >
-              Live
-            </text>
-          </g>
-        )}
-        <text
-          x={labelX}
-          y={labelY}
-          textAnchor="middle"
-          dominantBaseline="auto"
-          style={{ fontSize: 9, fill: "white", fontWeight: 500 }}
-        >
-          {formatCompact(valueAmount)}
-        </text>
-      </g>
-    )
-  }
-}
-
-// Custom bar shape that applies rounding based on position in stack
-function RoundedBar(props: {
-  x: number
-  y: number
-  width: number
-  height: number
-  fill?: string
-  dataKey: string
-  payload?: { topPositiveBar: string | null }
-}) {
-  const { x, y, width, height, fill, dataKey, payload } = props
-  if (!height || height === 0) return null
-
-  const topRadius = 4
-  const bottomRadius = 2
-
-  // Determine if this bar is the topmost positive bar
-  const isTopBar = payload?.topPositiveBar === dataKey
-  // Determine if this bar is the bottom bar (supplyApyBar)
-  const isBottomBar = dataKey === 'supplyApyBar'
-
-  // Build the path with conditional rounding
-  const tl = isTopBar ? topRadius : 0
-  const tr = isTopBar ? topRadius : 0
-  const br = isBottomBar ? bottomRadius : 0
-  const bl = isBottomBar ? bottomRadius : 0
-
-  const path = `
-    M ${x + tl} ${y}
-    L ${x + width - tr} ${y}
-    Q ${x + width} ${y} ${x + width} ${y + tr}
-    L ${x + width} ${y + height - br}
-    Q ${x + width} ${y + height} ${x + width - br} ${y + height}
-    L ${x + bl} ${y + height}
-    Q ${x} ${y + height} ${x} ${y + height - bl}
-    L ${x} ${y + tl}
-    Q ${x} ${y} ${x + tl} ${y}
-    Z
-  `
-
-  return <path d={path} fill={fill ?? "currentColor"} />
-}
-
-// Transform data for yield chart (without price changes)
-function transformDataForYieldChart(
-  data: PnlChangeDataPoint[]
-): Array<{
-  period: string
-  supplyApyBar: number
-  supplyBlndApyBar: number
-  backstopYieldPositiveBar: number
-  backstopBlndApyBar: number
-  borrowBlndApyBar: number
-  backstopYieldNegativeBar: number
-  borrowInterestCostBar: number
-  supplyApy: number
-  supplyBlndApy: number
-  backstopYield: number
-  backstopBlndApy: number
-  borrowInterestCost: number
-  borrowBlndApy: number
-  priceChange: number
-  isLive: boolean
-  yieldTotal: number
-  positiveTotal: number
-  negativeTotal: number
-  topPositiveBar: string | null
-}> {
-  return data.map(d => {
-    // Include borrow data in yield total (cost is negative, BLND is positive)
-    const borrowInterestCost = d.borrowInterestCost ?? 0
-    const borrowBlndApy = d.borrowBlndApy ?? 0
-    const yieldTotal = d.supplyApy + d.supplyBlndApy + d.backstopYield + d.backstopBlndApy + borrowInterestCost + borrowBlndApy
-
-    // Calculate positive and negative totals for labels
-    const positiveTotal = d.supplyApy + d.supplyBlndApy + Math.max(0, d.backstopYield) + d.backstopBlndApy + borrowBlndApy
-    const negativeTotal = Math.min(0, d.backstopYield) + borrowInterestCost
-
-    // Determine which bar is the topmost positive bar
-    // Stacking order: supplyApy -> supplyBlndApy -> backstopYield -> backstopBlndApy -> borrowBlndApy
-    let topPositiveBar: string | null = null
-    if (borrowBlndApy > 0) topPositiveBar = 'borrowBlndApyBar'
-    else if (d.backstopBlndApy > 0) topPositiveBar = 'backstopBlndApyBar'
-    else if (d.backstopYield > 0) topPositiveBar = 'backstopYieldPositiveBar'
-    else if (d.supplyBlndApy > 0) topPositiveBar = 'supplyBlndApyBar'
-    else if (d.supplyApy > 0) topPositiveBar = 'supplyApyBar'
-
-    return {
-      period: d.period,
-      supplyApyBar: Math.max(0, d.supplyApy),
-      supplyBlndApyBar: Math.max(0, d.supplyBlndApy),
-      backstopYieldPositiveBar: Math.max(0, d.backstopYield),
-      backstopBlndApyBar: Math.max(0, d.backstopBlndApy),
-      borrowBlndApyBar: Math.max(0, borrowBlndApy),
-      backstopYieldNegativeBar: d.backstopYield < 0 ? d.backstopYield : 0,
-      borrowInterestCostBar: borrowInterestCost < 0 ? borrowInterestCost : 0, // Cost is negative
-      supplyApy: d.supplyApy,
-      supplyBlndApy: d.supplyBlndApy,
-      backstopYield: d.backstopYield,
-      backstopBlndApy: d.backstopBlndApy,
-      borrowInterestCost,
-      borrowBlndApy,
-      priceChange: d.priceChange,
-      isLive: d.isLive,
-      yieldTotal,
-      positiveTotal,
-      negativeTotal,
-      topPositiveBar,
-    }
-  })
-}
-
-// Transform data for price change chart
-function transformDataForPriceChart(
-  data: PnlChangeDataPoint[]
-): Array<{
-  period: string
-  priceChangePositive: number
-  priceChangeNegative: number
-  priceChange: number
-  isLive: boolean
-}> {
-  return data.map(d => ({
-    period: d.period,
-    priceChangePositive: d.priceChange > 0 ? d.priceChange : 0,
-    priceChangeNegative: d.priceChange < 0 ? d.priceChange : 0,
-    priceChange: d.priceChange,
-    isLive: d.isLive,
-  }))
-}
-
-// Custom tooltip for yield chart
-function YieldTooltip({
-  active,
-  payload,
-  formatCurrency,
-}: {
-  active?: boolean
-  payload?: Array<{ payload: ReturnType<typeof transformDataForYieldChart>[number] }>
-  formatCurrency: (amount: number, options?: FormatCurrencyOptions) => string
-}) {
-  if (!active || !payload || !payload.length) {
-    return null
-  }
-
-  const data = payload[0].payload
-  const formatValue = (value: number) =>
-    formatCurrency(value, {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-      showSign: true,
-    })
-
-  const hasAnyValue =
-    data.supplyApy !== 0 ||
-    data.supplyBlndApy !== 0 ||
-    data.backstopYield !== 0 ||
-    data.backstopBlndApy !== 0 ||
-    data.borrowInterestCost !== 0 ||
-    data.borrowBlndApy !== 0
-
-  return (
-    <div className="bg-black text-white border border-zinc-800 rounded-md shadow-lg p-2.5 min-w-[160px] max-w-[220px] select-none z-50">
-      <div className="font-medium text-[11px] mb-1.5 flex items-center gap-2">
-        {data.period}
-        {data.isLive && (
-          <span className="text-[9px] text-emerald-400 bg-emerald-400/10 px-1.5 py-0.5 rounded">
-            Live
-          </span>
-        )}
-      </div>
-
-      {!hasAnyValue ? (
-        <div className="text-[11px] text-zinc-400">No yield in this period</div>
-      ) : (
-        <div className="space-y-1 text-[11px]">
-          {data.supplyApy !== 0 && (
-            <div className="flex justify-between items-center">
-              <div className="flex items-center gap-1.5">
-                <div className="w-2 h-2 rounded-sm bg-blue-500" />
-                <span className="text-zinc-400">Supply APY</span>
-              </div>
-              <span className="tabular-nums text-blue-400">
-                {formatValue(data.supplyApy)}
-              </span>
-            </div>
-          )}
-
-          {data.supplyBlndApy !== 0 && (
-            <div className="flex justify-between items-center">
-              <div className="flex items-center gap-1.5">
-                <div className="w-2 h-2 rounded-sm bg-sky-500" />
-                <span className="text-zinc-400">Supply BLND</span>
-              </div>
-              <span className="tabular-nums text-sky-400">
-                {formatValue(data.supplyBlndApy)}
-              </span>
-            </div>
-          )}
-
-          {data.backstopYield !== 0 && (
-            <div className="flex justify-between items-center">
-              <div className="flex items-center gap-1.5">
-                <div className={`w-2 h-2 rounded-sm ${data.backstopYield >= 0 ? "bg-violet-500" : "bg-red-500"}`} />
-                <span className="text-zinc-400">Backstop Yield</span>
-              </div>
-              <span className={`tabular-nums ${data.backstopYield >= 0 ? "text-violet-400" : "text-red-400"}`}>
-                {formatValue(data.backstopYield)}
-              </span>
-            </div>
-          )}
-
-          {data.backstopBlndApy !== 0 && (
-            <div className="flex justify-between items-center">
-              <div className="flex items-center gap-1.5">
-                <div className="w-2 h-2 rounded-sm bg-purple-400" />
-                <span className="text-zinc-400">Backstop BLND</span>
-              </div>
-              <span className="tabular-nums text-purple-400">
-                {formatValue(data.backstopBlndApy)}
-              </span>
-            </div>
-          )}
-
-          {data.borrowInterestCost !== 0 && (
-            <div className="flex justify-between items-center">
-              <div className="flex items-center gap-1.5">
-                <div className="w-2 h-2 rounded-sm bg-orange-500" />
-                <span className="text-zinc-400">Borrow Cost</span>
-              </div>
-              <span className="tabular-nums text-orange-400">
-                {formatValue(data.borrowInterestCost)}
-              </span>
-            </div>
-          )}
-
-          {data.borrowBlndApy !== 0 && (
-            <div className="flex justify-between items-center">
-              <div className="flex items-center gap-1.5">
-                <div className="w-2 h-2 rounded-sm bg-amber-500" />
-                <span className="text-zinc-400">Borrow BLND</span>
-              </div>
-              <span className="tabular-nums text-amber-400">
-                {formatValue(data.borrowBlndApy)}
-              </span>
-            </div>
-          )}
-
-          <div className="pt-1.5 mt-1.5 border-t border-zinc-700 flex justify-between items-center">
-            <span className="text-zinc-300 font-medium">Total Yield</span>
-            <span
-              className={`tabular-nums font-medium ${
-                data.yieldTotal >= 0 ? "text-emerald-400" : "text-red-400"
-              }`}
-            >
-              {formatValue(data.yieldTotal)}
-            </span>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-// Custom tooltip for price change chart
-function PriceChangeTooltip({
-  active,
-  payload,
-  formatCurrency,
-}: {
-  active?: boolean
-  payload?: Array<{ payload: ReturnType<typeof transformDataForPriceChart>[number] }>
-  formatCurrency: (amount: number, options?: FormatCurrencyOptions) => string
-}) {
-  if (!active || !payload || !payload.length) {
-    return null
-  }
-
-  const data = payload[0].payload
-  const formatValue = (value: number) =>
-    formatCurrency(value, {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-      showSign: true,
-    })
-
-  return (
-    <div className="bg-black text-white border border-zinc-800 rounded-md shadow-lg p-2.5 min-w-[140px] select-none z-50">
-      <div className="font-medium text-[11px] mb-1.5 flex items-center gap-2">
-        {data.period}
-        {data.isLive && (
-          <span className="text-[9px] text-emerald-400 bg-emerald-400/10 px-1.5 py-0.5 rounded">
-            Live
-          </span>
-        )}
-      </div>
-
-      <div className="flex justify-between items-center text-[11px]">
-        <div className="flex items-center gap-1.5">
-          <div
-            className={`w-2 h-2 rounded-sm ${
-              data.priceChange >= 0 ? "bg-emerald-500" : "bg-red-500"
-            }`}
-          />
-          <span className="text-zinc-400">Price Change</span>
-        </div>
-        <span
-          className={`tabular-nums font-medium ${
-            data.priceChange >= 0 ? "text-emerald-400" : "text-red-400"
-          }`}
-        >
-          {formatValue(data.priceChange)}
-        </span>
-      </div>
-    </div>
-  )
-}
-
 export const PnlChangeChart = memo(function PnlChangeChart({
   data,
   period,
@@ -489,18 +49,21 @@ export const PnlChangeChart = memo(function PnlChangeChart({
   const { containerRef: yieldContainerRef, shouldRenderTooltip: shouldRenderYieldTooltip } = useTooltipDismiss()
   const { containerRef: priceContainerRef, shouldRenderTooltip: shouldRenderPriceTooltip } = useTooltipDismiss()
 
-  // Transform data for both charts
   const yieldChartData = useMemo(() => {
     if (!data) return []
     return transformDataForYieldChart(data)
   }, [data])
+
+  const positiveLabelRenderer = useMemo(
+    () => createPositiveLabelRenderer(yieldChartData),
+    [yieldChartData]
+  )
 
   const priceChartData = useMemo(() => {
     if (!data) return []
     return transformDataForPriceChart(data)
   }, [data])
 
-  // Calculate Y axis domain for yield chart
   const yieldDomain = useMemo(() => {
     if (yieldChartData.length === 0) return { min: 0, max: 1 }
 
@@ -519,7 +82,6 @@ export const PnlChangeChart = memo(function PnlChangeChart({
     return { min: min - padding, max: max + padding }
   }, [yieldChartData])
 
-  // Calculate Y axis domain for price chart
   const priceDomain = useMemo(() => {
     if (priceChartData.length === 0) return { min: 0, max: 1 }
 
@@ -630,7 +192,7 @@ export const PnlChangeChart = memo(function PnlChangeChart({
                   {period !== "1M" && (
                     <LabelList
                       dataKey="positiveTotal"
-                      content={createPositiveLabelRenderer(yieldChartData)}
+                      content={positiveLabelRenderer}
                     />
                   )}
                 </Bar>

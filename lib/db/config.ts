@@ -38,10 +38,9 @@ function getPool(): Pool | null {
 // Export the pool getter
 export const pool = getPool()
 
-// Handle pool errors silently in production
 if (pool) {
-  pool.on('error', () => {
-    // Pool error - will be handled by query-level error handling
+  pool.on('error', (err) => {
+    console.error('[pg pool] idle client error:', err)
   })
 }
 

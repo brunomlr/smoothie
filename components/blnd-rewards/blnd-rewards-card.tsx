@@ -9,7 +9,6 @@ import { Separator } from "@/components/ui/separator"
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -21,6 +20,7 @@ import { getPoolName as getConfigPoolName } from "@/lib/config/pools"
 
 import type { BlndRewardsCardProps, TableRow } from "./types"
 import { formatNumber, formatCompact } from "./helpers"
+import { YieldProjectionGrid } from "./yield-projection-grid"
 
 export function BlndRewardsCard({
   publicKey,
@@ -353,18 +353,16 @@ export function BlndRewardsCard({
         </div>
         <div className="flex items-center gap-2">
           {combinedApy > 0 && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger onClick={(e) => e.stopPropagation()}>
-                  <Badge variant="outline" className="text-xs">
-                    {combinedApy.toFixed(2)}% APY
-                  </Badge>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Weighted average emission APY (BLND + LP)</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger onClick={(e) => e.stopPropagation()}>
+                <Badge variant="outline" className="text-xs">
+                  {combinedApy.toFixed(2)}% APY
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Weighted average emission APY (BLND + LP)</p>
+              </TooltipContent>
+            </Tooltip>
           )}
           <ChevronDown className={`h-4 w-4 mx-2 text-muted-foreground transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
         </div>
@@ -573,96 +571,14 @@ export function BlndRewardsCard({
 
           {/* Yield Projection */}
           {blndPrice && ((blndApy > 0 && totalPositionUsd > 0) || backstopPositions.length > 0) && (
-            <div className="grid grid-cols-3 gap-3 text-center mt-8">
-                {(() => {
-                  // Calculate backstop totals for LP projections
-                  const hasLpPositions = backstopPositions.length > 0
-                  let totalBackstopUsd = 0
-                  let weightedBackstopApy = 0
-                  backstopPositions.forEach(bp => {
-                    const posUsd = bp.lpTokensUsd || 0
-                    const posApy = bp.emissionApy || 0
-                    totalBackstopUsd += posUsd
-                    weightedBackstopApy += posUsd * posApy
-                  })
-                  const backstopApy = totalBackstopUsd > 0 ? weightedBackstopApy / totalBackstopUsd : 0
-
-                  // BLND projections: supply/borrow positions × their BLND APY
-                  // Note: blndApy and totalPositionUsd are both supply/borrow only (excludes backstop)
-                  const annualBlndUsd = totalPositionUsd * (blndApy / 100)
-                  const annualBlnd = blndPrice > 0 ? annualBlndUsd / blndPrice : 0
-                  const monthlyBlnd = annualBlnd / 12
-                  const dailyBlnd = annualBlnd / 365
-
-                  // LP yield: backstop position value × emission APY → USD → LP tokens
-                  const annualLpUsd = totalBackstopUsd * (backstopApy / 100)
-                  const annualLp = lpTokenPrice && lpTokenPrice > 0 ? annualLpUsd / lpTokenPrice : 0
-                  const monthlyLp = annualLp / 12
-                  const dailyLp = annualLp / 365
-
-                  // Combined USD
-                  const dailyBlndUsd = dailyBlnd * blndPrice
-                  const dailyLpUsd = dailyLp * (lpTokenPrice || 0)
-                  const dailyTotalUsd = dailyBlndUsd + dailyLpUsd
-                  const monthlyTotalUsd = dailyTotalUsd * 30
-                  const annualTotalUsd = dailyTotalUsd * 365
-
-                  const hasBlndPositions = blndApy > 0 && totalPositionUsd > 0
-
-                  return (
-                    <>
-                      <div>
-                        <div className="text-xs text-muted-foreground mb-0.5">Daily</div>
-                        <div className="font-semibold tabular-nums text-sm">{formatUsd(dailyTotalUsd)}</div>
-                        {hasBlndPositions && (
-                          <div className="tabular-nums text-xs text-muted-foreground flex items-center justify-center gap-1 mt-0.5">
-                            <Flame className="h-2.5 w-2.5" />
-                            {formatNumber(dailyBlnd, 2)}
-                          </div>
-                        )}
-                        {hasLpPositions && (
-                          <div className="tabular-nums text-xs text-muted-foreground flex items-center justify-center gap-1">
-                            <Shield className="h-2.5 w-2.5" />
-                            {dailyLp > 0 ? formatNumber(dailyLp, 2) : '-'}
-                          </div>
-                        )}
-                      </div>
-                      <div>
-                        <div className="text-xs text-muted-foreground mb-0.5">Monthly</div>
-                        <div className="font-semibold tabular-nums text-sm">{formatUsd(monthlyTotalUsd)}</div>
-                        {hasBlndPositions && (
-                          <div className="tabular-nums text-xs text-muted-foreground flex items-center justify-center gap-1 mt-0.5">
-                            <Flame className="h-2.5 w-2.5" />
-                            {formatNumber(monthlyBlnd, 2)}
-                          </div>
-                        )}
-                        {hasLpPositions && (
-                          <div className="tabular-nums text-xs text-muted-foreground flex items-center justify-center gap-1">
-                            <Shield className="h-2.5 w-2.5" />
-                            {monthlyLp > 0 ? formatNumber(monthlyLp, 2) : '-'}
-                          </div>
-                        )}
-                      </div>
-                      <div>
-                        <div className="text-xs text-muted-foreground mb-0.5">Annual</div>
-                        <div className="font-semibold tabular-nums text-sm">{formatUsd(annualTotalUsd)}</div>
-                        {hasBlndPositions && (
-                          <div className="tabular-nums text-xs text-muted-foreground flex items-center justify-center gap-1 mt-0.5">
-                            <Flame className="h-2.5 w-2.5" />
-                            {formatNumber(annualBlnd, 2)}
-                          </div>
-                        )}
-                        {hasLpPositions && (
-                          <div className="tabular-nums text-xs text-muted-foreground flex items-center justify-center gap-1">
-                            <Shield className="h-2.5 w-2.5" />
-                            {annualLp > 0 ? formatNumber(annualLp, 2) : '-'}
-                          </div>
-                        )}
-                      </div>
-                    </>
-                  )
-                })()}
-              </div>
+            <YieldProjectionGrid
+              blndPrice={blndPrice}
+              lpTokenPrice={lpTokenPrice}
+              blndApy={blndApy}
+              totalPositionUsd={totalPositionUsd}
+              backstopPositions={backstopPositions}
+              formatUsd={formatUsd}
+            />
           )}
         </div>
       </div>

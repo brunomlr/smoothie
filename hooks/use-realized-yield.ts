@@ -19,33 +19,47 @@ export interface UseRealizedYieldResult {
   refetch: () => void
 }
 
+interface SharedQueryOptions {
+  publicKeys: string[]
+  sdkBlndPrice: number
+  sdkLpPrice: number
+  sdkPrices: Record<string, number>
+  enabled: boolean
+  queryKeyPrefix: string
+}
+
 /**
- * Hook to fetch realized yield data for a user.
+ * Shared query implementation for realized yield.
  *
  * Realized yield = Total withdrawn (at historical prices) - Total deposited (at historical prices)
  *
- * This tracks actual profits that have left the protocol, not paper gains.
+ * This is internal — call `useRealizedYield` (single wallet) or
+ * `useRealizedYieldMulti` (aggregate across wallets) instead.
  */
-export function useRealizedYield({
-  publicKey,
-  sdkBlndPrice = 0,
-  sdkLpPrice = 0,
-  sdkPrices = {},
-  enabled = true,
-}: UseRealizedYieldOptions): UseRealizedYieldResult {
-  // Create a stable cache key from sdkPrices object
-  const sdkPricesKey = Object.keys(sdkPrices).sort().map(k => `${k}:${sdkPrices[k]?.toFixed(6)}`).join(',')
+function useRealizedYieldQuery({
+  publicKeys,
+  sdkBlndPrice,
+  sdkLpPrice,
+  sdkPrices,
+  enabled,
+  queryKeyPrefix,
+}: SharedQueryOptions): UseRealizedYieldResult {
+  const sdkPricesKey = Object.keys(sdkPrices)
+    .sort()
+    .map(k => `${k}:${sdkPrices[k]?.toFixed(6)}`)
+    .join(',')
+
+  const isQueryEnabled = enabled && publicKeys.length > 0
 
   const query = useQuery({
-    // Include SDK prices in query key so we refetch when prices become available
-    queryKey: ["performance", publicKey, sdkBlndPrice, sdkLpPrice, sdkPricesKey],
+    queryKey: [queryKeyPrefix, publicKeys.slice().sort().join(','), sdkBlndPrice, sdkLpPrice, sdkPricesKey],
     queryFn: async ({ signal }) => {
-      if (!publicKey) {
-        throw new Error("No public key provided")
+      if (publicKeys.length === 0) {
+        throw new Error("No public key(s) provided")
       }
 
       const params = new URLSearchParams({
-        userAddress: publicKey,
+        userAddresses: publicKeys.join(','),
       })
 
       if (sdkBlndPrice > 0) {
@@ -72,16 +86,12 @@ export function useRealizedYield({
 
       return response.json() as Promise<RealizedYieldResponse>
     },
-    enabled: enabled && !!publicKey,
+    enabled: isQueryEnabled,
     staleTime: 5 * 60 * 1000, // 5 minutes - historical yield data changes slowly
     gcTime: 15 * 60 * 1000, // 15 minutes
     refetchOnWindowFocus: false,
     retry: 2,
   })
-
-  // Include pending state (query disabled or not yet started)
-  // This ensures skeleton shows until actual data is available
-  const isQueryEnabled = enabled && !!publicKey
 
   return {
     data: query.data,
@@ -90,3 +100,26 @@ export function useRealizedYield({
     refetch: query.refetch,
   }
 }
+
+/**
+ * Hook to fetch realized yield data for a single wallet.
+ */
+export function useRealizedYield({
+  publicKey,
+  sdkBlndPrice = 0,
+  sdkLpPrice = 0,
+  sdkPrices = {},
+  enabled = true,
+}: UseRealizedYieldOptions): UseRealizedYieldResult {
+  return useRealizedYieldQuery({
+    publicKeys: publicKey ? [publicKey] : [],
+    sdkBlndPrice,
+    sdkLpPrice,
+    sdkPrices,
+    enabled,
+    queryKeyPrefix: "performance",
+  })
+}
+
+// Internal export for the multi-wallet variant.
+export { useRealizedYieldQuery as _useRealizedYieldQueryInternal }

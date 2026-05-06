@@ -9,7 +9,6 @@ import { Skeleton } from "@/components/ui/skeleton"
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { useRealizedYield } from "@/hooks/use-realized-yield"
@@ -106,26 +105,24 @@ export function RealizedYieldCard({
         </div>
         <div className="flex items-center gap-2">
           {data.roiPercent !== null && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger onClick={(e) => e.stopPropagation()}>
-                  <Badge
-                    variant="outline"
-                    className={`text-xs ${isPositive ? "text-emerald-400 border-emerald-400/30" : "text-red-400 border-red-400/30"}`}
-                  >
-                    {isPositive ? "+" : ""}{data.roiPercent.toFixed(1)}% ROI
-                  </Badge>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Return on {formatUsd(data.totalDepositedUsd)} deposited</p>
-                  {data.annualizedRoiPercent !== null && (
-                    <p className="text-xs text-muted-foreground mt-1">
-                      ~{data.annualizedRoiPercent.toFixed(1)}% annualized ({data.daysActive} days)
-                    </p>
-                  )}
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger onClick={(e) => e.stopPropagation()}>
+                <Badge
+                  variant="outline"
+                  className={`text-xs ${isPositive ? "text-emerald-400 border-emerald-400/30" : "text-red-400 border-red-400/30"}`}
+                >
+                  {isPositive ? "+" : ""}{data.roiPercent.toFixed(1)}% ROI
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Return on {formatUsd(data.totalDepositedUsd)} deposited</p>
+                {data.annualizedRoiPercent !== null && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    ~{data.annualizedRoiPercent.toFixed(1)}% annualized ({data.daysActive} days)
+                  </p>
+                )}
+              </TooltipContent>
+            </Tooltip>
           )}
           <ChevronDown
             className={`h-4 w-4 mx-2 text-muted-foreground transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
