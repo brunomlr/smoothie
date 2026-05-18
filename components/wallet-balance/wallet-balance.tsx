@@ -372,6 +372,10 @@ const WalletBalanceComponent = ({
   // When loading, we don't want to show the all-time fallback value
   const isLoadingPeriodData = (selectedPeriod !== "All" && selectedPeriod !== "Projection") && periodYieldBreakdownAPI.isLoading
 
+  // Chart-history loading is decoupled from balance loading so the balance,
+  // APY, and stats render as soon as the SDK snapshot is ready.
+  const isHistoryLoading = !balanceHistoryData || balanceHistoryData.isLoading
+
   // Use period-specific percentage gain instead of total percentage
   const percentageGain = periodPercentageGain
   const showPercentageGain = Number.isFinite(percentageGain) && hasSignificantAmount(displayYield)
@@ -480,7 +484,7 @@ const WalletBalanceComponent = ({
         </div>
       </div>
 
-      <div className="pb-6">
+      <div className="pt-4 pb-6">
         <BalanceBarChart
           historyData={displayChartData}
           userActions={userActions}
@@ -490,7 +494,7 @@ const WalletBalanceComponent = ({
           apy={data.apyPercentage}
           blndApy={data.blndApy}
           firstEventDate={firstEventDate}
-          isLoading={loading}
+          isLoading={isHistoryLoading}
           selectedPeriod={selectedPeriod}
           onPeriodChange={setSelectedPeriod}
           poolInputs={poolInputs}

@@ -49,6 +49,7 @@ export interface WalletBalanceProps {
     earningsStats: EarningsStats
     chartData: ChartDataPoint[]
     positionChanges: PositionChange[]
+    isLoading?: boolean
   }
   loading?: boolean
   usdcPrice?: number // USDC price from SDK oracle for normalizing historical data

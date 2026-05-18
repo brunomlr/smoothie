@@ -344,7 +344,7 @@ export function HomeContent() {
             chartData={chartData}
             publicKey={activeWallet?.publicKey ?? ''}
             balanceHistoryData={aggregatedHistoryDataWithCorrectYield ?? undefined}
-            loading={isLoading || !aggregatedHistoryDataWithCorrectYield || aggregatedHistoryDataWithCorrectYield.isLoading}
+            loading={isLoading}
             usdcPrice={1}
             poolInputs={poolInputs}
             yieldBreakdown={!yieldBreakdown.isLoading && yieldBreakdown.totalCostBasisHistorical > 0 ? {
