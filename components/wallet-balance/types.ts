@@ -55,6 +55,7 @@ export interface WalletBalanceProps {
   usdcPrice?: number // USDC price from SDK oracle for normalizing historical data
   poolInputs?: PoolProjectionInput[] // Per-pool data for projection breakdown
   yieldBreakdown?: YieldBreakdownTotals // Historical yield breakdown (protocol yield vs price change)
+  yieldBreakdownLoading?: boolean // True while useHistoricalYieldBreakdown query is in-flight
   // New props for period-specific breakdown
   balanceHistoryDataMap?: Map<string, BalanceHistoryDataEntry>
   historicalPrices?: ChartHistoricalPrices

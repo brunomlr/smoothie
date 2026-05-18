@@ -353,6 +353,7 @@ export function HomeContent() {
               totalCostBasisHistorical: yieldBreakdown.totalCostBasisHistorical,
               totalEarnedUsd: yieldBreakdown.totalEarnedUsd,
             } : undefined}
+            yieldBreakdownLoading={yieldBreakdown.isLoading}
             balanceHistoryDataMap={balanceHistoryDataMap}
             historicalPrices={historicalPrices}
             blendPositions={blendSnapshot?.positions}

@@ -43,6 +43,7 @@ const WalletBalanceComponent = ({
   usdcPrice = 1,
   poolInputs = [],
   yieldBreakdown,
+  yieldBreakdownLoading,
   blendPositions,
   backstopPositions,
   lpTokenPrice,
@@ -376,6 +377,12 @@ const WalletBalanceComponent = ({
   // APY, and stats render as soon as the SDK snapshot is ready.
   const isHistoryLoading = !balanceHistoryData || balanceHistoryData.isLoading
 
+  // Skeleton the yield text while the All/Projection historical breakdown is
+  // still loading — otherwise it briefly shows the SDK-based fallback (current
+  // prices × cost-basis tokens), which diverges from the historical value.
+  const isLoadingAllPeriodYield = (selectedPeriod === "All" || selectedPeriod === "Projection") && !!yieldBreakdownLoading
+  const isLoadingYieldText = isLoadingPeriodData || isLoadingAllPeriodYield
+
   // Use period-specific percentage gain instead of total percentage
   const percentageGain = periodPercentageGain
   const showPercentageGain = Number.isFinite(percentageGain) && hasSignificantAmount(displayYield)
@@ -437,7 +444,7 @@ const WalletBalanceComponent = ({
           )}
         </div>
         <div className="flex items-center gap-1.5 flex-wrap">
-          {isLoadingPeriodData ? (
+          {isLoadingYieldText ? (
             <div className="flex items-center gap-1.5">
               <Skeleton className="h-5 w-20" />
               <Skeleton className="h-5 w-12" />
