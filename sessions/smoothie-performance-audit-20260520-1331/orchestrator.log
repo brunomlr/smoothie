@@ -1,0 +1,16 @@
+2026-05-20 13:34:20,367 [INFO] Session folder: /Users/brunomuller/projects/wallet-test/smoothie/sessions/smoothie-performance-audit-20260520-1331
+2026-05-20 13:34:20,368 [INFO] Loaded config from /Users/brunomuller/work/gesserit-main/config.json
+2026-05-20 13:34:20,368 [INFO] Backends: copilot
+2026-05-20 13:34:20,551 [INFO] Pruned stale POC worktree from previous run: /Users/brunomuller/projects/wallet-test/smoothie/worktrees/poc-001-oracle-price-window-cache
+2026-05-20 13:34:20,551 [INFO] Publish level: medium (only publishing medium and above)
+2026-05-20 13:34:20,551 [INFO] Bug bounty orchestrator started (max_agents=1, max_workers=0, max_duration_minutes=none, dry_run=False, skip={'publish'})
+2026-05-20 13:34:20,563 [INFO] Spawned agent-0001 | type=poc sub=stellar-clients target=001-oracle-price-window-cache.md model=claude-opus-4-6
+2026-05-20 13:34:20,563 [INFO] TICK 1 | agents: 1/1 | workers: 0/0 | dispatched: poc:stellar-clients/001-oracle-price-window-cache.md
+2026-05-20 13:34:20,563 [INFO]   queue: 4 hypothesis / 1 reviewed / 0 in-progress-poc / 0 poc
+2026-05-20 13:34:20,563 [INFO]   running: 1 poc
+2026-05-20 13:34:20,810 [WARNING] Replacing stale ai-summary directory with symlink: /Users/brunomuller/projects/wallet-test/smoothie/worktrees/poc-001-oracle-price-window-cache/ai-summary
+2026-05-20 13:34:50,571 [INFO] TICK 2 | agents: 1/1 | workers: 0/0 | dispatched: none
+2026-05-20 13:34:50,572 [INFO]   queue: 4 hypothesis / 1 reviewed / 0 in-progress-poc / 0 poc
+2026-05-20 13:34:50,572 [INFO]   running: 1 poc
+2026-05-20 13:34:53,705 [INFO] Shutdown signal received, finishing running agents...
+2026-05-20 13:34:53,705 [INFO] Waiting up to 60s for 1 running agent(s)...

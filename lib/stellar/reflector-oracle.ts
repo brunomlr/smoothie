@@ -33,6 +33,12 @@ export interface OracleAsset {
   id: string // Contract ID for Stellar, symbol for Other
 }
 
+// In-memory price cache keyed by contractId.
+// Oracle prices update every 5 minutes; a 60-second TTL eliminates ~90% of
+// redundant simulateTransaction RPCs while keeping data reasonably fresh.
+const PRICE_CACHE_TTL_MS = 60 * 1000
+const priceCache = new Map<string, { result: OraclePriceResult; cachedAt: number }>()
+
 /**
  * Get the Soroban RPC server instance
  */
@@ -95,10 +101,18 @@ export async function getOraclePrice(
   assetCode: string,
   assetIssuer: string | null
 ): Promise<OraclePriceResult | null> {
+  const contractId = assetToContractId(assetCode, assetIssuer)
+
+  // Check in-memory cache first — only successful results are cached
+  const now = Date.now()
+  const cached = priceCache.get(contractId)
+  if (cached && now - cached.cachedAt < PRICE_CACHE_TTL_MS) {
+    return cached.result
+  }
+
   try {
     const server = getServer()
     const contract = new Contract(REFLECTOR_STELLAR_ORACLE)
-    const contractId = assetToContractId(assetCode, assetIssuer)
     const assetScVal = buildStellarAssetScVal(contractId)
 
     const tx = new TransactionBuilder(DUMMY_ACCOUNT, { fee: "100", networkPassphrase: NETWORK_PASSPHRASE })
@@ -113,10 +127,12 @@ export async function getOraclePrice(
 
       if (data && data.price) {
         const usdPrice = Number(data.price) / Math.pow(10, ORACLE_DECIMALS)
-        return {
+        const priceResult: OraclePriceResult = {
           price: usdPrice,
           timestamp: Number(data.timestamp)
         }
+        priceCache.set(contractId, { result: priceResult, cachedAt: now })
+        return priceResult
       }
     }
 

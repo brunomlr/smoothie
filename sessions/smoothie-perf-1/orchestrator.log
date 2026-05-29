@@ -1,0 +1,383 @@
+2026-05-20 13:21:03,243 [INFO] Session folder: /Users/brunomuller/projects/wallet-test/smoothie/sessions/smoothie-perf-1
+2026-05-20 13:21:03,244 [INFO] Loaded config from config.json
+2026-05-20 13:21:03,244 [INFO] Backends: copilot
+2026-05-20 13:21:03,253 [INFO] Subsystem filter: stellar-clients
+2026-05-20 13:21:03,328 [INFO] Publish level: medium (only publishing medium and above)
+2026-05-20 13:21:03,329 [INFO] Bug bounty orchestrator started (max_agents=1, max_workers=0, max_duration_minutes=none, dry_run=False, skip={'publish'})
+2026-05-20 13:21:03,339 [INFO] Spawned agent-0001 | type=hypothesis sub=stellar-clients target=N/A model=gpt-5.4
+2026-05-20 13:21:03,339 [INFO] TICK 1 | agents: 1/1 | workers: 0/0 | dispatched: hypothesis:stellar-clients
+2026-05-20 13:21:03,339 [INFO]   queue: 0 hypothesis / 0 reviewed / 0 in-progress-poc / 0 poc
+2026-05-20 13:21:03,339 [INFO]   running: 1 hypothesis
+2026-05-20 13:21:33,353 [INFO] TICK 2 | agents: 1/1 | workers: 0/0 | dispatched: none
+2026-05-20 13:21:33,353 [INFO]   queue: 0 hypothesis / 0 reviewed / 0 in-progress-poc / 0 poc
+2026-05-20 13:21:33,353 [INFO]   running: 1 hypothesis
+2026-05-20 13:22:03,368 [INFO] TICK 3 | agents: 1/1 | workers: 0/0 | dispatched: none
+2026-05-20 13:22:03,368 [INFO]   queue: 0 hypothesis / 0 reviewed / 0 in-progress-poc / 0 poc
+2026-05-20 13:22:03,368 [INFO]   running: 1 hypothesis
+2026-05-20 13:22:33,378 [INFO] TICK 4 | agents: 1/1 | workers: 0/0 | dispatched: none
+2026-05-20 13:22:33,378 [INFO]   queue: 0 hypothesis / 0 reviewed / 0 in-progress-poc / 0 poc
+2026-05-20 13:22:33,378 [INFO]   running: 1 hypothesis
+2026-05-20 13:23:03,393 [INFO] TICK 5 | agents: 1/1 | workers: 0/0 | dispatched: none
+2026-05-20 13:23:03,393 [INFO]   queue: 0 hypothesis / 0 reviewed / 0 in-progress-poc / 0 poc
+2026-05-20 13:23:03,393 [INFO]   running: 1 hypothesis
+2026-05-20 13:23:33,402 [INFO] TICK 6 | agents: 1/1 | workers: 0/0 | dispatched: none
+2026-05-20 13:23:33,402 [INFO]   queue: 0 hypothesis / 0 reviewed / 0 in-progress-poc / 0 poc
+2026-05-20 13:23:33,402 [INFO]   running: 1 hypothesis
+2026-05-20 13:23:48,082 [INFO] Shutdown signal received, finishing running agents...
+2026-05-20 13:23:48,082 [INFO] Waiting up to 60s for 1 running agent(s)...
+2026-05-20 13:23:48,363 [WARNING] Retryable error from copilot/gpt-5.4 (attempt 1/5), retrying in 2s: {"type":"session.mcp_server_status_changed","data":{"serverName":"github-mcp-server","status":"connected"},"id":"4214a4b5-cd65-428b-9126-ebbce7103588","timestamp":"2026-05-20T20:21:08.975Z","parentId"
+2026-05-20 13:23:48,790 [WARNING] Second signal received, forcing exit
+2026-05-20 13:23:51,298 [INFO] Session folder: /Users/brunomuller/projects/wallet-test/smoothie/sessions/smoothie-perf-1
+2026-05-20 13:23:51,299 [INFO] Loaded config from config.json
+2026-05-20 13:23:51,299 [INFO] Backends: copilot
+2026-05-20 13:23:51,301 [INFO] Subsystem filter: stellar-clients
+2026-05-20 13:23:51,385 [INFO] Publish level: medium (only publishing medium and above)
+2026-05-20 13:23:51,386 [INFO] Resuming session from /Users/brunomuller/projects/wallet-test/smoothie/sessions/smoothie-perf-1/metrics.json (1 agents previously spawned)
+2026-05-20 13:23:51,386 [INFO] ============================================================
+2026-05-20 13:23:51,386 [INFO] METRICS REPORT  (viable / not-viable per stage)
+2026-05-20 13:23:51,386 [INFO] ------------------------------------------------------------
+2026-05-20 13:23:51,386 [INFO] Total agents spawned:    1
+2026-05-20 13:23:51,386 [INFO] Agent failures:          0
+2026-05-20 13:23:51,386 [INFO] Agent timeouts:          0
+2026-05-20 13:23:51,386 [INFO] Hypothesis:              0 viable / 0 not-viable
+2026-05-20 13:23:51,386 [INFO] Review:                  0 viable / 0 not-viable (0% pass)
+2026-05-20 13:23:51,386 [INFO] POC:                     0 viable / 0 not-viable (0% pass)
+2026-05-20 13:23:51,386 [INFO] Final review:            0 viable / 0 not-viable / 0 revisions (0% pass)
+2026-05-20 13:23:51,386 [INFO] Condensations:           0
+2026-05-20 13:23:51,386 [INFO] Publishes:               0
+2026-05-20 13:23:51,386 [INFO] ------------------------------------------------------------
+2026-05-20 13:23:51,386 [INFO] ============================================================
+2026-05-20 13:23:51,387 [INFO] Bug bounty orchestrator started (max_agents=1, max_workers=0, max_duration_minutes=none, dry_run=False, skip={'publish'})
+2026-05-20 13:23:51,397 [INFO] Spawned agent-0001 | type=hypothesis sub=stellar-clients target=N/A model=gpt-5.4
+2026-05-20 13:23:51,397 [INFO] TICK 1 | agents: 1/1 | workers: 0/0 | dispatched: hypothesis:stellar-clients
+2026-05-20 13:23:51,397 [INFO]   queue: 0 hypothesis / 0 reviewed / 0 in-progress-poc / 0 poc
+2026-05-20 13:23:51,397 [INFO]   running: 1 hypothesis
+2026-05-20 13:24:21,412 [INFO] TICK 2 | agents: 1/1 | workers: 0/0 | dispatched: none
+2026-05-20 13:24:21,412 [INFO]   queue: 0 hypothesis / 0 reviewed / 0 in-progress-poc / 0 poc
+2026-05-20 13:24:21,412 [INFO]   running: 1 hypothesis
+2026-05-20 13:24:51,422 [INFO] TICK 3 | agents: 1/1 | workers: 0/0 | dispatched: none
+2026-05-20 13:24:51,422 [INFO]   queue: 0 hypothesis / 0 reviewed / 0 in-progress-poc / 0 poc
+2026-05-20 13:24:51,422 [INFO]   running: 1 hypothesis
+2026-05-20 13:25:21,435 [INFO] TICK 4 | agents: 1/1 | workers: 0/0 | dispatched: none
+2026-05-20 13:25:21,435 [INFO]   queue: 0 hypothesis / 0 reviewed / 0 in-progress-poc / 0 poc
+2026-05-20 13:25:21,435 [INFO]   running: 1 hypothesis
+2026-05-20 13:25:51,443 [INFO] TICK 5 | agents: 1/1 | workers: 0/0 | dispatched: none
+2026-05-20 13:25:51,443 [INFO]   queue: 0 hypothesis / 0 reviewed / 0 in-progress-poc / 0 poc
+2026-05-20 13:25:51,443 [INFO]   running: 1 hypothesis
+2026-05-20 13:26:21,457 [INFO] TICK 6 | agents: 1/1 | workers: 0/0 | dispatched: none
+2026-05-20 13:26:21,458 [INFO]   queue: 0 hypothesis / 0 reviewed / 0 in-progress-poc / 0 poc
+2026-05-20 13:26:21,458 [INFO]   running: 1 hypothesis
+2026-05-20 13:26:51,469 [INFO] TICK 7 | agents: 1/1 | workers: 0/0 | dispatched: none
+2026-05-20 13:26:51,469 [INFO]   queue: 0 hypothesis / 0 reviewed / 0 in-progress-poc / 0 poc
+2026-05-20 13:26:51,469 [INFO]   running: 1 hypothesis
+2026-05-20 13:27:21,477 [INFO] TICK 8 | agents: 1/1 | workers: 0/0 | dispatched: none
+2026-05-20 13:27:21,477 [INFO]   queue: 0 hypothesis / 0 reviewed / 0 in-progress-poc / 0 poc
+2026-05-20 13:27:21,477 [INFO]   running: 1 hypothesis
+2026-05-20 13:27:51,488 [INFO] TICK 9 | agents: 1/1 | workers: 0/0 | dispatched: none
+2026-05-20 13:27:51,488 [INFO]   queue: 0 hypothesis / 0 reviewed / 0 in-progress-poc / 0 poc
+2026-05-20 13:27:51,488 [INFO]   running: 1 hypothesis
+2026-05-20 13:28:21,502 [INFO] TICK 10 | agents: 1/1 | workers: 0/0 | dispatched: none
+2026-05-20 13:28:21,503 [INFO]   queue: 0 hypothesis / 0 reviewed / 0 in-progress-poc / 0 poc
+2026-05-20 13:28:21,503 [INFO]   running: 1 hypothesis
+2026-05-20 13:28:51,517 [INFO] TICK 11 | agents: 1/1 | workers: 0/0 | dispatched: none
+2026-05-20 13:28:51,518 [INFO]   queue: 0 hypothesis / 0 reviewed / 0 in-progress-poc / 0 poc
+2026-05-20 13:28:51,518 [INFO]   running: 1 hypothesis
+2026-05-20 13:28:51,519 [INFO] ============================================================
+2026-05-20 13:28:51,519 [INFO] METRICS REPORT  (viable / not-viable per stage)
+2026-05-20 13:28:51,519 [INFO] ------------------------------------------------------------
+2026-05-20 13:28:51,519 [INFO] Total agents spawned:    2
+2026-05-20 13:28:51,519 [INFO] Agent failures:          0
+2026-05-20 13:28:51,519 [INFO] Agent timeouts:          0
+2026-05-20 13:28:51,519 [INFO] Hypothesis:              0 viable / 0 not-viable
+2026-05-20 13:28:51,519 [INFO] Review:                  0 viable / 0 not-viable (0% pass)
+2026-05-20 13:28:51,519 [INFO] POC:                     0 viable / 0 not-viable (0% pass)
+2026-05-20 13:28:51,519 [INFO] Final review:            0 viable / 0 not-viable / 0 revisions (0% pass)
+2026-05-20 13:28:51,520 [INFO] Condensations:           0
+2026-05-20 13:28:51,520 [INFO] Publishes:               0
+2026-05-20 13:28:51,520 [INFO] ------------------------------------------------------------
+2026-05-20 13:28:51,520 [INFO] ============================================================
+2026-05-20 13:29:21,525 [INFO] TICK 12 | agents: 1/1 | workers: 0/0 | dispatched: none
+2026-05-20 13:29:21,526 [INFO]   queue: 0 hypothesis / 0 reviewed / 0 in-progress-poc / 0 poc
+2026-05-20 13:29:21,526 [INFO]   running: 1 hypothesis
+2026-05-20 13:29:50,003 [INFO] Completed agent-0001 | type=hypothesis sub=stellar-clients verdict=HYPOTHESES model=gpt-5.4 duration=359s
+2026-05-20 13:29:50,012 [INFO] Spawned agent-0002 | type=reviewer sub=stellar-clients target=001-oracle-price-window-cache.md model=claude-opus-4-6
+2026-05-20 13:29:50,012 [INFO] TICK 13 | agents: 1/1 | workers: 0/0 | dispatched: reviewer:stellar-clients/001-oracle-price-window-cache.md
+2026-05-20 13:29:50,012 [INFO]   queue: 5 hypothesis / 0 reviewed / 0 in-progress-poc / 0 poc
+2026-05-20 13:29:50,012 [INFO]   running: 1 reviewer
+2026-05-20 13:30:20,019 [INFO] TICK 14 | agents: 1/1 | workers: 0/0 | dispatched: none
+2026-05-20 13:30:20,020 [INFO]   queue: 5 hypothesis / 0 reviewed / 0 in-progress-poc / 0 poc
+2026-05-20 13:30:20,020 [INFO]   running: 1 reviewer
+2026-05-20 13:30:50,025 [INFO] TICK 15 | agents: 1/1 | workers: 0/0 | dispatched: none
+2026-05-20 13:30:50,026 [INFO]   queue: 5 hypothesis / 0 reviewed / 0 in-progress-poc / 0 poc
+2026-05-20 13:30:50,026 [INFO]   running: 1 reviewer
+2026-05-20 13:31:20,039 [INFO] TICK 16 | agents: 1/1 | workers: 0/0 | dispatched: none
+2026-05-20 13:31:20,039 [INFO]   queue: 5 hypothesis / 0 reviewed / 0 in-progress-poc / 0 poc
+2026-05-20 13:31:20,040 [INFO]   running: 1 reviewer
+2026-05-20 13:31:50,053 [INFO] TICK 17 | agents: 1/1 | workers: 0/0 | dispatched: none
+2026-05-20 13:31:50,053 [INFO]   queue: 5 hypothesis / 0 reviewed / 0 in-progress-poc / 0 poc
+2026-05-20 13:31:50,053 [INFO]   running: 1 reviewer
+2026-05-20 13:32:20,064 [INFO] TICK 18 | agents: 1/1 | workers: 0/0 | dispatched: none
+2026-05-20 13:32:20,064 [INFO]   queue: 5 hypothesis / 0 reviewed / 0 in-progress-poc / 0 poc
+2026-05-20 13:32:20,064 [INFO]   running: 1 reviewer
+2026-05-20 13:32:41,988 [INFO] Completed agent-0002 | type=reviewer sub=stellar-clients verdict=VIABLE model=claude-opus-4-6 duration=172s
+2026-05-20 13:32:42,040 [INFO] Committing: viable review 001-oracle-price-window-cache
+2026-05-20 13:32:42,174 [INFO] Pushing to remote
+2026-05-20 13:32:43,927 [INFO] Spawned agent-0003 | type=poc sub=stellar-clients target=001-oracle-price-window-cache.md model=claude-opus-4-6
+2026-05-20 13:32:43,927 [INFO] TICK 19 | agents: 1/1 | workers: 0/0 | dispatched: poc:stellar-clients/001-oracle-price-window-cache.md
+2026-05-20 13:32:43,928 [INFO]   queue: 4 hypothesis / 1 reviewed / 0 in-progress-poc / 0 poc
+2026-05-20 13:32:43,928 [INFO]   running: 1 poc
+2026-05-20 13:32:44,210 [WARNING] Replacing stale ai-summary directory with symlink: /Users/brunomuller/projects/wallet-test/smoothie/worktrees/poc-001-oracle-price-window-cache/ai-summary
+2026-05-20 13:33:13,937 [INFO] TICK 20 | agents: 1/1 | workers: 0/0 | dispatched: none
+2026-05-20 13:33:13,938 [INFO]   queue: 4 hypothesis / 1 reviewed / 0 in-progress-poc / 0 poc
+2026-05-20 13:33:13,938 [INFO]   running: 1 poc
+2026-05-20 13:33:43,945 [INFO] TICK 21 | agents: 1/1 | workers: 0/0 | dispatched: none
+2026-05-20 13:33:43,945 [INFO]   queue: 4 hypothesis / 1 reviewed / 0 in-progress-poc / 0 poc
+2026-05-20 13:33:43,945 [INFO]   running: 1 poc
+2026-05-20 13:33:46,545 [INFO] Shutdown signal received, finishing running agents...
+2026-05-20 13:33:46,546 [INFO] Waiting up to 60s for 1 running agent(s)...
+2026-05-20 13:33:46,837 [WARNING] Retryable error from copilot/claude-opus-4-6 (attempt 1/5), retrying in 2s: {"type":"session.mcp_server_status_changed","data":{"serverName":"github-mcp-server","status":"connected"},"id":"f746f4d4-8976-4c3c-a640-184a74dd085d","timestamp":"2026-05-20T20:32:48.429Z","parentId"
+2026-05-20 13:34:46,547 [WARNING] Killing agent agent-0003 (still running after grace period)
+2026-05-20 13:34:51,592 [INFO] ============================================================
+2026-05-20 13:34:51,592 [INFO] METRICS REPORT  (viable / not-viable per stage)
+2026-05-20 13:34:51,592 [INFO] ------------------------------------------------------------
+2026-05-20 13:34:51,592 [INFO] Total agents spawned:    4
+2026-05-20 13:34:51,592 [INFO] Agent failures:          0
+2026-05-20 13:34:51,592 [INFO] Agent timeouts:          0
+2026-05-20 13:34:51,592 [INFO] Hypothesis:              5 viable / 1 not-viable
+2026-05-20 13:34:51,592 [INFO] Review:                  1 viable / 0 not-viable (100% pass)
+2026-05-20 13:34:51,592 [INFO] POC:                     0 viable / 0 not-viable (0% pass)
+2026-05-20 13:34:51,592 [INFO] Final review:            0 viable / 0 not-viable / 0 revisions (0% pass)
+2026-05-20 13:34:51,592 [INFO] Condensations:           0
+2026-05-20 13:34:51,592 [INFO] Publishes:               0
+2026-05-20 13:34:51,592 [INFO] Tokens:                  0k input / 26k output / 0k cache read
+2026-05-20 13:34:51,592 [INFO]   claude-opus-4-6           0k in / 6k out / 0k cache
+2026-05-20 13:34:51,592 [INFO]   gpt-5.4                   0k in / 20k out / 0k cache
+2026-05-20 13:34:51,592 [INFO]   hypothesis                0k in / 20k out
+2026-05-20 13:34:51,592 [INFO]   reviewer                  0k in / 6k out
+2026-05-20 13:34:51,592 [INFO] ESTIMATED COSTS:
+2026-05-20 13:34:51,592 [INFO]   copilot:
+    claude-opus-4-6                6k out / 3.00 reqs                       $    0.09
+    gpt-5.4                        20k out / 1.00 reqs                      $    0.03
+                                   subtotal                                 $    0.12
+  TOTAL                                                                       $    0.12
+2026-05-20 13:34:51,592 [INFO] PER-STAGE USAGE:
+2026-05-20 13:34:51,592 [INFO]   hypothesis           copilot: 20k out / 1.00 reqs
+  reviewer             copilot: 6k out / 3.00 reqs
+2026-05-20 13:34:51,592 [INFO] ------------------------------------------------------------
+2026-05-20 13:34:51,592 [INFO] PER-MODEL BREAKDOWN:
+2026-05-20 13:34:51,593 [INFO]   claude-opus-4-6           review_viable=1
+2026-05-20 13:34:51,593 [INFO]   gpt-5.4                   hypothesis_viable=5
+2026-05-20 13:34:51,593 [INFO] AVG DURATION (seconds):
+2026-05-20 13:34:51,593 [INFO]   hypothesis           359s (n=1)
+2026-05-20 13:34:51,593 [INFO]   reviewer             172s (n=1)
+2026-05-20 13:34:51,593 [INFO] ============================================================
+2026-05-20 13:34:51,593 [INFO] Shutdown complete
+2026-05-20 13:36:36,682 [INFO] Session folder: /Users/brunomuller/projects/wallet-test/smoothie/sessions/smoothie-perf-1
+2026-05-20 13:36:36,683 [INFO] Loaded config from config.json
+2026-05-20 13:36:36,683 [INFO] Backends: copilot
+2026-05-20 13:36:36,686 [INFO] Subsystem filter: stellar-clients
+2026-05-20 13:36:36,864 [INFO] Pruned stale POC worktree from previous run: /Users/brunomuller/projects/wallet-test/smoothie/worktrees/poc-001-oracle-price-window-cache
+2026-05-20 13:36:36,865 [INFO] Publish level: medium (only publishing medium and above)
+2026-05-20 13:36:36,865 [INFO] Resuming session from /Users/brunomuller/projects/wallet-test/smoothie/sessions/smoothie-perf-1/metrics.json (4 agents previously spawned)
+2026-05-20 13:36:36,865 [INFO] ============================================================
+2026-05-20 13:36:36,865 [INFO] METRICS REPORT  (viable / not-viable per stage)
+2026-05-20 13:36:36,865 [INFO] ------------------------------------------------------------
+2026-05-20 13:36:36,865 [INFO] Total agents spawned:    4
+2026-05-20 13:36:36,866 [INFO] Agent failures:          0
+2026-05-20 13:36:36,866 [INFO] Agent timeouts:          0
+2026-05-20 13:36:36,866 [INFO] Hypothesis:              5 viable / 1 not-viable
+2026-05-20 13:36:36,866 [INFO] Review:                  1 viable / 0 not-viable (100% pass)
+2026-05-20 13:36:36,866 [INFO] POC:                     0 viable / 0 not-viable (0% pass)
+2026-05-20 13:36:36,866 [INFO] Final review:            0 viable / 0 not-viable / 0 revisions (0% pass)
+2026-05-20 13:36:36,866 [INFO] Condensations:           0
+2026-05-20 13:36:36,866 [INFO] Publishes:               0
+2026-05-20 13:36:36,866 [INFO] Tokens:                  0k input / 26k output / 0k cache read
+2026-05-20 13:36:36,866 [INFO]   claude-opus-4-6           0k in / 6k out / 0k cache
+2026-05-20 13:36:36,866 [INFO]   gpt-5.4                   0k in / 20k out / 0k cache
+2026-05-20 13:36:36,866 [INFO]   hypothesis                0k in / 20k out
+2026-05-20 13:36:36,866 [INFO]   reviewer                  0k in / 6k out
+2026-05-20 13:36:36,866 [INFO] ESTIMATED COSTS:
+2026-05-20 13:36:36,866 [INFO]   copilot:
+    claude-opus-4-6                6k out / 3.00 reqs                       $    0.09
+    gpt-5.4                        20k out / 1.00 reqs                      $    0.03
+                                   subtotal                                 $    0.12
+  TOTAL                                                                       $    0.12
+2026-05-20 13:36:36,866 [INFO] PER-STAGE USAGE:
+2026-05-20 13:36:36,866 [INFO]   hypothesis           copilot: 20k out / 1.00 reqs
+  reviewer             copilot: 6k out / 3.00 reqs
+2026-05-20 13:36:36,866 [INFO] ------------------------------------------------------------
+2026-05-20 13:36:36,866 [INFO] PER-MODEL BREAKDOWN:
+2026-05-20 13:36:36,866 [INFO]   claude-opus-4-6           review_viable=1
+2026-05-20 13:36:36,866 [INFO]   gpt-5.4                   hypothesis_viable=5
+2026-05-20 13:36:36,866 [INFO] AVG DURATION (seconds):
+2026-05-20 13:36:36,866 [INFO]   hypothesis           359s (n=1)
+2026-05-20 13:36:36,866 [INFO]   reviewer             172s (n=1)
+2026-05-20 13:36:36,866 [INFO] ============================================================
+2026-05-20 13:36:36,866 [INFO] Bug bounty orchestrator started (max_agents=1, max_workers=0, max_duration_minutes=none, dry_run=False, skip={'publish'})
+2026-05-20 13:36:36,878 [INFO] Spawned agent-0001 | type=poc sub=stellar-clients target=001-oracle-price-window-cache.md model=claude-opus-4-6
+2026-05-20 13:36:36,878 [INFO] TICK 1 | agents: 1/1 | workers: 0/0 | dispatched: poc:stellar-clients/001-oracle-price-window-cache.md
+2026-05-20 13:36:36,878 [INFO]   queue: 4 hypothesis / 1 reviewed / 0 in-progress-poc / 0 poc
+2026-05-20 13:36:36,878 [INFO]   running: 1 poc
+2026-05-20 13:36:37,159 [WARNING] Replacing stale ai-summary directory with symlink: /Users/brunomuller/projects/wallet-test/smoothie/worktrees/poc-001-oracle-price-window-cache/ai-summary
+2026-05-20 13:36:40,373 [INFO] Shutdown signal received, finishing running agents...
+2026-05-20 13:36:40,374 [INFO] Waiting up to 60s for 1 running agent(s)...
+2026-05-20 13:36:40,854 [ERROR] Agent agent-0001 agent_failure [no_output]: type=poc sub=stellar-clients
+2026-05-20 13:36:40,854 [INFO] Shutdown: completed agent-0001 verdict=ERROR
+2026-05-20 13:36:40,896 [INFO] ============================================================
+2026-05-20 13:36:40,896 [INFO] METRICS REPORT  (viable / not-viable per stage)
+2026-05-20 13:36:40,896 [INFO] ------------------------------------------------------------
+2026-05-20 13:36:40,896 [INFO] Total agents spawned:    5
+2026-05-20 13:36:40,896 [INFO] Agent failures:          1
+2026-05-20 13:36:40,896 [INFO] Agent timeouts:          0
+2026-05-20 13:36:40,896 [INFO] Hypothesis:              5 viable / 1 not-viable
+2026-05-20 13:36:40,896 [INFO] Review:                  1 viable / 0 not-viable (100% pass)
+2026-05-20 13:36:40,896 [INFO] POC:                     0 viable / 0 not-viable (0% pass)
+2026-05-20 13:36:40,896 [INFO] Final review:            0 viable / 0 not-viable / 0 revisions (0% pass)
+2026-05-20 13:36:40,896 [INFO] Condensations:           0
+2026-05-20 13:36:40,896 [INFO] Publishes:               0
+2026-05-20 13:36:40,896 [INFO] Tokens:                  0k input / 26k output / 0k cache read
+2026-05-20 13:36:40,896 [INFO]   claude-opus-4-6           0k in / 6k out / 0k cache
+2026-05-20 13:36:40,896 [INFO]   gpt-5.4                   0k in / 20k out / 0k cache
+2026-05-20 13:36:40,896 [INFO]   hypothesis                0k in / 20k out
+2026-05-20 13:36:40,896 [INFO]   reviewer                  0k in / 6k out
+2026-05-20 13:36:40,896 [INFO] ESTIMATED COSTS:
+2026-05-20 13:36:40,896 [INFO]   copilot:
+    claude-opus-4-6                6k out / 3.00 reqs                       $    0.09
+    gpt-5.4                        20k out / 1.00 reqs                      $    0.03
+                                   subtotal                                 $    0.12
+  TOTAL                                                                       $    0.12
+2026-05-20 13:36:40,896 [INFO] PER-STAGE USAGE:
+2026-05-20 13:36:40,896 [INFO]   hypothesis           copilot: 20k out / 1.00 reqs
+  poc                  copilot: 0k out / 0.00 reqs
+  reviewer             copilot: 6k out / 3.00 reqs
+2026-05-20 13:36:40,896 [INFO] ------------------------------------------------------------
+2026-05-20 13:36:40,896 [INFO] PER-MODEL BREAKDOWN:
+2026-05-20 13:36:40,896 [INFO]   claude-opus-4-6           agent_failures=1, review_viable=1
+2026-05-20 13:36:40,897 [INFO]   gpt-5.4                   hypothesis_viable=5
+2026-05-20 13:36:40,897 [INFO] AVG DURATION (seconds):
+2026-05-20 13:36:40,897 [INFO]   hypothesis           359s (n=1)
+2026-05-20 13:36:40,897 [INFO]   poc                  4s (n=1)
+2026-05-20 13:36:40,897 [INFO]   reviewer             172s (n=1)
+2026-05-20 13:36:40,897 [INFO] ============================================================
+2026-05-20 13:36:40,897 [INFO] Shutdown complete
+2026-05-20 13:36:44,224 [INFO] Session folder: /Users/brunomuller/projects/wallet-test/smoothie/sessions/smoothie-perf-1
+2026-05-20 13:36:44,224 [INFO] Loaded config from config.json
+2026-05-20 13:36:44,225 [INFO] Backends: copilot
+2026-05-20 13:36:44,227 [INFO] Subsystem filter: stellar-clients
+2026-05-20 13:36:44,409 [INFO] Pruned stale POC worktree from previous run: /Users/brunomuller/projects/wallet-test/smoothie/worktrees/poc-001-oracle-price-window-cache
+2026-05-20 13:36:44,410 [INFO] Publish level: medium (only publishing medium and above)
+2026-05-20 13:36:44,410 [INFO] Resuming session from /Users/brunomuller/projects/wallet-test/smoothie/sessions/smoothie-perf-1/metrics.json (5 agents previously spawned)
+2026-05-20 13:36:44,410 [INFO] ============================================================
+2026-05-20 13:36:44,410 [INFO] METRICS REPORT  (viable / not-viable per stage)
+2026-05-20 13:36:44,410 [INFO] ------------------------------------------------------------
+2026-05-20 13:36:44,410 [INFO] Total agents spawned:    5
+2026-05-20 13:36:44,410 [INFO] Agent failures:          1
+2026-05-20 13:36:44,410 [INFO] Agent timeouts:          0
+2026-05-20 13:36:44,410 [INFO] Hypothesis:              5 viable / 1 not-viable
+2026-05-20 13:36:44,410 [INFO] Review:                  1 viable / 0 not-viable (100% pass)
+2026-05-20 13:36:44,410 [INFO] POC:                     0 viable / 0 not-viable (0% pass)
+2026-05-20 13:36:44,410 [INFO] Final review:            0 viable / 0 not-viable / 0 revisions (0% pass)
+2026-05-20 13:36:44,410 [INFO] Condensations:           0
+2026-05-20 13:36:44,411 [INFO] Publishes:               0
+2026-05-20 13:36:44,411 [INFO] Tokens:                  0k input / 26k output / 0k cache read
+2026-05-20 13:36:44,411 [INFO]   claude-opus-4-6           0k in / 6k out / 0k cache
+2026-05-20 13:36:44,411 [INFO]   gpt-5.4                   0k in / 20k out / 0k cache
+2026-05-20 13:36:44,411 [INFO]   hypothesis                0k in / 20k out
+2026-05-20 13:36:44,411 [INFO]   reviewer                  0k in / 6k out
+2026-05-20 13:36:44,411 [INFO] ESTIMATED COSTS:
+2026-05-20 13:36:44,411 [INFO]   copilot:
+    claude-opus-4-6                6k out / 3.00 reqs                       $    0.09
+    gpt-5.4                        20k out / 1.00 reqs                      $    0.03
+                                   subtotal                                 $    0.12
+  TOTAL                                                                       $    0.12
+2026-05-20 13:36:44,411 [INFO] PER-STAGE USAGE:
+2026-05-20 13:36:44,411 [INFO]   hypothesis           copilot: 20k out / 1.00 reqs
+  poc                  copilot: 0k out / 0.00 reqs
+  reviewer             copilot: 6k out / 3.00 reqs
+2026-05-20 13:36:44,412 [INFO] ------------------------------------------------------------
+2026-05-20 13:36:44,412 [INFO] PER-MODEL BREAKDOWN:
+2026-05-20 13:36:44,412 [INFO]   claude-opus-4-6           agent_failures=1, review_viable=1
+2026-05-20 13:36:44,412 [INFO]   gpt-5.4                   hypothesis_viable=5
+2026-05-20 13:36:44,412 [INFO] AVG DURATION (seconds):
+2026-05-20 13:36:44,412 [INFO]   hypothesis           359s (n=1)
+2026-05-20 13:36:44,412 [INFO]   poc                  4s (n=1)
+2026-05-20 13:36:44,412 [INFO]   reviewer             172s (n=1)
+2026-05-20 13:36:44,412 [INFO] ============================================================
+2026-05-20 13:36:44,413 [INFO] Bug bounty orchestrator started (max_agents=1, max_workers=0, max_duration_minutes=none, dry_run=False, skip={'publish'})
+2026-05-20 13:36:44,428 [INFO] Spawned agent-0001 | type=poc sub=stellar-clients target=001-oracle-price-window-cache.md model=claude-opus-4-6
+2026-05-20 13:36:44,428 [INFO] TICK 1 | agents: 1/1 | workers: 0/0 | dispatched: poc:stellar-clients/001-oracle-price-window-cache.md
+2026-05-20 13:36:44,428 [INFO]   queue: 4 hypothesis / 1 reviewed / 0 in-progress-poc / 0 poc
+2026-05-20 13:36:44,428 [INFO]   running: 1 poc
+2026-05-20 13:36:44,621 [WARNING] Replacing stale ai-summary directory with symlink: /Users/brunomuller/projects/wallet-test/smoothie/worktrees/poc-001-oracle-price-window-cache/ai-summary
+2026-05-20 13:37:14,440 [INFO] TICK 2 | agents: 1/1 | workers: 0/0 | dispatched: none
+2026-05-20 13:37:14,441 [INFO]   queue: 4 hypothesis / 1 reviewed / 0 in-progress-poc / 0 poc
+2026-05-20 13:37:14,441 [INFO]   running: 1 poc
+2026-05-20 13:37:44,447 [INFO] TICK 3 | agents: 1/1 | workers: 0/0 | dispatched: none
+2026-05-20 13:37:44,447 [INFO]   queue: 4 hypothesis / 1 reviewed / 0 in-progress-poc / 0 poc
+2026-05-20 13:37:44,447 [INFO]   running: 1 poc
+2026-05-20 13:38:14,478 [INFO] TICK 4 | agents: 1/1 | workers: 0/0 | dispatched: none
+2026-05-20 13:38:14,478 [INFO]   queue: 4 hypothesis / 1 reviewed / 0 in-progress-poc / 0 poc
+2026-05-20 13:38:14,478 [INFO]   running: 1 poc
+2026-05-20 13:38:22,341 [INFO] Shutdown signal received, finishing running agents...
+2026-05-20 13:38:22,341 [INFO] Waiting up to 60s for 1 running agent(s)...
+2026-05-20 13:38:22,617 [WARNING] Retryable error from copilot/claude-opus-4-6 (attempt 1/5), retrying in 2s: {"type":"session.mcp_server_status_changed","data":{"serverName":"github-mcp-server","status":"connected"},"id":"0aa380b8-73f4-4e16-8fe9-dda41372c80b","timestamp":"2026-05-20T20:36:48.679Z","parentId"
+2026-05-20 13:38:27,837 [WARNING] Second signal received, forcing exit
+2026-05-20 13:38:28,206 [WARNING] Second signal received, forcing exit
+2026-05-20 13:38:28,211 [ERROR] Task was destroyed but it is pending!
+task: <Task cancelling name='Task-2' coro=<AgentManager._run_agent() running at /Users/brunomuller/work/gesserit-main/src/gesserit/orchestrator_app.py:394> wait_for=<Future pending cb=[Task.task_wakeup()]> cb=[gather.<locals>._done_callback() at /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/asyncio/tasks.py:754]>
+2026-05-20 13:40:43,880 [INFO] Session folder: /Users/brunomuller/projects/wallet-test/smoothie/sessions/smoothie-perf-1
+2026-05-20 13:40:43,881 [INFO] Loaded config from config.json
+2026-05-20 13:40:43,881 [INFO] Backends: copilot
+2026-05-20 13:40:43,885 [INFO] Subsystem filter: stellar-clients
+2026-05-20 13:41:02,040 [INFO] Pruned stale POC worktree from previous run: /Users/brunomuller/projects/wallet-test/smoothie/worktrees/poc-001-oracle-price-window-cache
+2026-05-20 13:41:02,041 [INFO] Publish level: medium (only publishing medium and above)
+2026-05-20 13:41:02,042 [INFO] Resuming session from /Users/brunomuller/projects/wallet-test/smoothie/sessions/smoothie-perf-1/metrics.json (6 agents previously spawned)
+2026-05-20 13:41:02,042 [INFO] ============================================================
+2026-05-20 13:41:02,042 [INFO] METRICS REPORT  (viable / not-viable per stage)
+2026-05-20 13:41:02,042 [INFO] ------------------------------------------------------------
+2026-05-20 13:41:02,042 [INFO] Total agents spawned:    6
+2026-05-20 13:41:02,042 [INFO] Agent failures:          1
+2026-05-20 13:41:02,042 [INFO] Agent timeouts:          0
+2026-05-20 13:41:02,042 [INFO] Hypothesis:              5 viable / 1 not-viable
+2026-05-20 13:41:02,042 [INFO] Review:                  1 viable / 0 not-viable (100% pass)
+2026-05-20 13:41:02,042 [INFO] POC:                     0 viable / 0 not-viable (0% pass)
+2026-05-20 13:41:02,042 [INFO] Final review:            0 viable / 0 not-viable / 0 revisions (0% pass)
+2026-05-20 13:41:02,042 [INFO] Condensations:           0
+2026-05-20 13:41:02,042 [INFO] Publishes:               0
+2026-05-20 13:41:02,042 [INFO] Tokens:                  0k input / 26k output / 0k cache read
+2026-05-20 13:41:02,042 [INFO]   claude-opus-4-6           0k in / 6k out / 0k cache
+2026-05-20 13:41:02,042 [INFO]   gpt-5.4                   0k in / 20k out / 0k cache
+2026-05-20 13:41:02,042 [INFO]   hypothesis                0k in / 20k out
+2026-05-20 13:41:02,042 [INFO]   reviewer                  0k in / 6k out
+2026-05-20 13:41:02,042 [INFO] ESTIMATED COSTS:
+2026-05-20 13:41:02,042 [INFO]   copilot:
+    claude-opus-4-6                6k out / 3.00 reqs                       $    0.09
+    gpt-5.4                        20k out / 1.00 reqs                      $    0.03
+                                   subtotal                                 $    0.12
+  TOTAL                                                                       $    0.12
+2026-05-20 13:41:02,042 [INFO] PER-STAGE USAGE:
+2026-05-20 13:41:02,042 [INFO]   hypothesis           copilot: 20k out / 1.00 reqs
+  poc                  copilot: 0k out / 0.00 reqs
+  reviewer             copilot: 6k out / 3.00 reqs
+2026-05-20 13:41:02,042 [INFO] ------------------------------------------------------------
+2026-05-20 13:41:02,042 [INFO] PER-MODEL BREAKDOWN:
+2026-05-20 13:41:02,042 [INFO]   claude-opus-4-6           agent_failures=1, review_viable=1
+2026-05-20 13:41:02,042 [INFO]   gpt-5.4                   hypothesis_viable=5
+2026-05-20 13:41:02,043 [INFO] AVG DURATION (seconds):
+2026-05-20 13:41:02,043 [INFO]   hypothesis           359s (n=1)
+2026-05-20 13:41:02,043 [INFO]   poc                  4s (n=1)
+2026-05-20 13:41:02,043 [INFO]   reviewer             172s (n=1)
+2026-05-20 13:41:02,043 [INFO] ============================================================
+2026-05-20 13:41:02,043 [INFO] Bug bounty orchestrator started (max_agents=1, max_workers=0, max_duration_minutes=none, dry_run=False, skip={'publish'})
+2026-05-20 13:41:02,053 [INFO] Spawned agent-0001 | type=final_review sub=stellar-clients target=001-oracle-price-window-cache.md model=gpt-5.4
+2026-05-20 13:41:02,054 [INFO] TICK 1 | agents: 1/1 | workers: 0/0 | dispatched: final_review:stellar-clients/001-oracle-price-window-cache.md
+2026-05-20 13:41:02,054 [INFO]   queue: 4 hypothesis / 1 reviewed / 0 in-progress-poc / 1 poc
+2026-05-20 13:41:02,054 [INFO]   running: 1 final_review
+2026-05-20 13:41:02,309 [WARNING] Replacing stale ai-summary directory with symlink: /Users/brunomuller/projects/wallet-test/smoothie/worktrees/poc-001-oracle-price-window-cache/ai-summary
+2026-05-20 13:41:14,342 [INFO] Shutdown signal received, finishing running agents...
+2026-05-20 13:41:14,343 [INFO] Waiting up to 60s for 1 running agent(s)...
+2026-05-20 13:41:14,781 [ERROR] Agent agent-0001 agent_failure [no_output]: type=final_review sub=stellar-clients
+2026-05-20 13:41:14,781 [INFO] Shutdown: completed agent-0001 verdict=ERROR
+2026-05-20 13:41:14,858 [INFO] Committing: viable shutdown batch-uncommitted-work
+2026-05-20 13:41:14,951 [INFO] Pushing to remote
+2026-05-20 13:41:16,060 [WARNING] Second signal received, forcing exit

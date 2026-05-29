@@ -9,6 +9,7 @@ import { TokenLogo } from "@/components/token-logo"
 import { PoolLogo } from "@/components/pool-logo"
 import { PoolsChart } from "@/components/explore/pools-chart"
 import { PoolTvlHistoryChart } from "@/components/explore/pool-tvl-history-chart"
+import { PoolTokenTvlChart } from "@/components/explore/pool-token-tvl-chart"
 import type { PoolExploreItem, PoolTokenItem } from "@/types/explore"
 
 interface PoolsResultsProps {
@@ -282,6 +283,8 @@ export function PoolsResults({ items, isLoading }: PoolsResultsProps) {
       </div>
 
       <PoolTvlHistoryChart />
+
+      <PoolTokenTvlChart />
     </div>
   )
 }

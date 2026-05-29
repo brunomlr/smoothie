@@ -13,6 +13,20 @@ export interface PoolTvlHistoryPoint {
   borrowedUsd: number
 }
 
+export interface PoolTokenTvlHistoryPoint {
+  poolId: string
+  date: string
+  assetAddress: string
+  /** Supplied amount in native token units (b_supply * b_rate) */
+  suppliedTokens: number
+  /** Borrowed amount in native token units (d_supply * d_rate) */
+  borrowedTokens: number
+  /** Supplied value in USD */
+  suppliedUsd: number
+  /** Borrowed value in USD */
+  borrowedUsd: number
+}
+
 export class PoolSnapshotsRepository extends BaseRepository {
   /**
    * Get historical TVL and borrowed amounts for all pools.
@@ -54,6 +68,61 @@ export class PoolSnapshotsRepository extends BaseRepository {
       poolId: row.pool_id,
       date: row.snapshot_date,
       tvlUsd: parseFloat(row.tvl_usd) || 0,
+      borrowedUsd: parseFloat(row.borrowed_usd) || 0,
+    }))
+  }
+
+  /**
+   * Get historical supplied/borrowed amounts broken down by token.
+   * Like getPoolTvlHistory, but grouped by asset so a single pool's TVL can be
+   * decomposed into its individual reserves. Returns both native token units
+   * and USD value for each (pool, date, asset).
+   *
+   * Formula per token:
+   * - Supplied tokens = b_supply * b_rate
+   * - Borrowed tokens = d_supply * d_rate
+   * - USD value       = tokens * usd_price
+   */
+  async getPoolTokenTvlHistory(days?: number): Promise<PoolTokenTvlHistoryPoint[]> {
+    const whereClause = days ? 'WHERE ps.snapshot_date >= CURRENT_DATE - $1::integer' : ''
+    const params = days ? [days] : []
+
+    const rows = await this.query<{
+      pool_id: string
+      snapshot_date: string
+      asset_address: string
+      supplied_tokens: string
+      borrowed_tokens: string
+      supplied_usd: string
+      borrowed_usd: string
+    }>(
+      `
+      SELECT
+        ps.pool_id,
+        ps.snapshot_date::text,
+        ps.asset_address,
+        COALESCE(SUM(ps.b_supply * ps.b_rate), 0) as supplied_tokens,
+        COALESCE(SUM(ps.d_supply * ps.d_rate), 0) as borrowed_tokens,
+        COALESCE(SUM(ps.b_supply * ps.b_rate * COALESCE(dtp.usd_price, 0)), 0) as supplied_usd,
+        COALESCE(SUM(ps.d_supply * ps.d_rate * COALESCE(dtp.usd_price, 0)), 0) as borrowed_usd
+      FROM pool_snapshots ps
+      LEFT JOIN daily_token_prices dtp
+        ON ps.asset_address = dtp.token_address
+        AND ps.snapshot_date = dtp.price_date
+      ${whereClause}
+      GROUP BY ps.pool_id, ps.snapshot_date, ps.asset_address
+      ORDER BY ps.pool_id, ps.snapshot_date, ps.asset_address
+      `,
+      params
+    )
+
+    return rows.map((row) => ({
+      poolId: row.pool_id,
+      date: row.snapshot_date,
+      assetAddress: row.asset_address,
+      suppliedTokens: parseFloat(row.supplied_tokens) || 0,
+      borrowedTokens: parseFloat(row.borrowed_tokens) || 0,
+      suppliedUsd: parseFloat(row.supplied_usd) || 0,
       borrowedUsd: parseFloat(row.borrowed_usd) || 0,
     }))
   }
