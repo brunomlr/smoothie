@@ -150,8 +150,13 @@ export function BalanceChartTooltip({
         ) : (
           <>
             {/* Standard view without per-pool breakdown */}
+            {/* For historical/current bars this value is cumulative lifetime yield as of this
+                bar's date (balance − cost basis), NOT the yield earned during this single
+                period — label it accordingly so month-to-month values aren't misread. */}
             <div className="flex justify-between">
-              <span className="text-zinc-400">Yield:</span>
+              <span className="text-zinc-400">
+                {data.isProjected ? "Yield:" : "Total yield to date:"}
+              </span>
               <span
                 className={
                   data.yieldEarned >= 0

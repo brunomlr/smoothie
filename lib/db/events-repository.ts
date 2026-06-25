@@ -313,7 +313,7 @@ export class EventsRepository {
     // Main query: compute daily positions from events and join with daily rates
     const result = await pool.query(
       `
-      WITH date_range AS (
+      WITH RECURSIVE date_range AS (
         SELECT generate_series(
           GREATEST(
             (CURRENT_TIMESTAMP AT TIME ZONE $4)::date - $3::integer,
@@ -433,10 +433,65 @@ export class EventsRepository {
 
         ORDER BY ledger_closed_at, ledger_sequence
       ),
+      -- Number events per pool and derive bToken/underlying deltas used for share-aware cost basis.
+      -- cb_btoken_delta = change in total bTokens (supply + collateral) for this event.
+      -- cb_underlying_in = underlying added by a deposit (0 for withdrawals).
+      numbered_events AS (
+        SELECT
+          *,
+          ROW_NUMBER() OVER (PARTITION BY pool_id ORDER BY ledger_closed_at, ledger_sequence) AS rn,
+          (CASE
+            WHEN action_type = 'supply' THEN amount_tokens / 10000000.0
+            WHEN action_type = 'withdraw' THEN -amount_tokens / 10000000.0
+            WHEN action_type = 'supply_collateral' THEN amount_tokens / 10000000.0
+            WHEN action_type = 'withdraw_collateral' THEN -amount_tokens / 10000000.0
+            -- Liquidated user LOSES collateral (lot); liquidator GAINS it
+            WHEN event_source = 'liquidated_fill' AND lot_asset = $2 THEN -lot_amount / 10000000.0
+            WHEN event_source = 'liquidator' AND lot_asset = $2 THEN lot_amount / 10000000.0
+            ELSE 0
+          END) AS cb_btoken_delta,
+          (CASE
+            WHEN action_type IN ('supply', 'supply_collateral') THEN amount_underlying / 10000000.0
+            -- Liquidator gaining collateral: treat lot as a deposit for cost basis
+            WHEN event_source = 'liquidator' AND lot_asset = $2 THEN lot_amount / 10000000.0
+            ELSE 0
+          END) AS cb_underlying_in
+        FROM user_events
+      ),
+      -- Share-aware running cost basis per pool.
+      -- Deposits add underlying; withdrawals reduce cost basis PROPORTIONALLY to the shares
+      -- (bTokens) removed, so a fully-closed position lands at cost basis 0 (no phantom basis).
+      cb_calc AS (
+        SELECT
+          pool_id,
+          rn,
+          cb_btoken_delta AS shares_after,
+          GREATEST(0, cb_underlying_in) AS cost_after
+        FROM numbered_events
+        WHERE rn = 1
+
+        UNION ALL
+
+        SELECT
+          n.pool_id,
+          n.rn,
+          c.shares_after + n.cb_btoken_delta AS shares_after,
+          CASE
+            -- Deposit: add invested underlying to cost basis
+            WHEN n.cb_underlying_in > 0 THEN c.cost_after + n.cb_underlying_in
+            -- Withdrawal: keep the same average cost per share, scale by remaining shares
+            WHEN c.shares_after > 0.0000001
+              THEN GREATEST(0, c.cost_after * ((c.shares_after + n.cb_btoken_delta) / c.shares_after))
+            ELSE 0
+          END AS cost_after
+        FROM cb_calc c
+        JOIN numbered_events n ON n.pool_id = c.pool_id AND n.rn = c.rn + 1
+      ),
       -- Calculate cumulative positions per pool up to each event
       event_positions AS (
         SELECT
           pool_id,
+          rn,
           event_date,
           ledger_closed_at,
           ledger_sequence,
@@ -511,12 +566,13 @@ export class EventsRepository {
               THEN (bid_amount / 10000000.0) * COALESCE(implied_rate, 1.0)
             ELSE 0
           END) OVER (PARTITION BY pool_id ORDER BY ledger_closed_at, ledger_sequence) AS total_repays
-        FROM user_events
+        FROM numbered_events
       ),
       -- Get last position of each day per pool
       daily_positions AS (
         SELECT DISTINCT ON (pool_id, event_date)
           pool_id,
+          rn,
           event_date,
           ledger_sequence,
           supply_btokens,
@@ -552,8 +608,9 @@ export class EventsRepository {
         COALESCE(pos.total_withdrawals, 0) AS total_withdrawals,
         COALESCE(pos.total_borrows, 0) AS total_borrows,
         COALESCE(pos.total_repays, 0) AS total_repays,
-        -- Cost basis = deposits - withdrawals, but never negative (clamp at 0)
-        GREATEST(0, COALESCE(pos.total_deposits, 0) - COALESCE(pos.total_withdrawals, 0)) AS cost_basis,
+        -- Share-aware cost basis: withdrawals reduce basis proportionally to shares removed,
+        -- so a fully-closed position correctly lands at 0 (no phantom basis / false negative yield).
+        GREATEST(0, COALESCE(cbc.cost_after, 0)) AS cost_basis,
         -- Borrow cost basis = borrows - repays (original amount borrowed)
         GREATEST(0, COALESCE(pos.total_borrows, 0) - COALESCE(pos.total_repays, 0)) AS borrow_cost_basis,
         rates.b_rate,
@@ -568,6 +625,8 @@ export class EventsRepository {
         ORDER BY event_date DESC
         LIMIT 1
       ) pos ON true
+      -- Share-aware cost basis as of the position's latest event on/before this date
+      LEFT JOIN cb_calc cbc ON cbc.pool_id = dpg.pool_id AND cbc.rn = pos.rn
       -- Get rates for this date (or most recent before)
       LEFT JOIN LATERAL (
         SELECT b_rate, d_rate
