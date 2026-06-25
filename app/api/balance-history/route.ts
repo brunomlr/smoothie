@@ -15,18 +15,25 @@ import {
 } from '@/lib/api'
 import { cacheKey, todayDate, CACHE_TTL, shouldRefreshRates, markRatesRefreshed, releaseRatesLock } from '@/lib/redis'
 
-async function ensureFreshRates(): Promise<void> {
-  // Use Redis-based coordination to avoid redundant refreshes across instances
-  if (await shouldRefreshRates()) {
-    try {
-      await eventsRepository.refreshDailyRates()
-      await markRatesRefreshed()
-    } catch {
-      // Release the lock so other instances can try
-      await releaseRatesLock()
-      // Don't throw - continue with stale data rather than failing
+function ensureFreshRates(): void {
+  // Refresh daily_rates in the background when stale. This is intentionally
+  // NOT awaited: the view is materialized so it always has data to serve, and
+  // `REFRESH MATERIALIZED VIEW CONCURRENTLY` can take several seconds - awaiting
+  // it made one request every refresh interval wait out the entire refresh
+  // before returning any data. Redis coordination dedupes refreshes across
+  // instances. See balance-history-batch/route.ts for the same rationale.
+  void (async () => {
+    if (await shouldRefreshRates()) {
+      try {
+        await eventsRepository.refreshDailyRates()
+        await markRatesRefreshed()
+      } catch {
+        // Release the lock so other instances can try
+        await releaseRatesLock()
+        // Don't throw - continue with stale data rather than failing
+      }
     }
-  }
+  })()
 }
 
 interface BalanceHistoryResponse {
@@ -72,8 +79,8 @@ export const GET = createApiHandler<BalanceHistoryResponse>({
     const days = optionalInt(searchParams, 'days', 30, { min: 1 })
     const timezone = getTimezone(searchParams)
 
-    // Ensure daily_rates is fresh (refresh if stale)
-    await ensureFreshRates()
+    // Kick off a daily_rates refresh in the background if stale (non-blocking).
+    ensureFreshRates()
 
     const { history, firstEventDate } = await eventsRepository.getBalanceHistoryFromEvents(
       user,
