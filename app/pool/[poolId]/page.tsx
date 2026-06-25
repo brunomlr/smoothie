@@ -13,6 +13,7 @@ import {
   Flame,
   Shield,
   Clock,
+  CheckCircle,
   Calculator,
   DollarSign,
 } from "lucide-react";
@@ -738,16 +739,26 @@ function BackstopSection({
   const q4wExpDate = position.q4wExpiration
     ? new Date(position.q4wExpiration * 1000)
     : null;
-  const isQ4wExpired = q4wExpDate && q4wExpDate <= new Date();
   const timeRemaining = q4wExpDate ? formatTimeRemaining(q4wExpDate) : "";
 
   // Pool-level Q4W percentage
   const poolQ4w = position.poolQ4wPercent;
 
-  // Calculate derived values
+  // Calculate derived values. Fall back to the Q4W-derived price when there is
+  // no active LP (fully-queued position) so Q4W USD values still render.
   const lpTokenPrice =
-    position.lpTokens > 0 ? position.lpTokensUsd / position.lpTokens : 0;
+    position.lpTokens > 0
+      ? position.lpTokensUsd / position.lpTokens
+      : position.q4wLpTokens > 0
+        ? position.q4wLpTokensUsd / position.q4wLpTokens
+        : 0;
   const yieldUsd = position.yieldLp * lpTokenPrice;
+
+  // Locked (still-queued) Q4W — chunks only contain entries that haven't unlocked.
+  const lockedLpTokens = position.q4wChunks.reduce(
+    (sum, c) => sum + c.lpTokens,
+    0,
+  );
 
   // Use simulated LP tokens from on-chain RPC (exact match with Blend UI)
   // Falls back to 0 if simulation failed
@@ -892,51 +903,63 @@ function BackstopSection({
 
         {/* User Q4W Status */}
         {hasQ4w && (
-          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2">
-            <Clock
-              className={`h-4 w-4 shrink-0 ${isQ4wExpired ? "text-emerald-400" : "text-amber-500"}`}
-            />
-            {isQ4wExpired ? (
-              <span className="text-sm text-emerald-400 font-medium">
-                {formatNumber(position.q4wLpTokens, 2)} LP ready to withdraw
-              </span>
-            ) : position.q4wChunks.length > 1 ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="text-sm text-amber-500 font-medium underline decoration-dotted cursor-pointer">
-                    {formatNumber(position.q4wLpTokens, 2)} LP in{" "}
-                    {position.q4wChunks.length} unlocks
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent className="p-2.5">
-                  <p className="font-medium text-zinc-400 mb-1.5">
-                    Unlock Schedule
-                  </p>
-                  <div className="space-y-1">
-                    {position.q4wChunks.map((chunk, i) => (
-                      <div key={i} className="flex justify-between gap-6">
-                        <span className="font-mono">
-                          {formatNumber(chunk.lpTokens, 2)} LP
-                        </span>
-                        <span className="text-zinc-400">
-                          {formatTimeRemaining(
-                            new Date(chunk.expiration * 1000),
-                          )}
-                        </span>
+          <div className="flex flex-col gap-2">
+            {/* Still-locked queued withdrawals */}
+            {position.q4wChunks.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2">
+                <Clock className="h-4 w-4 shrink-0 text-amber-500" />
+                {position.q4wChunks.length > 1 ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="text-sm text-amber-500 font-medium underline decoration-dotted cursor-pointer">
+                        {formatNumber(lockedLpTokens, 2)} LP in{" "}
+                        {position.q4wChunks.length} unlocks
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent className="p-2.5">
+                      <p className="font-medium text-zinc-400 mb-1.5">
+                        Unlock Schedule
+                      </p>
+                      <div className="space-y-1">
+                        {position.q4wChunks.map((chunk, i) => (
+                          <div key={i} className="flex justify-between gap-6">
+                            <span className="font-mono">
+                              {formatNumber(chunk.lpTokens, 2)} LP
+                            </span>
+                            <span className="text-zinc-400">
+                              {formatTimeRemaining(
+                                new Date(chunk.expiration * 1000),
+                              )}
+                            </span>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
-                </TooltipContent>
-              </Tooltip>
-            ) : (
-              <span className="text-sm text-amber-500 font-medium">
-                {formatNumber(position.q4wLpTokens, 2)} LP unlocks in{" "}
-                {timeRemaining}
-              </span>
+                    </TooltipContent>
+                  </Tooltip>
+                ) : (
+                  <span className="text-sm text-amber-500 font-medium">
+                    {formatNumber(lockedLpTokens, 2)} LP unlocks in{" "}
+                    {timeRemaining}
+                  </span>
+                )}
+                <span className="text-sm text-muted-foreground">
+                  ({formatUsd(lockedLpTokens * lpTokenPrice)})
+                </span>
+              </div>
             )}
-            <span className="text-sm text-muted-foreground">
-              ({formatUsd(position.q4wLpTokensUsd)})
-            </span>
+            {/* Unlocked Q4W — ready to withdraw */}
+            {position.unlockedQ4wLpTokens > 0.001 && (
+              <div className="flex flex-wrap items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2">
+                <CheckCircle className="h-4 w-4 shrink-0 text-emerald-400" />
+                <span className="text-sm text-emerald-400 font-medium">
+                  {formatNumber(position.unlockedQ4wLpTokens, 2)} LP ready to
+                  withdraw
+                </span>
+                <span className="text-sm text-muted-foreground">
+                  ({formatUsd(position.unlockedQ4wLpTokens * lpTokenPrice)})
+                </span>
+              </div>
+            )}
           </div>
         )}
       </CardContent>
@@ -1177,9 +1200,15 @@ export default function PoolDetailsPage() {
       (bp) => bp.poolId === poolId,
     );
 
-    // Enrich backstop position with yield data
+    // Enrich backstop position with yield data.
+    // Show the position if it has active LP OR any queued-for-withdrawal (Q4W)
+    // shares — a fully-queued position has lpTokensUsd === 0 but still holds value.
     let backstopPosition: BlendBackstopPosition | null = null;
-    if (rawBackstopPosition && rawBackstopPosition.lpTokensUsd > 0) {
+    if (
+      rawBackstopPosition &&
+      (rawBackstopPosition.lpTokensUsd > 0 ||
+        rawBackstopPosition.q4wShares > BigInt(0))
+    ) {
       const costBasis = costBases?.find((cb) => cb.pool_address === poolId);
       if (costBasis) {
         // Include Q4W LP tokens in total - they're still the user's tokens, just locked

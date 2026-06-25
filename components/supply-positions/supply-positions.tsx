@@ -302,9 +302,10 @@ export function SupplyPositions({
       {} as Record<string, { poolName: string; assets: AssetCardData[] }>,
     );
 
-    // Add backstop-only pools
+    // Add backstop-only pools. Include positions that are fully queued for
+    // withdrawal (lpTokensUsd === 0 but q4wShares > 0) so their Q4W still shows.
     backstopPositions.forEach((bp) => {
-      if (!map[bp.poolId] && bp.lpTokensUsd > 0) {
+      if (!map[bp.poolId] && (bp.lpTokensUsd > 0 || bp.q4wShares > BigInt(0))) {
         map[bp.poolId] = { poolName: bp.poolName, assets: [] };
       }
     });
@@ -333,7 +334,9 @@ export function SupplyPositions({
             (bp) => bp.poolId === poolId,
           );
           const showBackstop =
-            backstopPosition && backstopPosition.lpTokensUsd > 0;
+            backstopPosition &&
+            (backstopPosition.lpTokensUsd > 0 ||
+              backstopPosition.q4wShares > BigInt(0));
 
           return (
             <Card key={poolId} className="py-2 gap-0">
