@@ -30,6 +30,7 @@ export interface BackstopPositionData {
   emissionApy: number
   q4wShares: bigint
   q4wLpTokens: number
+  q4wLpTokensUsd: number
   q4wExpiration: number | null
   q4wChunks: Q4WChunkData[]
   unlockedQ4wShares: bigint

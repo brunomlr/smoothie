@@ -10,6 +10,7 @@ import {
   EarningsStats,
   POOL_NAMES,
 } from '@/types/balance-history'
+import { addDaysToDate } from '@/lib/date-utils'
 
 // ============================================
 // HISTORICAL YIELD BREAKDOWN TYPES
@@ -22,26 +23,134 @@ export interface DepositEvent {
   usdValue: number
   poolId?: string
   priceSource?: 'daily_token_prices' | 'forward_fill' | 'sdk_fallback'
+  // Share units (bTokens for lending, backstop shares for backstop).
+  // Withdrawal amounts in underlying/LP tokens include accrued yield; shares don't,
+  // so cost basis must be reduced by share fraction, not token fraction.
+  shares?: number
+}
+
+// ============================================
+// SHARE-AWARE COST BASIS CORE
+// ============================================
+
+export interface ShareAwareEvent {
+  date: string
+  tokens: number // underlying tokens (or LP tokens for backstop) at event time
+  shares?: number // bTokens/dTokens/backstop shares if known
+  price: number // token price at event time
+  usdValue: number // tokens × price
+}
+
+export interface ShareAwareCostBasisResult {
+  costBasisUsd: number // remaining cost basis in USD (at deposit-time prices)
+  principalTokens: number // remaining principal, in tokens-at-deposit terms
+  realizedYieldTokens: number // tokens withdrawn in excess of principal removed
+  realizedYieldUsd: number // realized yield valued at withdrawal-time prices
+  realizedPriceChangeUsd: number // principal removed × withdrawal price − cost removed
+}
+
+/**
+ * Share-aware running cost basis (mirrors the cb_calc SQL in events-repository).
+ *
+ * Withdrawal amounts are reported in underlying tokens, which INCLUDE accrued yield
+ * (bTokens are burned at the withdrawal-time rate). Netting underlying amounts
+ * therefore over-removes cost: closed positions land at a negative basis and
+ * withdrawn yield is double-counted as still-unrealized.
+ *
+ * Instead, each withdrawal removes cost basis proportionally to the SHARE fraction
+ * it burns. The excess tokens withdrawn above principal are realized yield, valued
+ * at the withdrawal-time price. A fully-closed position lands at exactly 0.
+ *
+ * When share amounts are unavailable, falls back to a clamped token-proportional
+ * reduction (slightly over-removes on partial withdrawals but can't go negative).
+ */
+export function computeShareAwareCostBasis(
+  deposits: ShareAwareEvent[],
+  withdrawals: ShareAwareEvent[],
+): ShareAwareCostBasisResult {
+  const EPSILON = 1e-9
+
+  // Merge chronologically; on same-date ties process deposits first so a
+  // same-day deposit+withdraw doesn't withdraw from an empty position.
+  const merged = [
+    ...deposits.map(e => ({ ...e, isDeposit: true })),
+    ...withdrawals.map(e => ({ ...e, isDeposit: false })),
+  ].sort((a, b) => {
+    const dateCompare = a.date.localeCompare(b.date)
+    if (dateCompare !== 0) return dateCompare
+    return a.isDeposit === b.isDeposit ? 0 : a.isDeposit ? -1 : 1
+  })
+
+  let shares = 0
+  let cost = 0
+  let principal = 0
+  let realizedYieldTokens = 0
+  let realizedYieldUsd = 0
+  let realizedPriceChangeUsd = 0
+
+  for (const ev of merged) {
+    if (ev.isDeposit) {
+      shares += ev.shares ?? 0
+      cost += ev.usdValue
+      principal += ev.tokens
+    } else {
+      let fraction: number
+      if (ev.shares && ev.shares > EPSILON && shares > EPSILON) {
+        fraction = Math.min(1, ev.shares / shares)
+      } else if (principal > EPSILON) {
+        // Fallback without share data: token-proportional, clamped at full removal
+        fraction = Math.min(1, ev.tokens / principal)
+      } else {
+        fraction = 1
+      }
+
+      const costRemoved = cost * fraction
+      const principalRemoved = principal * fraction
+      const yieldTokens = ev.tokens - principalRemoved
+
+      realizedYieldTokens += yieldTokens
+      realizedYieldUsd += yieldTokens * ev.price
+      realizedPriceChangeUsd += principalRemoved * ev.price - costRemoved
+
+      cost = Math.max(0, cost - costRemoved)
+      principal = Math.max(0, principal - principalRemoved)
+      shares = Math.max(0, shares - (ev.shares ?? 0))
+    }
+  }
+
+  return {
+    costBasisUsd: cost,
+    principalTokens: principal,
+    realizedYieldTokens,
+    realizedYieldUsd,
+    realizedPriceChangeUsd,
+  }
 }
 
 export interface HistoricalYieldBreakdown {
-  // Cost basis (what you paid) - uses AVERAGE COST METHOD
-  costBasisHistorical: number      // Cost of remaining tokens at average deposit price
-  weightedAvgDepositPrice: number  // Actual average price paid for all deposits
-  netDepositedTokens: number       // Tokens deposited - withdrawn
+  // Cost basis (what you paid) - SHARE-AWARE: withdrawals reduce basis
+  // proportionally to shares removed, so closed positions land at 0
+  costBasisHistorical: number      // Cost of remaining principal at deposit prices
+  weightedAvgDepositPrice: number  // Remaining cost basis / remaining principal tokens
+  netDepositedTokens: number       // Remaining principal tokens (deposit-time terms)
 
-  // Protocol yield (what you earned from lending/backstop)
-  protocolYieldTokens: number      // Tokens earned = balance - netDeposited
+  // Protocol yield (what you earned from lending/backstop) - unrealized only
+  protocolYieldTokens: number      // Tokens earned = balance - remaining principal
   protocolYieldUsd: number         // Yield tokens × current price
 
-  // Price change (market performance on deposits)
+  // Price change (market performance on remaining deposits)
   priceChangeUsd: number           // Can be positive or negative
   priceChangePercent: number       // % change from deposit price to current
 
-  // Combined totals
+  // Combined totals (unrealized)
   currentValueUsd: number          // balance × current price
   totalEarnedUsd: number           // currentValue - costBasis = yield + priceChange
   totalEarnedPercent: number
+
+  // Realized components (from withdrawals, valued at withdrawal-time prices)
+  realizedYieldTokens?: number
+  realizedYieldUsd?: number
+  realizedPriceChangeUsd?: number
 }
 
 // ============================================
@@ -55,6 +164,9 @@ export interface BorrowEvent {
   usdValue: number
   poolId?: string
   priceSource?: 'daily_token_prices' | 'forward_fill' | 'sdk_fallback'
+  // dToken shares. Repay amounts in underlying include accrued interest;
+  // dTokens don't, so principal must be reduced by share fraction.
+  shares?: number
 }
 
 /**
@@ -78,7 +190,7 @@ export interface HistoricalBorrowBreakdown {
   weightedAvgBorrowPrice: number   // Actual average price when tokens were borrowed
   netBorrowedTokens: number        // Tokens borrowed - repaid (principal outstanding)
 
-  // Interest accrued (protocol cost)
+  // Interest accrued (protocol cost, unrealized - not yet repaid)
   interestAccruedTokens: number    // Tokens owed beyond principal = currentDebt - netBorrowed
   interestAccruedUsd: number       // Interest tokens × current price
 
@@ -96,6 +208,11 @@ export interface HistoricalBorrowBreakdown {
   // (both positive values represent costs to borrower)
   totalCostUsd: number
   totalCostPercent: number
+
+  // Realized components (interest already paid via repays, valued at repay-time prices)
+  realizedInterestTokens?: number
+  realizedInterestUsd?: number
+  realizedPriceChangeOnDebtUsd?: number
 }
 
 /**
@@ -147,37 +264,45 @@ export function calculateHistoricalYieldBreakdown(
   // Combine historical and adjusted same-day deposits
   const adjustedDeposits = [...historicalDeposits, ...sameDayDepositsAdjusted]
 
-  // 1. Calculate totals
-  const totalDepositedUsd = adjustedDeposits.reduce((sum, d) => sum + d.usdValue, 0)
-  const totalDepositedTokens = adjustedDeposits.reduce((sum, d) => sum + d.tokens, 0)
-  const totalWithdrawnTokens = withdrawals.reduce((sum, w) => sum + w.tokens, 0)
-  const netDepositedTokens = totalDepositedTokens - totalWithdrawnTokens
+  // 1. Run the share-aware cost basis (withdrawals reduce cost proportionally to
+  // shares removed, never below 0; excess withdrawn tokens are realized yield)
+  const shareAware = computeShareAwareCostBasis(
+    adjustedDeposits.map(d => ({
+      date: d.date,
+      tokens: d.tokens,
+      shares: d.shares,
+      price: d.priceAtDeposit,
+      usdValue: d.usdValue,
+    })),
+    withdrawals.map(w => ({
+      date: w.date,
+      tokens: w.tokens,
+      shares: w.shares,
+      price: w.priceAtDeposit, // withdrawal events carry their price in this field
+      usdValue: w.usdValue,
+    })),
+  )
 
-  // 2. Calculate weighted average deposit price (AVERAGE COST METHOD)
-  // This is the actual average price paid for deposits, regardless of withdrawals
-  const weightedAvgDepositPrice = totalDepositedTokens > 0
-    ? totalDepositedUsd / totalDepositedTokens
-    : currentPrice // Fallback to current if no deposits
+  const costBasisHistorical = shareAware.costBasisUsd
+  const netDepositedTokens = shareAware.principalTokens
 
-  // 3. Calculate cost basis using AVERAGE COST METHOD
-  // Withdrawals reduce cost basis at the average deposit price, not at withdrawal-time market price
-  // This prevents confusing "average prices" that exceed the asset's historical max price
-  const costRemovedByWithdrawals = totalWithdrawnTokens * weightedAvgDepositPrice
-  const costBasisHistorical = totalDepositedUsd - costRemovedByWithdrawals
+  // 2. Weighted average deposit price of the REMAINING principal
+  const weightedAvgDepositPrice = netDepositedTokens > 0
+    ? costBasisHistorical / netDepositedTokens
+    : currentPrice // Fallback to current if position closed / no deposits
 
-  // 4. Calculate protocol yield (tokens earned from APY)
+  // 3. Calculate protocol yield (tokens earned from APY, unrealized)
   const protocolYieldTokens = currentBalance - netDepositedTokens
   const protocolYieldUsd = protocolYieldTokens * currentPrice
 
-  // 5. Calculate price change on deposited tokens
-  // This is how much the VALUE of your deposits changed due to price movement
+  // 4. Calculate price change on remaining deposited tokens
   const depositValueAtCurrentPrice = netDepositedTokens * currentPrice
   const priceChangeUsd = depositValueAtCurrentPrice - costBasisHistorical
   const priceChangePercent = costBasisHistorical > 0
     ? (priceChangeUsd / costBasisHistorical) * 100
     : 0
 
-  // 6. Calculate totals
+  // 5. Calculate totals
   const currentValueUsd = currentBalance * currentPrice
   const totalEarnedUsd = currentValueUsd - costBasisHistorical
   // Note: totalEarnedUsd = protocolYieldUsd + priceChangeUsd (they should sum up)
@@ -202,6 +327,11 @@ export function calculateHistoricalYieldBreakdown(
     totalEarnedPercent: costBasisHistorical > 0
       ? (totalEarnedUsd / costBasisHistorical) * 100
       : 0,
+
+    // Realized components (withdrawn yield, valued at withdrawal-time prices)
+    realizedYieldTokens: shareAware.realizedYieldTokens,
+    realizedYieldUsd: shareAware.realizedYieldUsd,
+    realizedPriceChangeUsd: shareAware.realizedPriceChangeUsd,
   }
 }
 
@@ -329,33 +459,45 @@ export function calculateHistoricalBorrowBreakdown(
   // Combine historical and adjusted same-day borrows
   const adjustedBorrows = [...historicalBorrows, ...sameDayBorrowsAdjusted]
 
-  // 1. Calculate totals
-  const totalBorrowedUsd = adjustedBorrows.reduce((sum, b) => sum + b.usdValue, 0)
-  const totalBorrowedTokens = adjustedBorrows.reduce((sum, b) => sum + b.tokens, 0)
-  const totalRepaidTokens = repays.reduce((sum, r) => sum + r.tokens, 0)
-  const netBorrowedTokens = totalBorrowedTokens - totalRepaidTokens
+  // 1. Run the share-aware cost basis with dToken shares.
+  // Repaid underlying includes interest paid, so principal is reduced by the
+  // dToken share fraction each repay burns. A fully repaid loan lands at
+  // principal 0 / basis 0 (no negative basis, no sign-flipped price impact);
+  // interest paid shows up in the realized fields instead of vanishing.
+  const shareAware = computeShareAwareCostBasis(
+    adjustedBorrows.map(b => ({
+      date: b.date,
+      tokens: b.tokens,
+      shares: b.shares,
+      price: b.priceAtBorrow,
+      usdValue: b.usdValue,
+    })),
+    repays.map(r => ({
+      date: r.date,
+      tokens: r.tokens,
+      shares: r.shares,
+      price: r.priceAtBorrow, // repay events carry their price in this field
+      usdValue: r.usdValue,
+    })),
+  )
 
-  // 2. Calculate weighted average borrow price (AVERAGE COST METHOD)
-  // This is the actual average price when borrows were taken out
-  const weightedAvgBorrowPrice = totalBorrowedTokens > 0
-    ? totalBorrowedUsd / totalBorrowedTokens
-    : currentPrice // Fallback to current if no borrows
+  const borrowCostBasisUsd = shareAware.costBasisUsd
+  const netBorrowedTokens = shareAware.principalTokens
 
-  // 3. Calculate borrow cost basis using AVERAGE COST METHOD
-  // Repays reduce the cost basis at the average borrow price
-  const costRemovedByRepays = totalRepaidTokens * weightedAvgBorrowPrice
-  const borrowCostBasisUsd = totalBorrowedUsd - costRemovedByRepays
+  // 2. Weighted average borrow price of the REMAINING principal
+  const weightedAvgBorrowPrice = netBorrowedTokens > 0
+    ? borrowCostBasisUsd / netBorrowedTokens
+    : currentPrice // Fallback to current if loan closed / no borrows
 
-  // 4. Calculate interest accrued (tokens owed beyond principal)
+  // 3. Calculate interest accrued (tokens owed beyond outstanding principal)
   const interestAccruedTokens = currentDebt - netBorrowedTokens
   const interestAccruedUsd = interestAccruedTokens * currentPrice
 
-  // 5. Calculate price change on debt
+  // 4. Calculate price change on outstanding debt
   // IMPORTANT: For borrowers, price increase is BAD (debt is more expensive to repay)
   // This is the opposite of supply where price increase is good
-  const debtValueAtBorrowPrice = netBorrowedTokens * weightedAvgBorrowPrice
   const debtValueAtCurrentPrice = netBorrowedTokens * currentPrice
-  const priceChangeOnDebtUsd = debtValueAtCurrentPrice - debtValueAtBorrowPrice
+  const priceChangeOnDebtUsd = debtValueAtCurrentPrice - borrowCostBasisUsd
   // positive = price went up = debt is more expensive = BAD for borrower
   const priceChangePercent = borrowCostBasisUsd > 0
     ? (priceChangeOnDebtUsd / borrowCostBasisUsd) * 100
@@ -392,6 +534,11 @@ export function calculateHistoricalBorrowBreakdown(
     // Total cost
     totalCostUsd,
     totalCostPercent,
+
+    // Realized components (interest already paid, valued at repay-time prices)
+    realizedInterestTokens: shareAware.realizedYieldTokens,
+    realizedInterestUsd: shareAware.realizedYieldUsd,
+    realizedPriceChangeOnDebtUsd: shareAware.realizedPriceChangeUsd,
   }
 }
 
@@ -461,28 +608,28 @@ export function fillMissingDates(
 
   // Add a $0 baseline day before the first data point (only if this IS the first-ever event)
   // This ensures we only show $0 at the very beginning of the pool history, not at the start of filtered views
+  let baselineInserted = false
   if (includeBaselineDay && allDates.length > 0 && firstEventDate) {
     const firstDateInRecords = allDates[0]
 
     // Only add baseline if the first date in our records matches the absolute first event date
     if (firstDateInRecords === firstEventDate) {
-      const firstDate = new Date(allDates[0])
-      const dayBefore = new Date(firstDate)
-      dayBefore.setDate(dayBefore.getDate() - 1)
-      // Use local date formatting to avoid UTC conversion issues
-      const year = dayBefore.getFullYear()
-      const month = String(dayBefore.getMonth() + 1).padStart(2, '0')
-      const day = String(dayBefore.getDate()).padStart(2, '0')
-      const dayBeforeStr = `${year}-${month}-${day}`
+      // String-based day arithmetic: new Date('YYYY-MM-DD') parses as UTC
+      // midnight, so local get/setDate in negative-UTC-offset timezones
+      // landed the baseline TWO days before the first event
+      const dayBeforeStr = addDaysToDate(allDates[0], -1)
 
       // Add empty pool map for the day before (will show $0)
       datePoolMap.set(dayBeforeStr, new Map())
       allDates.unshift(dayBeforeStr)
+      baselineInserted = true
     }
   }
 
-  // Calculate initial deposit amount from first data point (skip $0 baseline if it exists)
-  const firstRealDate = includeBaselineDay && allDates.length > 1 ? allDates[1] : allDates[0]
+  // Calculate initial deposit amount from first data point (skip $0 baseline
+  // ONLY if it was actually inserted - wallets older than the fetched window
+  // don't get one, and skipping allDates[0] would seed from the second day)
+  const firstRealDate = baselineInserted && allDates.length > 1 ? allDates[1] : allDates[0]
   const firstDateRecords = datePoolMap.get(firstRealDate)!
 
   // Track cumulative deposits per pool (bTokens and initial b_rate)
@@ -554,7 +701,7 @@ export function fillMissingDates(
     return {
       date,
       formattedDate: formatChartDate(date),
-      timestamp: new Date(date).getTime(),
+      timestamp: parseLocalDate(date).getTime(),
       pool_yieldblox:
         pools.find(
           (p) =>
@@ -814,8 +961,17 @@ export function getPoolName(poolId: string): string {
 /**
  * Format date for chart display
  */
+/**
+ * Parse a YYYY-MM-DD string as LOCAL midnight. new Date('YYYY-MM-DD') parses
+ * as UTC midnight, which renders as the PREVIOUS day for users west of UTC.
+ */
+function parseLocalDate(dateStr: string): Date {
+  const [year, month, day] = dateStr.split('-').map(Number)
+  return new Date(year, month - 1, day)
+}
+
 export function formatChartDate(dateStr: string): string {
-  const date = new Date(dateStr)
+  const date = parseLocalDate(dateStr)
   return date.toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',

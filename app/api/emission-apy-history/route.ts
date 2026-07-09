@@ -72,7 +72,7 @@ export async function GET(request: NextRequest) {
             AND apy_type = 'backstop'
             AND rate_date >= CURRENT_DATE - $2::integer
             AND emission_apy IS NOT NULL
-          ORDER BY rate_date, emission_apy DESC NULLS LAST
+          ORDER BY rate_date, id DESC
         ) sub
         ORDER BY date ASC
       `
@@ -89,7 +89,7 @@ export async function GET(request: NextRequest) {
             AND asset_address = $2
             AND rate_date >= CURRENT_DATE - $3::integer
             AND emission_apy IS NOT NULL
-          ORDER BY rate_date, emission_apy DESC NULLS LAST
+          ORDER BY rate_date, id DESC
         ) sub
         ORDER BY date ASC
       `

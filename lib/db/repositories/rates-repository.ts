@@ -123,7 +123,7 @@ export class RatesRepository extends BaseRepository {
     return rows.map((row) => ({
       pool_id: row.pool_id,
       asset_address: row.asset_address,
-      apy: row.apy ? parseFloat(row.apy) : null,
+      apy: row.apy != null ? parseFloat(row.apy) : null,
     }))
   }
 }

@@ -191,10 +191,13 @@ async function buildSupplyItems(
           )
 
           if (emissionsPerAsset > 0) {
-            // For stablecoins, assume $1 price; for other assets, use rough estimate
-            // This is acceptable since BLND APY is already an approximation
-            const assetPrice = tokenSymbol === 'USDC' ? 1 : 1
-            blndApy = (emissionsPerAsset * blndPrice / assetPrice) * 100
+            // Divide by the asset's oracle price: emissions are BLND per TOKEN
+            // per year, so a $1 placeholder made the APY wrong by the asset's
+            // actual price (~3x understated for XLM). Leave null if no price.
+            const assetPrice = snapshot.oracle?.getPriceFloat(assetId)
+            if (assetPrice != null && Number.isFinite(assetPrice) && assetPrice > 0) {
+              blndApy = (emissionsPerAsset * blndPrice / assetPrice) * 100
+            }
           }
         } catch {
           // BLND APY calculation failed
@@ -210,9 +213,13 @@ async function buildSupplyItems(
         totalSuppliedTokens = reserve.totalSupplyFloat()
         totalBorrowedTokens = reserve.totalLiabilitiesFloat()
         if (snapshot.oracle) {
-          const priceFloat = snapshot.oracle.getPriceFloat(assetId) ?? 1
-          totalSupplied = totalSuppliedTokens * priceFloat
-          totalBorrowed = totalBorrowedTokens * priceFloat
+          // Leave null (rendered as unavailable) when the oracle has no price
+          // for this asset - pricing at $1 silently corrupts the TVL totals
+          const priceFloat = snapshot.oracle.getPriceFloat(assetId)
+          if (priceFloat != null && Number.isFinite(priceFloat) && priceFloat > 0) {
+            totalSupplied = totalSuppliedTokens * priceFloat
+            totalBorrowed = totalBorrowedTokens * priceFloat
+          }
         }
       } catch {
         // Total supplied/borrowed calculation failed

@@ -37,8 +37,10 @@ export const GET = createApiHandler<BackstopBalanceHistoryResponse>({
       const params = request.nextUrl.searchParams
       return cacheKey(
         'backstop-balance-history',
-        params.get('user') || '',
+        resolveWalletAddress(params.get('user') || ''),
         params.get('days') || '365',
+        // Day boundaries depend on the user's timezone
+        params.get('timezone') || 'UTC',
         todayDate() // Rotate cache daily
       )
     },

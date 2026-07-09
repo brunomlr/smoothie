@@ -272,6 +272,72 @@ export class EventsRepository {
   }
 
   /**
+   * Get liquidation (fill_auction) flows for a user, as either the liquidated
+   * user or the liquidator, with amounts converted to underlying tokens:
+   * - lot (collateral) is bTokens → multiplied by b_rate at the event date
+   * - bid (debt) is dTokens → multiplied by d_rate at the event date
+   * Rates use forward-fill (most recent daily rate on/before the event's UTC date).
+   */
+  async getLiquidationFlows(userAddress: string): Promise<Array<{
+    pool_id: string
+    ledger_closed_at: string
+    role: 'liquidated' | 'liquidator'
+    lot_asset: string | null
+    lot_underlying: number
+    bid_asset: string | null
+    bid_underlying: number
+  }>> {
+    if (!pool) {
+      throw new Error('Database pool not initialized')
+    }
+
+    const result = await pool.query(
+      `
+      SELECT
+        pe.pool_id,
+        to_char(pe.ledger_closed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS ledger_closed_at,
+        CASE WHEN pe.user_address = $1 THEN 'liquidated' ELSE 'liquidator' END AS role,
+        pe.lot_asset,
+        (pe.lot_amount / 1e7) * COALESCE(lot_rate.b_rate, 1.0) AS lot_underlying,
+        pe.bid_asset,
+        (pe.bid_amount / 1e7) * COALESCE(bid_rate.d_rate, 1.0) AS bid_underlying
+      FROM parsed_events pe
+      LEFT JOIN LATERAL (
+        SELECT b_rate FROM daily_rates
+        WHERE pool_id = pe.pool_id
+          AND asset_address = pe.lot_asset
+          AND rate_date <= (pe.ledger_closed_at AT TIME ZONE 'UTC')::date
+        ORDER BY rate_date DESC
+        LIMIT 1
+      ) lot_rate ON true
+      LEFT JOIN LATERAL (
+        SELECT d_rate FROM daily_rates
+        WHERE pool_id = pe.pool_id
+          AND asset_address = pe.bid_asset
+          AND rate_date <= (pe.ledger_closed_at AT TIME ZONE 'UTC')::date
+        ORDER BY rate_date DESC
+        LIMIT 1
+      ) bid_rate ON true
+      WHERE pe.action_type = 'fill_auction'
+        AND pe.auction_type = 0
+        AND (pe.user_address = $1 OR pe.filler_address = $1)
+      ORDER BY pe.ledger_closed_at, pe.ledger_sequence
+      `,
+      [userAddress]
+    )
+
+    return result.rows.map((row) => ({
+      pool_id: row.pool_id,
+      ledger_closed_at: row.ledger_closed_at,
+      role: row.role as 'liquidated' | 'liquidator',
+      lot_asset: row.lot_asset,
+      lot_underlying: row.lot_underlying != null ? parseFloat(row.lot_underlying) || 0 : 0,
+      bid_asset: row.bid_asset,
+      bid_underlying: row.bid_underlying != null ? parseFloat(row.bid_underlying) || 0 : 0,
+    }))
+  }
+
+  /**
    * Get balance history from events - computes running positions and applies daily rates
    * This replaces Dune for historical balance data
    * Updated: 2025-12-08 - Added support for fill_auction events (liquidations)
@@ -338,6 +404,7 @@ export class EventsRepository {
           amount_underlying,
           amount_tokens,
           implied_rate,
+          NULL::numeric AS lot_implied_rate,
           NULL::bigint AS lot_amount,
           NULL::bigint AS bid_amount,
           NULL::text AS lot_asset,
@@ -362,6 +429,7 @@ export class EventsRepository {
           NULL AS amount_underlying,
           NULL AS amount_tokens,
           NULL AS implied_rate,
+          NULL::numeric AS lot_implied_rate,
           lot_amount,
           bid_amount,
           lot_asset,
@@ -388,6 +456,7 @@ export class EventsRepository {
           NULL AS amount_underlying,
           NULL AS amount_tokens,
           dr.d_rate AS implied_rate,  -- d_rate for converting bid dTokens to underlying
+          lot_rate.b_rate AS lot_implied_rate,  -- b_rate for converting lot bTokens to underlying
           pe.lot_amount,
           pe.bid_amount,
           pe.lot_asset,
@@ -395,9 +464,25 @@ export class EventsRepository {
           pe.filler_address,
           'liquidated_fill' AS event_source
         FROM parsed_events pe
-        LEFT JOIN daily_rates dr ON dr.pool_id = pe.pool_id
-          AND dr.asset_address = pe.bid_asset
-          AND dr.rate_date = (pe.ledger_closed_at AT TIME ZONE 'UTC' AT TIME ZONE $4)::date
+        -- Forward-fill rate lookups: the exact event date may have no daily_rates row
+        -- (view refreshed before midnight, user-timezone date ahead of UTC), which
+        -- previously made COALESCE(rate, 1.0) drop the whole accumulated rate premium
+        LEFT JOIN LATERAL (
+          SELECT d_rate FROM daily_rates
+          WHERE pool_id = pe.pool_id
+            AND asset_address = pe.bid_asset
+            AND rate_date <= (pe.ledger_closed_at AT TIME ZONE 'UTC' AT TIME ZONE $4)::date
+          ORDER BY rate_date DESC
+          LIMIT 1
+        ) dr ON true
+        LEFT JOIN LATERAL (
+          SELECT b_rate FROM daily_rates
+          WHERE pool_id = pe.pool_id
+            AND asset_address = pe.lot_asset
+            AND rate_date <= (pe.ledger_closed_at AT TIME ZONE 'UTC' AT TIME ZONE $4)::date
+          ORDER BY rate_date DESC
+          LIMIT 1
+        ) lot_rate ON true
         WHERE pe.user_address = $1
           AND pe.action_type = 'fill_auction'
           AND pe.auction_type = 0  -- Liquidation auctions
@@ -416,6 +501,7 @@ export class EventsRepository {
           NULL AS amount_underlying,
           NULL AS amount_tokens,
           dr.d_rate AS implied_rate,  -- d_rate for converting bid dTokens to underlying
+          lot_rate.b_rate AS lot_implied_rate,  -- b_rate for converting lot bTokens to underlying
           pe.lot_amount,
           pe.bid_amount,
           pe.lot_asset,
@@ -423,9 +509,22 @@ export class EventsRepository {
           pe.filler_address,
           'liquidator' AS event_source
         FROM parsed_events pe
-        LEFT JOIN daily_rates dr ON dr.pool_id = pe.pool_id
-          AND dr.asset_address = pe.bid_asset
-          AND dr.rate_date = (pe.ledger_closed_at AT TIME ZONE 'UTC' AT TIME ZONE $4)::date
+        LEFT JOIN LATERAL (
+          SELECT d_rate FROM daily_rates
+          WHERE pool_id = pe.pool_id
+            AND asset_address = pe.bid_asset
+            AND rate_date <= (pe.ledger_closed_at AT TIME ZONE 'UTC' AT TIME ZONE $4)::date
+          ORDER BY rate_date DESC
+          LIMIT 1
+        ) dr ON true
+        LEFT JOIN LATERAL (
+          SELECT b_rate FROM daily_rates
+          WHERE pool_id = pe.pool_id
+            AND asset_address = pe.lot_asset
+            AND rate_date <= (pe.ledger_closed_at AT TIME ZONE 'UTC' AT TIME ZONE $4)::date
+          ORDER BY rate_date DESC
+          LIMIT 1
+        ) lot_rate ON true
         WHERE pe.filler_address = $1
           AND pe.action_type = 'fill_auction'
           AND pe.auction_type = 0  -- Liquidation auctions
@@ -452,8 +551,9 @@ export class EventsRepository {
           END) AS cb_btoken_delta,
           (CASE
             WHEN action_type IN ('supply', 'supply_collateral') THEN amount_underlying / 10000000.0
-            -- Liquidator gaining collateral: treat lot as a deposit for cost basis
-            WHEN event_source = 'liquidator' AND lot_asset = $2 THEN lot_amount / 10000000.0
+            -- Liquidator gaining collateral: lot is bTokens, convert to underlying via b_rate
+            WHEN event_source = 'liquidator' AND lot_asset = $2
+              THEN (lot_amount / 10000000.0) * COALESCE(lot_implied_rate, 1.0)
             ELSE 0
           END) AS cb_underlying_in
         FROM user_events
@@ -537,17 +637,17 @@ export class EventsRepository {
           -- Cumulative deposits (for cost basis tracking) - convert from stroops (7 decimals)
           SUM(CASE
             WHEN action_type IN ('supply', 'supply_collateral') THEN amount_underlying / 10000000.0
-            -- Liquidator gaining collateral: add lot as "deposit" for cost basis
+            -- Liquidator gaining collateral: lot is bTokens, convert to underlying via b_rate
             WHEN event_source = 'liquidator' AND lot_asset = $2
-              THEN lot_amount / 10000000.0
+              THEN (lot_amount / 10000000.0) * COALESCE(lot_implied_rate, 1.0)
             ELSE 0
           END) OVER (PARTITION BY pool_id ORDER BY ledger_closed_at, ledger_sequence) AS total_deposits,
           -- Cumulative withdrawals - convert from stroops (7 decimals)
           SUM(CASE
             WHEN action_type IN ('withdraw', 'withdraw_collateral') THEN amount_underlying / 10000000.0
-            -- Liquidated user losing collateral: add lot as "withdrawal" for cost basis at fill_auction
+            -- Liquidated user losing collateral: lot is bTokens, convert to underlying via b_rate
             WHEN event_source = 'liquidated_fill' AND lot_asset = $2
-              THEN lot_amount / 10000000.0
+              THEN (lot_amount / 10000000.0) * COALESCE(lot_implied_rate, 1.0)
             ELSE 0
           END) OVER (PARTITION BY pool_id ORDER BY ledger_closed_at, ledger_sequence) AS total_withdrawals,
           -- Cumulative borrows (for interest tracking) - convert from stroops (7 decimals)
@@ -648,8 +748,10 @@ export class EventsRepository {
       const liabilities_dtokens = parseFloat(row.liabilities_dtokens) || 0
       const cost_basis = parseFloat(row.cost_basis) || 0
       const borrow_cost_basis = parseFloat(row.borrow_cost_basis) || 0
-      const b_rate = row.b_rate ? parseFloat(row.b_rate) : 1.0
-      const d_rate = row.d_rate ? parseFloat(row.d_rate) : 1.0 // Fallback to 1.0 if no d_rate (before first borrow)
+      const total_borrows = parseFloat(row.total_borrows) || 0
+      const total_repays = parseFloat(row.total_repays) || 0
+      const b_rate = row.b_rate != null ? parseFloat(row.b_rate) : 1.0
+      const d_rate = row.d_rate != null ? parseFloat(row.d_rate) : 1.0 // Fallback to 1.0 if no d_rate (before first borrow)
 
       const supply_balance = supply_btokens * b_rate
       const collateral_balance = collateral_btokens * b_rate
@@ -662,8 +764,11 @@ export class EventsRepository {
       const total_asset_value = supply_balance + collateral_balance
       const total_yield = Math.max(0, total_asset_value - cost_basis)
 
-      // Calculate interest accrued on debt (how much debt grew from original borrow)
-      const total_interest_accrued = debt_balance - borrow_cost_basis
+      // Lifetime interest accrued on debt = current debt + repaid - borrowed.
+      // Uses the UNCLAMPED borrow/repay totals: for a fully repaid loan
+      // (repays > borrows), the clamped borrow_cost_basis would zero this out
+      // and hide the interest that was actually paid.
+      const total_interest_accrued = debt_balance + total_repays - total_borrows
 
       return {
         pool_id: row.pool_id,
@@ -999,7 +1104,7 @@ export class EventsRepository {
         END) as total_shares
       FROM backstop_events
       WHERE pool_address = $1
-        AND ledger_closed_at <= ($2::date + interval '1 day')
+        AND ledger_closed_at < ($2::date + interval '1 day')
       GROUP BY pool_address
       `,
       [poolAddress, targetDate]
@@ -1209,7 +1314,7 @@ export class EventsRepository {
 
     return result.rows.map((row) => ({
       pool_id: row.pool_id,
-      apy: row.apy ? parseFloat(row.apy) : null,
+      apy: row.apy != null ? parseFloat(row.apy) : null,
     }))
   }
 
@@ -1620,7 +1725,7 @@ export class EventsRepository {
                AND pool_address != ''
              LIMIT 1)
           ) AS pool_address,
-          COALESCE(b.emissions_shares, b.lp_tokens)::numeric AS claimed_lp,
+          COALESCE(b.lp_tokens, b.emissions_shares)::numeric AS claimed_lp,
           b.ledger_closed_at
         FROM backstop_events b
         WHERE b.user_address = $1
@@ -1822,6 +1927,7 @@ export class EventsRepository {
     deposits: Array<{
       date: string
       tokens: number
+      shares: number
       priceAtDeposit: number
       usdValue: number
       poolId: string
@@ -1830,6 +1936,7 @@ export class EventsRepository {
     withdrawals: Array<{
       date: string
       tokens: number
+      shares: number
       priceAtWithdrawal: number
       usdValue: number
       poolId: string
@@ -1876,17 +1983,20 @@ export class EventsRepository {
           pe.pool_id,
           pe.action_type,
           (pe.ledger_closed_at AT TIME ZONE 'UTC' AT TIME ZONE $${tzParamIndex})::date::text AS event_date,
-          pe.amount_underlying / 1e7 AS tokens
+          pe.ledger_closed_at,
+          pe.ledger_sequence,
+          pe.amount_underlying / 1e7 AS tokens,
+          pe.amount_tokens / 1e7 AS share_tokens
         FROM parsed_events pe
         ${whereClause}
           AND pe.action_type IN ('supply', 'supply_collateral', 'withdraw', 'withdraw_collateral')
-        ORDER BY pe.ledger_closed_at
       )
       SELECT
         e.pool_id,
         e.action_type,
         e.event_date,
         e.tokens,
+        e.share_tokens,
         COALESCE(price_data.usd_price, NULL) AS price,
         price_data.price_date AS price_source_date
       FROM events e
@@ -1898,7 +2008,7 @@ export class EventsRepository {
         ORDER BY price_date DESC
         LIMIT 1
       ) price_data ON true
-      ORDER BY e.event_date
+      ORDER BY e.ledger_closed_at, e.ledger_sequence
       `,
       params
     )
@@ -1906,6 +2016,7 @@ export class EventsRepository {
     const deposits: Array<{
       date: string
       tokens: number
+      shares: number
       priceAtDeposit: number
       usdValue: number
       poolId: string
@@ -1915,6 +2026,7 @@ export class EventsRepository {
     const withdrawals: Array<{
       date: string
       tokens: number
+      shares: number
       priceAtWithdrawal: number
       usdValue: number
       poolId: string
@@ -1923,6 +2035,7 @@ export class EventsRepository {
 
     for (const row of result.rows) {
       const tokens = parseFloat(row.tokens) || 0
+      const shares = row.share_tokens != null ? parseFloat(row.share_tokens) || 0 : 0
       let price = row.price ? parseFloat(row.price) : sdkPrice
       let priceSource: 'daily_token_prices' | 'forward_fill' | 'sdk_fallback'
 
@@ -1945,6 +2058,7 @@ export class EventsRepository {
         deposits.push({
           date: row.event_date,
           tokens,
+          shares,
           priceAtDeposit: price,
           usdValue,
           poolId: row.pool_id,
@@ -1954,6 +2068,7 @@ export class EventsRepository {
         withdrawals.push({
           date: row.event_date,
           tokens,
+          shares,
           priceAtWithdrawal: price,
           usdValue,
           poolId: row.pool_id,
@@ -2822,6 +2937,7 @@ export class EventsRepository {
     deposits: Array<{
       date: string
       tokens: number
+      shares: number
       priceAtDeposit: number
       usdValue: number
       poolId: string
@@ -2830,6 +2946,7 @@ export class EventsRepository {
     withdrawals: Array<{
       date: string
       tokens: number
+      shares: number
       priceAtWithdrawal: number
       usdValue: number
       poolId: string
@@ -2863,12 +2980,14 @@ export class EventsRepository {
           pe.asset_address,
           pe.action_type,
           (pe.ledger_closed_at AT TIME ZONE 'UTC' AT TIME ZONE $2)::date::text AS event_date,
-          pe.amount_underlying / 1e7 AS tokens
+          pe.ledger_closed_at,
+          pe.ledger_sequence,
+          pe.amount_underlying / 1e7 AS tokens,
+          pe.amount_tokens / 1e7 AS share_tokens
         FROM parsed_events pe
         WHERE pe.user_address = $1
           AND pe.action_type IN ('supply', 'supply_collateral', 'withdraw', 'withdraw_collateral')
           AND (pe.pool_id, pe.asset_address) IN (VALUES ${pairValues})
-        ORDER BY pe.ledger_closed_at
       )
       SELECT
         e.pool_id,
@@ -2876,6 +2995,7 @@ export class EventsRepository {
         e.action_type,
         e.event_date,
         e.tokens,
+        e.share_tokens,
         COALESCE(price_data.usd_price, NULL) AS price,
         price_data.price_date AS price_source_date
       FROM events e
@@ -2887,7 +3007,7 @@ export class EventsRepository {
         ORDER BY price_date DESC
         LIMIT 1
       ) price_data ON true
-      ORDER BY e.pool_id, e.asset_address, e.event_date
+      ORDER BY e.pool_id, e.asset_address, e.ledger_closed_at, e.ledger_sequence
       `,
       params
     )
@@ -2897,6 +3017,7 @@ export class EventsRepository {
       deposits: Array<{
         date: string
         tokens: number
+        shares: number
         priceAtDeposit: number
         usdValue: number
         poolId: string
@@ -2905,6 +3026,7 @@ export class EventsRepository {
       withdrawals: Array<{
         date: string
         tokens: number
+        shares: number
         priceAtWithdrawal: number
         usdValue: number
         poolId: string
@@ -2925,6 +3047,7 @@ export class EventsRepository {
       if (!entry) continue
 
       const tokens = parseFloat(row.tokens) || 0
+      const shares = row.share_tokens != null ? parseFloat(row.share_tokens) || 0 : 0
       const sdkPrice = sdkPrices[row.asset_address] || 0
       let price = row.price ? parseFloat(row.price) : sdkPrice
       let priceSource: 'daily_token_prices' | 'forward_fill' | 'sdk_fallback'
@@ -2946,6 +3069,7 @@ export class EventsRepository {
         entry.deposits.push({
           date: row.event_date,
           tokens,
+          shares,
           priceAtDeposit: price,
           usdValue,
           poolId: row.pool_id,
@@ -2955,6 +3079,7 @@ export class EventsRepository {
         entry.withdrawals.push({
           date: row.event_date,
           tokens,
+          shares,
           priceAtWithdrawal: price,
           usdValue,
           poolId: row.pool_id,
@@ -3009,7 +3134,7 @@ export class EventsRepository {
           AND rate_date <= $2::date
           AND pool_address = ANY($3)
           AND emission_apy IS NOT NULL
-        ORDER BY rate_date, apy_type, pool_address, COALESCE(asset_address, ''), emission_apy DESC NULLS LAST
+        ORDER BY rate_date, apy_type, pool_address, COALESCE(asset_address, ''), id DESC
       ) sub
       ORDER BY rate_date
       `,
@@ -3125,6 +3250,7 @@ export class EventsRepository {
     borrows: Array<{
       date: string
       tokens: number
+      shares: number
       priceAtBorrow: number
       usdValue: number
       poolId: string
@@ -3133,6 +3259,7 @@ export class EventsRepository {
     repays: Array<{
       date: string
       tokens: number
+      shares: number
       priceAtRepay: number
       usdValue: number
       poolId: string
@@ -3165,12 +3292,14 @@ export class EventsRepository {
           pe.asset_address,
           pe.action_type,
           (pe.ledger_closed_at AT TIME ZONE 'UTC' AT TIME ZONE $2)::date::text AS event_date,
-          pe.amount_underlying / 1e7 AS tokens
+          pe.ledger_closed_at,
+          pe.ledger_sequence,
+          pe.amount_underlying / 1e7 AS tokens,
+          pe.amount_tokens / 1e7 AS share_tokens
         FROM parsed_events pe
         WHERE pe.user_address = $1
           AND pe.action_type IN ('borrow', 'repay')
           AND (pe.pool_id, pe.asset_address) IN (VALUES ${pairValues})
-        ORDER BY pe.ledger_closed_at
       )
       SELECT
         e.pool_id,
@@ -3178,6 +3307,7 @@ export class EventsRepository {
         e.action_type,
         e.event_date,
         e.tokens,
+        e.share_tokens,
         COALESCE(price_data.usd_price, NULL) AS price,
         price_data.price_date AS price_source_date
       FROM events e
@@ -3189,7 +3319,7 @@ export class EventsRepository {
         ORDER BY price_date DESC
         LIMIT 1
       ) price_data ON true
-      ORDER BY e.pool_id, e.asset_address, e.event_date
+      ORDER BY e.pool_id, e.asset_address, e.ledger_closed_at, e.ledger_sequence
       `,
       params
     )
@@ -3199,6 +3329,7 @@ export class EventsRepository {
       borrows: Array<{
         date: string
         tokens: number
+        shares: number
         priceAtBorrow: number
         usdValue: number
         poolId: string
@@ -3207,6 +3338,7 @@ export class EventsRepository {
       repays: Array<{
         date: string
         tokens: number
+        shares: number
         priceAtRepay: number
         usdValue: number
         poolId: string
@@ -3227,6 +3359,7 @@ export class EventsRepository {
       if (!entry) continue
 
       const tokens = parseFloat(row.tokens) || 0
+      const shares = row.share_tokens != null ? parseFloat(row.share_tokens) || 0 : 0
       const sdkPrice = sdkPrices[row.asset_address] || 0
       let price = row.price ? parseFloat(row.price) : sdkPrice
       let priceSource: 'daily_token_prices' | 'forward_fill' | 'sdk_fallback'
@@ -3248,6 +3381,7 @@ export class EventsRepository {
         entry.borrows.push({
           date: row.event_date,
           tokens,
+          shares,
           priceAtBorrow: price,
           usdValue,
           poolId: row.pool_id,
@@ -3257,6 +3391,7 @@ export class EventsRepository {
         entry.repays.push({
           date: row.event_date,
           tokens,
+          shares,
           priceAtRepay: price,
           usdValue,
           poolId: row.pool_id,

@@ -7,7 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { eventsRepository } from '@/lib/db/events-repository'
 import { LP_TOKEN_ADDRESS } from '@/lib/constants'
 import { getAllDatesBetween, getToday } from '@/lib/date-utils'
-import { resolveWalletAddress } from '@/lib/api'
+import { resolveWalletAddress, getTimezone } from '@/lib/api'
 
 export interface DailyPnlDataPoint {
   date: string
@@ -16,12 +16,12 @@ export interface DailyPnlDataPoint {
   lendingValue: number        // Lending pools value
   backstopValue: number       // Backstop value
   // Cost basis
-  costBasis: number           // Cumulative cost basis (deposits - withdrawals)
+  costBasis: number           // Remaining cost basis of open principal (share-aware: withdrawals reduce it proportionally)
   lendingCostBasis: number
   backstopCostBasis: number
   // P&L
-  unrealizedPnl: number       // portfolioValue - costBasis
-  realizedPnl: number         // Cumulative claims (emissions)
+  unrealizedPnl: number       // Protocol yield still held (balance - remaining principal) × price
+  realizedPnl: number         // Cumulative claims (emissions) + yield realized by withdrawals (valued at withdrawal-date prices)
   totalPnl: number            // unrealizedPnl + realizedPnl
   // Breakdown
   lendingUnrealizedPnl: number
@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
   const days = parseInt(searchParams.get('days') || '365', 10)
   const sdkPricesParam = searchParams.get('sdkPrices')
   const lpTokenPrice = parseFloat(searchParams.get('lpTokenPrice') || '0')
-  const timezone = searchParams.get('timezone') || 'UTC'
+  const timezone = getTimezone(searchParams)
 
   if (!userAddress) {
     return NextResponse.json(
@@ -193,7 +193,8 @@ export async function GET(request: NextRequest) {
     const depositEventsMap = await eventsRepository.getDepositEventsWithPricesBatch(
       resolvedUserAddress,
       Array.from(poolAssetPairs.values()),
-      sdkPrices
+      sdkPrices,
+      timezone
     )
 
     // Get backstop events for cost basis
@@ -208,49 +209,82 @@ export async function GET(request: NextRequest) {
     // Step 7: Build daily P&L time series
     const allDates = earliestBalanceDate ? getAllDatesBetween(earliestBalanceDate, today) : []
 
-    // Track TOKEN deposits/withdrawals per asset (not USD!)
-    // This matches how the existing displayPnl calculation works
-    const lendingTokenEventsByAssetByDate = new Map<string, Map<string, {
+    // Track TOKEN deposits/withdrawals per asset per day, including share amounts
+    // (bTokens / backstop shares) so cost basis can be reduced share-aware:
+    // withdrawal amounts are underlying (they include accrued yield), so netting
+    // them against deposits would double-count withdrawn yield and go negative
+    // for closed positions.
+    interface DayFlows {
       depositedTokens: number
+      depositedUsd: number
+      depositedShares: number
       withdrawnTokens: number
-      depositedUsd: number  // For weighted avg price calculation
-    }>>()
+      withdrawnUsd: number
+      withdrawnShares: number
+    }
+    const emptyFlows = (): DayFlows => ({
+      depositedTokens: 0,
+      depositedUsd: 0,
+      depositedShares: 0,
+      withdrawnTokens: 0,
+      withdrawnUsd: 0,
+      withdrawnShares: 0,
+    })
+
+    const lendingTokenEventsByAssetByDate = new Map<string, Map<string, DayFlows>>()
 
     for (const [compositeKey, events] of depositEventsMap) {
       const assetAddress = compositeKey.split('-')[1]
-      const assetEvents = lendingTokenEventsByAssetByDate.get(assetAddress) || new Map()
+      const assetEvents = lendingTokenEventsByAssetByDate.get(assetAddress) || new Map<string, DayFlows>()
 
       for (const deposit of events.deposits) {
-        const existing = assetEvents.get(deposit.date) || { depositedTokens: 0, withdrawnTokens: 0, depositedUsd: 0 }
+        const existing = assetEvents.get(deposit.date) || emptyFlows()
         existing.depositedTokens += deposit.tokens
         existing.depositedUsd += deposit.usdValue
+        existing.depositedShares += deposit.shares
         assetEvents.set(deposit.date, existing)
       }
       for (const withdrawal of events.withdrawals) {
-        const existing = assetEvents.get(withdrawal.date) || { depositedTokens: 0, withdrawnTokens: 0, depositedUsd: 0 }
+        const existing = assetEvents.get(withdrawal.date) || emptyFlows()
         existing.withdrawnTokens += withdrawal.tokens
+        existing.withdrawnUsd += withdrawal.usdValue
+        existing.withdrawnShares += withdrawal.shares
         assetEvents.set(withdrawal.date, existing)
       }
       lendingTokenEventsByAssetByDate.set(assetAddress, assetEvents)
     }
 
-    // Process backstop deposits/withdrawals (LP tokens)
-    const backstopTokenEventsByDate = new Map<string, {
-      depositedTokens: number
-      withdrawnTokens: number
-      depositedUsd: number
-    }>()
+    // Process backstop deposits/withdrawals (LP tokens + backstop shares).
+    // Bucket by the USER's timezone date derived from the event timestamp:
+    // the repo's `date` field is UTC while the balance history is bucketed in
+    // the user's timezone, so near-midnight flows would misalign by one day
+    // (balance jumps with no matching flow -> fake unrealized spike).
+    const backstopDateFormatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    })
+    const backstopEventDate = (e: { date: string; timestamp?: string }): string =>
+      e.timestamp ? backstopDateFormatter.format(new Date(e.timestamp)) : e.date
+
+    const backstopTokenEventsByDate = new Map<string, DayFlows>()
 
     for (const deposit of backstopEvents.deposits) {
-      const existing = backstopTokenEventsByDate.get(deposit.date) || { depositedTokens: 0, withdrawnTokens: 0, depositedUsd: 0 }
+      const eventDate = backstopEventDate(deposit)
+      const existing = backstopTokenEventsByDate.get(eventDate) || emptyFlows()
       existing.depositedTokens += deposit.lpTokens
       existing.depositedUsd += deposit.usdValue
-      backstopTokenEventsByDate.set(deposit.date, existing)
+      existing.depositedShares += deposit.shares
+      backstopTokenEventsByDate.set(eventDate, existing)
     }
     for (const withdrawal of backstopEvents.withdrawals) {
-      const existing = backstopTokenEventsByDate.get(withdrawal.date) || { depositedTokens: 0, withdrawnTokens: 0, depositedUsd: 0 }
+      const eventDate = backstopEventDate(withdrawal)
+      const existing = backstopTokenEventsByDate.get(eventDate) || emptyFlows()
       existing.withdrawnTokens += withdrawal.lpTokens
-      backstopTokenEventsByDate.set(withdrawal.date, existing)
+      existing.withdrawnUsd += withdrawal.usdValue
+      existing.withdrawnShares += withdrawal.shares
+      backstopTokenEventsByDate.set(eventDate, existing)
     }
 
     // Process realized P&L (claims)
@@ -265,43 +299,74 @@ export async function GET(request: NextRequest) {
 
     const realizedPnlByDate = new Map<string, number>()
 
-    // Build cumulative TOKEN deposits/withdrawals per asset
-    // Track: cumDeposited, cumWithdrawn, cumDepositedUsd (for weighted avg price)
-    const cumLendingTokensByAsset = new Map<string, {
-      depositedTokens: number
-      withdrawnTokens: number
-      depositedUsd: number
-    }>()
+    // Share-aware running cost basis per asset. Withdrawals reduce cost and
+    // principal proportionally to the share fraction they burn; the excess
+    // tokens withdrawn above principal are yield REALIZED at the withdrawal-day
+    // price. This replaces the old underlying-token netting, which let
+    // withdrawn yield stay "unrealized" forever (repriced at each day's price)
+    // and pushed closed positions to a negative net-deposit.
+    interface CostBasisState {
+      shares: number
+      cost: number
+      principal: number
+      realizedYieldUsd: number
+    }
+    const EPSILON = 1e-9
+    const newCostBasisState = (): CostBasisState => ({ shares: 0, cost: 0, principal: 0, realizedYieldUsd: 0 })
 
-    // Initialize from all assets
-    for (const assetAddress of uniqueAssets) {
-      cumLendingTokensByAsset.set(assetAddress, { depositedTokens: 0, withdrawnTokens: 0, depositedUsd: 0 })
+    const applyDayFlows = (state: CostBasisState, flows: DayFlows): void => {
+      // Deposits first so a same-day deposit+withdraw doesn't drain an empty position
+      state.shares += flows.depositedShares
+      state.cost += flows.depositedUsd
+      state.principal += flows.depositedTokens
+
+      if (flows.withdrawnTokens > 0 || flows.withdrawnShares > 0) {
+        let fraction: number
+        if (flows.withdrawnShares > EPSILON && state.shares > EPSILON) {
+          fraction = Math.min(1, flows.withdrawnShares / state.shares)
+        } else if (state.principal > EPSILON) {
+          // Fallback without share data: token-proportional, clamped at full removal
+          fraction = Math.min(1, flows.withdrawnTokens / state.principal)
+        } else {
+          fraction = 1
+        }
+
+        const costRemoved = state.cost * fraction
+        const principalRemoved = state.principal * fraction
+        const yieldTokens = flows.withdrawnTokens - principalRemoved
+        const avgWithdrawPrice = flows.withdrawnTokens > 0 ? flows.withdrawnUsd / flows.withdrawnTokens : 0
+        state.realizedYieldUsd += yieldTokens * avgWithdrawPrice
+
+        state.cost = Math.max(0, state.cost - costRemoved)
+        state.principal = Math.max(0, state.principal - principalRemoved)
+        state.shares = Math.max(0, state.shares - flows.withdrawnShares)
+      }
     }
 
-    const cumBackstopTokens = { depositedTokens: 0, withdrawnTokens: 0, depositedUsd: 0 }
+    const lendingStateByAsset = new Map<string, CostBasisState>()
+    for (const assetAddress of uniqueAssets) {
+      lendingStateByAsset.set(assetAddress, newCostBasisState())
+    }
+    const backstopState = newCostBasisState()
 
-    // Include events BEFORE first balance date in initial values
+    // Include events BEFORE first balance date in initial state (in date order)
     const firstDate = allDates[0]
     if (firstDate) {
-      // Add lending events before start date
       for (const [assetAddress, assetEvents] of lendingTokenEventsByAssetByDate) {
-        const cumData = cumLendingTokensByAsset.get(assetAddress)!
-        for (const [eventDate, events] of assetEvents) {
-          if (eventDate < firstDate) {
-            cumData.depositedTokens += events.depositedTokens
-            cumData.withdrawnTokens += events.withdrawnTokens
-            cumData.depositedUsd += events.depositedUsd
-          }
+        let state = lendingStateByAsset.get(assetAddress)
+        if (!state) {
+          state = newCostBasisState()
+          lendingStateByAsset.set(assetAddress, state)
+        }
+        const earlyDates = [...assetEvents.keys()].filter(d => d < firstDate).sort()
+        for (const eventDate of earlyDates) {
+          applyDayFlows(state, assetEvents.get(eventDate)!)
         }
       }
 
-      // Add backstop events before start date
-      for (const [eventDate, events] of backstopTokenEventsByDate) {
-        if (eventDate < firstDate) {
-          cumBackstopTokens.depositedTokens += events.depositedTokens
-          cumBackstopTokens.withdrawnTokens += events.withdrawnTokens
-          cumBackstopTokens.depositedUsd += events.depositedUsd
-        }
+      const earlyBackstopDates = [...backstopTokenEventsByDate.keys()].filter(d => d < firstDate).sort()
+      for (const eventDate of earlyBackstopDates) {
+        applyDayFlows(backstopState, backstopTokenEventsByDate.get(eventDate)!)
       }
 
       // Add claims before start date
@@ -312,48 +377,49 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Build cumulative token values by date for each asset
-    const lendingCumTokensByAssetByDate = new Map<string, Map<string, {
-      depositedTokens: number
-      withdrawnTokens: number
-      depositedUsd: number
-    }>>()
-
-    const backstopCumTokensByDate = new Map<string, {
-      depositedTokens: number
-      withdrawnTokens: number
-      depositedUsd: number
-    }>()
+    // Snapshot the running state per date for each asset
+    interface CostBasisSnapshot {
+      principal: number
+      cost: number
+      realizedYieldUsd: number
+    }
+    const lendingStateByAssetByDate = new Map<string, Map<string, CostBasisSnapshot>>()
+    const backstopStateByDate = new Map<string, CostBasisSnapshot>()
 
     for (const date of allDates) {
-      // Update lending cumulative tokens for each asset
       for (const [assetAddress, assetEvents] of lendingTokenEventsByAssetByDate) {
-        const cumData = cumLendingTokensByAsset.get(assetAddress)!
+        let state = lendingStateByAsset.get(assetAddress)
+        if (!state) {
+          state = newCostBasisState()
+          lendingStateByAsset.set(assetAddress, state)
+        }
         const dateEvents = assetEvents.get(date)
         if (dateEvents) {
-          cumData.depositedTokens += dateEvents.depositedTokens
-          cumData.withdrawnTokens += dateEvents.withdrawnTokens
-          cumData.depositedUsd += dateEvents.depositedUsd
+          applyDayFlows(state, dateEvents)
         }
-        // Store snapshot for this date
-        let assetDateMap = lendingCumTokensByAssetByDate.get(assetAddress)
+        let assetDateMap = lendingStateByAssetByDate.get(assetAddress)
         if (!assetDateMap) {
           assetDateMap = new Map()
-          lendingCumTokensByAssetByDate.set(assetAddress, assetDateMap)
+          lendingStateByAssetByDate.set(assetAddress, assetDateMap)
         }
-        assetDateMap.set(date, { ...cumData })
+        assetDateMap.set(date, {
+          principal: state.principal,
+          cost: state.cost,
+          realizedYieldUsd: state.realizedYieldUsd,
+        })
       }
 
-      // Update backstop cumulative tokens
       const backstopDateEvents = backstopTokenEventsByDate.get(date)
       if (backstopDateEvents) {
-        cumBackstopTokens.depositedTokens += backstopDateEvents.depositedTokens
-        cumBackstopTokens.withdrawnTokens += backstopDateEvents.withdrawnTokens
-        cumBackstopTokens.depositedUsd += backstopDateEvents.depositedUsd
+        applyDayFlows(backstopState, backstopDateEvents)
       }
-      backstopCumTokensByDate.set(date, { ...cumBackstopTokens })
+      backstopStateByDate.set(date, {
+        principal: backstopState.principal,
+        cost: backstopState.cost,
+        realizedYieldUsd: backstopState.realizedYieldUsd,
+      })
 
-      // Update realized P&L
+      // Update realized P&L from claims
       const claims = claimsByDate.get(date)
       if (claims) {
         cumRealizedPnl += claims
@@ -418,6 +484,7 @@ export async function GET(request: NextRequest) {
       let lendingValue = 0
       let lendingProtocolYield = 0
       let lendingCostBasis = 0
+      let lendingRealizedYield = 0
 
       for (const [assetAddress, balanceByDate] of lendingBalanceByDateByAsset) {
         const prices = pricesByAsset.get(assetAddress)
@@ -425,19 +492,19 @@ export async function GET(request: NextRequest) {
         const price = priceData?.price || 0
         const balance = balanceByDate.get(date) || 0
 
-        // Get cumulative token deposits/withdrawals for this asset on this date
-        const assetCumTokens = lendingCumTokensByAssetByDate.get(assetAddress)
-        const cumTokens = assetCumTokens?.get(date) || { depositedTokens: 0, withdrawnTokens: 0, depositedUsd: 0 }
+        // Share-aware state as of this date (principal excludes withdrawn yield)
+        const stateAtDate = lendingStateByAssetByDate.get(assetAddress)?.get(date)
+          || { principal: 0, cost: 0, realizedYieldUsd: 0 }
 
-        const netDepositedTokens = cumTokens.depositedTokens - cumTokens.withdrawnTokens
-        const earnedTokens = balance - netDepositedTokens
+        const earnedTokens = balance - stateAtDate.principal
 
-        // Protocol yield = earned tokens × current price
+        // Protocol yield still held = earned tokens × current price
         const protocolYieldUsd = earnedTokens * price
 
         lendingValue += balance * price
         lendingProtocolYield += protocolYieldUsd
-        lendingCostBasis += cumTokens.depositedUsd // Track cost basis in USD for reference
+        lendingCostBasis += stateAtDate.cost // Remaining cost basis of open principal
+        lendingRealizedYield += stateAtDate.realizedYieldUsd
       }
 
       // Calculate backstop protocol yield for this date
@@ -455,24 +522,29 @@ export async function GET(request: NextRequest) {
         totalBackstopLpTokens += lpTokens
       }
 
-      const backstopCumTokens = backstopCumTokensByDate.get(date) || { depositedTokens: 0, withdrawnTokens: 0, depositedUsd: 0 }
-      const netBackstopDepositedTokens = backstopCumTokens.depositedTokens - backstopCumTokens.withdrawnTokens
-      const backstopEarnedTokens = totalBackstopLpTokens - netBackstopDepositedTokens
+      const backstopStateAtDate = backstopStateByDate.get(date)
+        || { principal: 0, cost: 0, realizedYieldUsd: 0 }
+      const backstopEarnedTokens = totalBackstopLpTokens - backstopStateAtDate.principal
 
       backstopValue = totalBackstopLpTokens * lpPrice
       backstopProtocolYield = backstopEarnedTokens * lpPrice
-      backstopCostBasis = backstopCumTokens.depositedUsd
+      backstopCostBasis = backstopStateAtDate.cost
 
       const portfolioValue = lendingValue + backstopValue
       const costBasis = lendingCostBasis + backstopCostBasis
-      const realizedPnl = realizedPnlByDate.get(date) || 0
 
-      // Unrealized P&L = protocol yield (tokens earned × price)
+      // Realized = claims (emissions) + yield realized by withdrawals
+      // (valued at withdrawal-date prices, so it doesn't wiggle with later prices)
+      const realizedPnl = (realizedPnlByDate.get(date) || 0)
+        + lendingRealizedYield
+        + backstopStateAtDate.realizedYieldUsd
+
+      // Unrealized P&L = protocol yield still held (tokens earned × price)
       const lendingUnrealizedPnl = lendingProtocolYield
       const backstopUnrealizedPnl = backstopProtocolYield
       const unrealizedPnl = lendingProtocolYield + backstopProtocolYield
 
-      // Total P&L = unrealized (protocol yield) + realized (claims)
+      // Total P&L = unrealized (still-held protocol yield) + realized (claims + withdrawn yield)
       const totalPnl = unrealizedPnl + realizedPnl
 
       history.push({

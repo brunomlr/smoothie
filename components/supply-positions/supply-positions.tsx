@@ -118,11 +118,12 @@ const BackstopPositionItem = memo(function BackstopPositionItem({
     return `${hours}h`;
   }, [backstopPosition.q4wChunks]);
 
-  // Calculate yield values
-  const lpTokenPrice =
-    backstopPosition.lpTokens > 0
-      ? backstopPosition.lpTokensUsd / backstopPosition.lpTokens
-      : 0;
+  // Calculate yield values. Derive the LP price from the Q4W-INCLUSIVE totals:
+  // when the position is fully queued, lpTokens is 0 and the old lpTokensUsd /
+  // lpTokens division returned 0, rendering "+$0.00" next to a nonzero percent.
+  const totalLpTokens = backstopPosition.lpTokens + backstopPosition.q4wLpTokens;
+  const totalLpUsd = backstopPosition.lpTokensUsd + backstopPosition.q4wLpTokensUsd;
+  const lpTokenPrice = totalLpTokens > 0 ? totalLpUsd / totalLpTokens : 0;
   const yieldUsd = backstopPosition.yieldLp * lpTokenPrice;
 
   return (

@@ -95,13 +95,17 @@ function buildBalanceData(snapshot: BlendWalletSnapshot | undefined): BalanceDat
     0
   )
 
-  // Include backstop balance in total
-  const totalBackstopUsd = snapshot.totalBackstopUsd ?? 0
+  // Include backstop balance in total - WITH queued withdrawals, which are
+  // still the user's capital (they keep appreciating; only emissions stop).
+  // The cost basis used for the header yield is Q4W-inclusive, so the balance
+  // must be too, or queuing a withdrawal shows up as a fake loss.
+  const totalBackstopUsd = (snapshot.totalBackstopUsd ?? 0) + (snapshot.totalBackstopQ4wUsd ?? 0)
   const totalBalanceUsd = totalSupplyUsd + totalBackstopUsd
 
   const weightedSupplyApy = snapshot.weightedSupplyApy ?? 0
-  // APY is already the effective annual rate (compound rate), so annual yield is simply Balance × APY
-  const estimatedAnnualYield = (totalSupplyUsd * weightedSupplyApy) / 100
+  // APY is already the effective annual rate (compound rate), so annual yield is
+  // Balance × APY, using the same base the APY was weighted over
+  const estimatedAnnualYield = (totalBalanceUsd * weightedSupplyApy) / 100
 
   return {
     balance: formatUsdWithDecimals(totalBalanceUsd),
@@ -287,8 +291,9 @@ export function useBlendPositions(walletPublicKey: string | undefined, totalCost
     return enrichBackstopPositionsWithYield(positions, costBases)
   }, [snapshotQuery.data, costBasisQuery.data]);
 
+  // Q4W-inclusive: queued withdrawals are still the user's capital
   const totalBackstopUsd = useMemo(
-    () => query.data?.totalBackstopUsd ?? 0,
+    () => (query.data?.totalBackstopUsd ?? 0) + (query.data?.totalBackstopQ4wUsd ?? 0),
     [query.data]
   );
 

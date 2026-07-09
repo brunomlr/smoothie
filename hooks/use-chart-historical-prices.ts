@@ -99,7 +99,7 @@ export function useChartHistoricalPrices({
       const now = new Date()
       const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
       if (date >= today) {
-        return sdkPrices.get(tokenAddress) || 1
+        return sdkPrices.get(tokenAddress) || 0
       }
 
       // For past dates, check if we have historical price data
@@ -112,7 +112,7 @@ export function useChartHistoricalPrices({
       }
 
       // Fallback to SDK price if no historical data for past date
-      return sdkPrices.get(tokenAddress) || 1
+      return sdkPrices.get(tokenAddress) || 0
     }
   }, [pricesMap, sdkPrices])
 

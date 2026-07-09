@@ -7,13 +7,16 @@
 
 import { NextRequest } from "next/server";
 import {
+  PoolV1,
   PoolV2,
   PoolMetadata,
   Backstop,
   TokenMetadata,
   FixedMath,
+  Version,
 } from "@blend-capital/blend-sdk";
 import { getBlendNetwork } from "@/lib/blend/network";
+import { metadataRepository } from "@/lib/db/repositories/metadata-repository";
 import {
   simulateApyChange,
   type SimulationAction,
@@ -66,9 +69,26 @@ async function loadReserveConfig(
   const network = getBlendNetwork();
 
   try {
+    // Resolve the pool version: loading a V1 pool through the V2 class either
+    // throws on emission parsing or misreads bRate/dRate (9 vs 12 decimals,
+    // 1000x off) and the IR modifier (9 vs 7 decimals, 100x off)
+    let version = Version.V2;
+    try {
+      const pools = await metadataRepository.getPools();
+      const dbPool = pools.find((p) => p.pool_id === poolId);
+      if (dbPool?.version === 1) {
+        version = Version.V1;
+      }
+    } catch {
+      // DB unavailable - default to V2
+    }
+
     // Load pool and metadata
     const metadata = await PoolMetadata.load(network, poolId);
-    const pool = await PoolV2.loadWithMetadata(network, poolId, metadata);
+    const pool =
+      version === Version.V1
+        ? await PoolV1.loadWithMetadata(network, poolId, metadata)
+        : await PoolV2.loadWithMetadata(network, poolId, metadata);
 
     // Get reserve
     const reserve = pool.reserves.get(assetId);
@@ -140,10 +160,20 @@ async function loadReserveConfig(
       }
     }
 
-    // Estimate asset price (for stablecoins use $1, otherwise approximate)
-    // In a real implementation, you'd fetch this from an oracle or price feed
-    const stablecoins = ["USDC", "USDT", "EURC", "USDGLO"];
-    const assetPrice = stablecoins.includes(tokenSymbol.toUpperCase()) ? 1 : 1;
+    // Fetch the asset price from the pool's oracle. The previous hardcoded $1
+    // made the BLND emission APY wrong by the asset's actual price (e.g. ~3x
+    // understated for XLM). If the oracle is unavailable, leave null so the
+    // emission APY is omitted rather than wrong.
+    let assetPrice: number | null = null;
+    try {
+      const oracle = await pool.loadOracle();
+      const priceFloat = oracle.getPriceFloat(assetId);
+      if (priceFloat != null && Number.isFinite(priceFloat) && priceFloat > 0) {
+        assetPrice = priceFloat;
+      }
+    } catch {
+      // Oracle load failed - emission APY will be omitted
+    }
 
     // Convert config values from fixed point (7 decimals) to float
     const reserveConfig: ReserveConfig = {

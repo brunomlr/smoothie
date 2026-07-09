@@ -11,6 +11,7 @@ import type { ChartDataPoint, EarningsStats, PositionChange } from "@/types/bala
 interface BlendPosition {
   id: string
   supplyAmount: number
+  supplyUsdValue?: number
   price?: { usdPrice?: number } | null
   assetId?: string
 }
@@ -123,9 +124,18 @@ export function useComputedBalance(
         } as AssetCardData
       }
 
-      // Get USD price for this asset from SDK
+      // Get USD price for this asset from SDK. If unknown, skip the yield
+      // calculation entirely - converting a token cost basis at $1 fabricates
+      // arbitrary gains/losses (e.g. an XLM cost basis inflated ~3x).
       const assetAddress = asset.id.includes('-') ? asset.id.split('-')[1] : asset.id
-      const usdPrice = assetPriceMap.get(assetAddress) || 1
+      const usdPrice = assetPriceMap.get(assetAddress)
+      if (!usdPrice || usdPrice <= 0) {
+        return {
+          ...asset,
+          earnedYield: 0,
+          yieldPercentage: 0,
+        } as AssetCardData
+      }
 
       // Convert cost basis from tokens to USD
       const costBasisUsd = costBasisTokens * usdPrice
@@ -159,10 +169,16 @@ export function useComputedBalance(
         const costBasisTokens = poolAssetCostBasisMap.get(compositeKey)
 
         if (costBasisTokens !== undefined && costBasisTokens > 0) {
-          // Convert cost basis from tokens to USD using SDK price
-          const usdPrice = position.price?.usdPrice || 1
-          const costBasisUsd = costBasisTokens * usdPrice
-          totalCostBasisUsd += costBasisUsd
+          // Convert cost basis from tokens to USD using SDK price.
+          // If the price is unknown, use the position's current value as a
+          // conservative cost basis (0 yield) instead of pricing at $1 -
+          // the balance side of the yield formula also treats it as $0.
+          const usdPrice = position.price?.usdPrice
+          if (usdPrice && usdPrice > 0) {
+            totalCostBasisUsd += costBasisTokens * usdPrice
+          } else {
+            totalCostBasisUsd += position.supplyUsdValue ?? 0
+          }
         }
       })
     }
@@ -316,7 +332,9 @@ export function useComputedBalance(
         // When showPriceChanges is ON, use historical price if available
         const usdPrice = showPriceChanges && historicalPrices?.hasHistoricalData
           ? historicalPrices.getPrice(assetAddress, date)
-          : (assetPriceMap.get(assetAddress) || 1)
+          : (assetPriceMap.get(assetAddress) || 0)
+        // No known price: skip this asset rather than fabricating $1 values
+        if (!usdPrice || usdPrice <= 0) return
 
         // Convert token amounts to USD and add to totals
         totalBalance += (point.total || 0) * usdPrice

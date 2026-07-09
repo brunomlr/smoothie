@@ -1,9 +1,40 @@
+import { after } from 'next/server'
 import { redis, isRedisEnabled } from './client'
 
 const RATES_REFRESH_KEY = 'rates:last-refresh'
 const RATES_LOCK_KEY = 'rates:refresh-lock'
 const RATES_REFRESH_INTERVAL_MS = 15 * 60 * 1000 // 15 minutes
 const LOCK_TTL_SECONDS = 60 // Lock expires after 60 seconds (in case refresh fails)
+
+/**
+ * Run a Redis-coordinated daily_rates refresh in the background, without
+ * blocking the response.
+ *
+ * Uses Next's `after()` instead of a dangling promise: on serverless runtimes,
+ * execution can be frozen as soon as the response is sent, so fire-and-forget
+ * work may never complete — the lock would be acquired but `markRatesRefreshed`
+ * never called, causing every subsequent request (after the 60s lock TTL) to
+ * kick off another doomed refresh. `after()` keeps the instance alive until
+ * the refresh finishes.
+ *
+ * All routes must use this single Redis-coordinated path — a second, in-memory
+ * dedupe runs one refresh per warm instance and never updates the shared
+ * timestamp, stampeding Postgres with duplicate REFRESH MATERIALIZED VIEW.
+ */
+export function ensureFreshRatesInBackground(refresh: () => Promise<void>): void {
+  after(async () => {
+    if (await shouldRefreshRates()) {
+      try {
+        await refresh()
+        await markRatesRefreshed()
+      } catch (error) {
+        console.error('[Redis] daily_rates refresh failed:', error)
+        // Release the lock so other instances can retry
+        await releaseRatesLock()
+      }
+    }
+  })
+}
 
 /**
  * Try to acquire a lock for refreshing rates.

@@ -67,25 +67,38 @@ export function useBlendPositionsMulti(walletPublicKeys: string[] | undefined) {
     // Sum totals across wallets
     const totalSupplyUsd = snapshots.reduce((sum, s) =>
       sum + s.positions.reduce((acc, p) => acc + p.supplyUsdValue, 0), 0)
-    const totalBackstopUsd = snapshots.reduce((sum, s) =>
+    const totalBorrowUsd = snapshots.reduce((sum, s) =>
+      sum + s.positions.reduce((acc, p) => acc + p.borrowUsdValue, 0), 0)
+    // Available (non-queued) backstop is the APY weight base; the exposed
+    // total also includes queued withdrawals, which remain the user's capital
+    const totalBackstopAvailableUsd = snapshots.reduce((sum, s) =>
       sum + (s.totalBackstopUsd ?? 0), 0)
+    const totalBackstopUsd = totalBackstopAvailableUsd + snapshots.reduce((sum, s) =>
+      sum + (s.totalBackstopQ4wUsd ?? 0), 0)
     const totalEmissions = snapshots.reduce((sum, s) =>
       sum + (s.totalEmissions ?? 0), 0)
 
-    // Calculate weighted APYs
-    const weightedSupplyApy = totalSupplyUsd > 0
-      ? snapshots.reduce((sum, s) => {
-          const walletSupply = s.positions.reduce((acc, p) => acc + p.supplyUsdValue, 0)
-          return sum + (s.weightedSupplyApy ?? 0) * walletSupply
-        }, 0) / totalSupplyUsd
-      : 0
+    // Calculate weighted APYs from RAW position components, using the same
+    // bases the server uses per wallet (supply+backstop for supply APY;
+    // supply+borrow+backstop for BLND APY). Re-averaging the per-wallet
+    // averages by supply-only weights skewed the total whenever any wallet
+    // held backstop or borrow positions.
+    const supplyApyBase = totalSupplyUsd + totalBackstopAvailableUsd
+    const supplyApyValue = snapshots.reduce((sum, s) =>
+      sum
+        + s.positions.reduce((acc, p) => acc + p.supplyUsdValue * (p.supplyApy || 0), 0)
+        + (s.backstopPositions ?? []).reduce((acc, bp) => acc + bp.lpTokensUsd * (bp.interestApr || 0), 0),
+      0)
+    const weightedSupplyApy = supplyApyBase > 0 ? supplyApyValue / supplyApyBase : 0
 
-    const weightedBlndApy = totalSupplyUsd > 0
-      ? snapshots.reduce((sum, s) => {
-          const walletSupply = s.positions.reduce((acc, p) => acc + p.supplyUsdValue, 0)
-          return sum + (s.weightedBlndApy ?? 0) * walletSupply
-        }, 0) / totalSupplyUsd
-      : 0
+    const blndApyBase = totalSupplyUsd + totalBorrowUsd + totalBackstopAvailableUsd
+    const blndApyValue = snapshots.reduce((sum, s) =>
+      sum
+        + s.positions.reduce((acc, p) =>
+            acc + p.supplyUsdValue * (p.blndApy || 0) + p.borrowUsdValue * (p.borrowBlndApy || 0), 0)
+        + (s.backstopPositions ?? []).reduce((acc, bp) => acc + bp.lpTokensUsd * (bp.emissionApy || 0), 0),
+      0)
+    const weightedBlndApy = blndApyBase > 0 ? blndApyValue / blndApyBase : 0
 
     // Use prices from first wallet (they should be the same across wallets)
     const blndPrice = snapshots[0]?.blndPrice ?? null
@@ -173,7 +186,8 @@ export function useBlendPositionsMulti(walletPublicKeys: string[] | undefined) {
     }
 
     const totalBalance = aggregatedData.totalSupplyUsd + aggregatedData.totalBackstopUsd
-    const estimatedAnnualYield = (aggregatedData.totalSupplyUsd * aggregatedData.weightedSupplyApy) / 100
+    // Multiply by the same base the APY was weighted over (supply + backstop)
+    const estimatedAnnualYield = (totalBalance * aggregatedData.weightedSupplyApy) / 100
 
     return {
       balance: formatUsdWithDecimals(totalBalance),

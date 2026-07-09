@@ -16,6 +16,7 @@ import { cacheKey, CACHE_TTL } from '@/lib/redis'
 export interface BackstopEventWithPrice {
   date: string
   lpTokens: number
+  shares: number // backstop shares burned/minted; LP amounts include share appreciation, shares don't
   priceAtEvent: number
   usdValue: number
   poolAddress: string
@@ -62,7 +63,9 @@ export const GET = createApiHandler<BackstopEventsWithPricesResponse>({
     }
 
     // Resolve demo wallet aliases to real addresses
-    userAddresses = userAddresses.map(addr => resolveWalletAddress(addr))
+    // Dedupe after alias resolution: the same wallet listed twice (or an alias
+  // plus its resolved address) would double-count every event in the totals
+  userAddresses = [...new Set(userAddresses.map(addr => resolveWalletAddress(addr)))]
 
     const sdkLpPrice = parseFloat(searchParams.get('sdkLpPrice') || '0') || 0
     const poolAddress = optionalString(searchParams, 'poolAddress')
@@ -82,6 +85,7 @@ export const GET = createApiHandler<BackstopEventsWithPricesResponse>({
       deposits: combinedDeposits.map(d => ({
         date: d.date,
         lpTokens: d.lpTokens,
+        shares: d.shares,
         priceAtEvent: d.priceAtDeposit,
         usdValue: d.usdValue,
         poolAddress: d.poolAddress,
@@ -90,6 +94,7 @@ export const GET = createApiHandler<BackstopEventsWithPricesResponse>({
       withdrawals: combinedWithdrawals.map(w => ({
         date: w.date,
         lpTokens: w.lpTokens,
+        shares: w.shares,
         priceAtEvent: w.priceAtWithdrawal,
         usdValue: w.usdValue,
         poolAddress: w.poolAddress,

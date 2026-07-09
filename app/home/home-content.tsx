@@ -426,6 +426,7 @@ export function HomeContent() {
 
             <TabsContent value="borrows" className="space-y-4">
               <BorrowPositions
+                isLoading={isLoading}
                 blendSnapshot={blendSnapshot}
                 enrichedAssetCards={enrichedAssetCardsWithBreakdown}
                 poolAssetBorrowCostBasisMap={poolAssetBorrowCostBasisMap}

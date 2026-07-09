@@ -128,8 +128,21 @@ export function parseJson<T>(
 }
 
 /**
- * Get user timezone from params, defaulting to UTC
+ * Get user timezone from params, defaulting to UTC.
+ *
+ * Validates the value is a real IANA timezone: the string reaches SQL
+ * `AT TIME ZONE` clauses, where garbage input throws a Postgres error (500),
+ * and unvalidated values inflate cache-key cardinality.
  */
 export function getTimezone(params: URLSearchParams): string {
-  return params.get('timezone') || 'UTC'
+  const timezone = params.get('timezone')
+  if (!timezone) return 'UTC'
+  try {
+    // Throws RangeError for invalid IANA timezone names
+    new Intl.DateTimeFormat('en-US', { timeZone: timezone })
+    return timezone
+  } catch {
+    console.warn(`[Query Parser] Invalid timezone "${timezone}", falling back to UTC`)
+    return 'UTC'
+  }
 }

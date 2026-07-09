@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { eventsRepository } from '@/lib/db/events-repository'
 import { LP_TOKEN_ADDRESS, BLND_TOKEN_ADDRESS } from '@/lib/constants'
-import { resolveWalletAddress } from '@/lib/api'
+import { resolveWalletAddress, getTimezone } from '@/lib/api'
 
 export type PnlPeriodType = '1W' | '1M' | '6M'
 
@@ -71,10 +71,14 @@ function generatePeriodBoundaries(
   })
 
   if (period === '6M') {
-    // Monthly bars for 6 months
+    // Monthly bars for 6 months. Derive the current month from the USER's
+    // timezone (todayStr) - using the server's local calendar could bucket
+    // and label a whole month off for users behind the server clock.
+    const [todayYear, todayMonth] = todayStr.split('-').map(Number)
+
     for (let i = 5; i >= 0; i--) {
-      const monthDate = new Date(now.getFullYear(), now.getMonth() - i, 1)
-      const monthEndDate = new Date(now.getFullYear(), now.getMonth() - i + 1, 0)
+      const monthDate = new Date(todayYear, todayMonth - 1 - i, 1)
+      const monthEndDate = new Date(todayYear, todayMonth - i, 0)
 
       const monthStart = `${monthDate.getFullYear()}-${String(monthDate.getMonth() + 1).padStart(2, '0')}-01`
       let monthEnd: string
@@ -90,7 +94,9 @@ function generatePeriodBoundaries(
       boundaries.push({
         start: monthStart,
         end: monthEnd,
-        label: monthLabelFormatter.format(monthDate),
+        // Format the label from the date string, anchored at noon UTC so the
+        // month can't shift when rendered in the user's timezone
+        label: monthLabelFormatter.format(new Date(monthStart + 'T12:00:00Z')),
       })
     }
   } else {
@@ -129,7 +135,7 @@ export async function GET(request: NextRequest) {
   const userAddress = searchParams.get('userAddress')
   const userAddressesParam = searchParams.get('userAddresses')
   const period = (searchParams.get('period') || '1W') as PnlPeriodType
-  const timezone = searchParams.get('timezone') || 'UTC'
+  const timezone = getTimezone(searchParams)
   const sdkPricesParam = searchParams.get('sdkPrices')
   const sdkBlndPriceParam = searchParams.get('sdkBlndPrice')
   const sdkLpPriceParam = searchParams.get('sdkLpPrice')
@@ -154,7 +160,9 @@ export async function GET(request: NextRequest) {
   }
 
   // Resolve demo wallet aliases to real addresses
-  userAddresses = userAddresses.map(addr => resolveWalletAddress(addr))
+  // Dedupe after alias resolution: the same wallet listed twice (or an alias
+  // plus its resolved address) would double-count every event in the totals
+  userAddresses = [...new Set(userAddresses.map(addr => resolveWalletAddress(addr)))]
 
   // Parse parameters
   let sdkPrices: Record<string, number> = {}
@@ -215,6 +223,15 @@ export async function GET(request: NextRequest) {
     const allUserActionsArrays = await Promise.all(allUserActionsPromises)
     const userActions = allUserActionsArrays.flat()
 
+    // Liquidations (fill_auction) move collateral and debt without supply/withdraw/
+    // borrow/repay events. Without them in the flow adjustment, a seized position
+    // shows up as a huge fake negative "interest" bar. Amounts come pre-converted
+    // to underlying via daily rates.
+    const liquidationFlowsArrays = await Promise.all(
+      userAddresses.map(addr => eventsRepository.getLiquidationFlows(addr))
+    )
+    const liquidationFlows = liquidationFlowsArrays.flat()
+
     // Get unique assets and separate supply vs borrow pool-asset pairs
     const uniqueAssets = new Set<string>()
     const poolAssetPairs = new Map<string, { poolId: string; assetAddress: string }>() // Supply positions
@@ -243,6 +260,24 @@ export async function GET(request: NextRequest) {
               assetAddress: action.asset_address,
             })
           }
+        }
+      }
+    }
+
+    // Include pool-assets touched only by liquidations (seized collateral / transferred debt)
+    for (const flow of liquidationFlows) {
+      if (flow.lot_asset) {
+        uniqueAssets.add(flow.lot_asset)
+        const lotKey = `${flow.pool_id}-${flow.lot_asset}`
+        if (!poolAssetPairs.has(lotKey)) {
+          poolAssetPairs.set(lotKey, { poolId: flow.pool_id, assetAddress: flow.lot_asset })
+        }
+      }
+      if (flow.bid_asset) {
+        uniqueAssets.add(flow.bid_asset)
+        const bidKey = `${flow.pool_id}-${flow.bid_asset}`
+        if (!borrowPoolAssetPairs.has(bidKey)) {
+          borrowPoolAssetPairs.set(bidKey, { poolId: flow.pool_id, assetAddress: flow.bid_asset })
         }
       }
     }
@@ -316,9 +351,11 @@ export async function GET(request: NextRequest) {
       withdrawals: allBackstopEvents.flatMap(e => e.withdrawals),
     }
 
-    // If no SDK positions provided, discover pools from events
-    if (backstopPoolAddresses.length === 0) {
-      const poolsFromEvents = new Set<string>()
+    // Union SDK pools with pools discovered from events. SDK positions only cover
+    // pools with a CURRENT balance — a pool fully exited mid-window would otherwise
+    // lose its history and flows for the earlier bars.
+    {
+      const poolsFromEvents = new Set<string>(backstopPoolAddresses)
       backstopEventsData.deposits.forEach(d => poolsFromEvents.add(d.poolAddress))
       backstopEventsData.withdrawals.forEach(w => poolsFromEvents.add(w.poolAddress))
       backstopPoolAddresses = Array.from(poolsFromEvents).filter(p => p) // Filter out empty
@@ -784,6 +821,21 @@ export async function GET(request: NextRequest) {
           }
         }
 
+        // Liquidations move collateral without supply/withdraw events:
+        // the liquidated user loses the lot, the liquidator gains it
+        const periodLiquidationLots = liquidationFlows.filter(f => {
+          if (f.pool_id !== poolId || f.lot_asset !== assetAddress || f.lot_underlying <= 0) return false
+          const flowDate = dateFormatter.format(new Date(f.ledger_closed_at))
+          return flowDate >= boundary.start && flowDate <= boundary.end
+        })
+        for (const flow of periodLiquidationLots) {
+          if (flow.role === 'liquidated') {
+            withdrawalsTokens += flow.lot_underlying
+          } else {
+            depositsTokens += flow.lot_underlying
+          }
+        }
+
         const netDeposited = depositsTokens - withdrawalsTokens
 
         // Calculate protocol yield (supply APY)
@@ -847,6 +899,17 @@ export async function GET(request: NextRequest) {
             priceChangeOnDeposits += tokens * (priceAtEnd - priceAtAction)
           } else if (action.action_type === 'withdraw' || action.action_type === 'withdraw_collateral') {
             priceChangeLostOnWithdrawals += tokens * (priceAtEnd - priceAtAction)
+          }
+        }
+
+        // Liquidation lots enter/leave at the event-date price, like deposits/withdrawals
+        for (const flow of periodLiquidationLots) {
+          const flowDate = dateFormatter.format(new Date(flow.ledger_closed_at))
+          const priceAtFlow = getPriceAtDate(assetAddress, flowDate)
+          if (flow.role === 'liquidated') {
+            priceChangeLostOnWithdrawals += flow.lot_underlying * (priceAtEnd - priceAtFlow)
+          } else {
+            priceChangeOnDeposits += flow.lot_underlying * (priceAtEnd - priceAtFlow)
           }
         }
 
@@ -1085,6 +1148,22 @@ export async function GET(request: NextRequest) {
           }
         }
 
+        // Liquidations move debt without borrow/repay events:
+        // the liquidated user's debt is cleared (like a repay),
+        // the liquidator takes it on (like a borrow)
+        const periodLiquidationBids = liquidationFlows.filter(f => {
+          if (f.pool_id !== poolId || f.bid_asset !== assetAddress || f.bid_underlying <= 0) return false
+          const flowDate = dateFormatter.format(new Date(f.ledger_closed_at))
+          return flowDate >= boundary.start && flowDate <= boundary.end
+        })
+        for (const flow of periodLiquidationBids) {
+          if (flow.role === 'liquidated') {
+            repaysTokens += flow.bid_underlying
+          } else {
+            borrowsTokens += flow.bid_underlying
+          }
+        }
+
         const netBorrowed = borrowsTokens - repaysTokens
 
         // Calculate borrow interest cost for the period
@@ -1099,11 +1178,12 @@ export async function GET(request: NextRequest) {
           // We have either historical debt data OR activity in this period - safe to calculate
           interestTokens = (debtAtEnd - debtAtStart) - netBorrowed
 
-          // SANITY CHECK: Interest should not exceed ~1% of debt per day (365% APY is unrealistic)
-          // If it does, there's likely a data mismatch between SDK and historical data
+          // SANITY CHECK: Interest should not exceed ~1% of debt PER DAY (365% APY is
+          // unrealistic). Scale by the bucket length: a monthly bar legitimately
+          // accrues ~30x a daily bar's interest.
           const maxReasonableInterestRatio = 0.01 // 1% per day max
           const avgDebt = (debtAtStart + debtAtEnd) / 2
-          if (avgDebt > 0 && Math.abs(interestTokens) > avgDebt * maxReasonableInterestRatio) {
+          if (avgDebt > 0 && Math.abs(interestTokens) > avgDebt * maxReasonableInterestRatio * periodDays) {
             // Interest is unreasonably large, likely data mismatch - skip this period
             interestTokens = 0
           }
@@ -1114,6 +1194,41 @@ export async function GET(request: NextRequest) {
 
         // Borrow interest is a cost (negative), so we subtract it
         borrowInterestCost -= periodBorrowInterestCost
+
+        // Price change on debt: a price move on outstanding debt changes net PnL
+        // with the OPPOSITE sign of the supply side (price up = more expensive to
+        // repay). Mirrors the supply-side decomposition, negated, so the bar total
+        // reflects the true flow-adjusted change in net portfolio value.
+        const debtPriceChangeOnStart = debtAtStart * (priceAtEnd - priceAtStart)
+        let debtPriceChangeOnBorrows = 0
+        let debtPriceChangeOnRepays = 0
+
+        for (const action of periodBorrowActions) {
+          const rawAmount = action.amount_underlying
+          if (rawAmount === null) continue
+          const decimals = action.asset_decimals || 7
+          const tokens = rawAmount / Math.pow(10, decimals)
+          const actionDate = dateFormatter.format(new Date(action.ledger_closed_at))
+          const priceAtAction = getPriceAtDate(assetAddress, actionDate)
+
+          if (action.action_type === 'borrow') {
+            debtPriceChangeOnBorrows += tokens * (priceAtEnd - priceAtAction)
+          } else if (action.action_type === 'repay') {
+            debtPriceChangeOnRepays += tokens * (priceAtEnd - priceAtAction)
+          }
+        }
+
+        for (const flow of periodLiquidationBids) {
+          const flowDate = dateFormatter.format(new Date(flow.ledger_closed_at))
+          const priceAtFlow = getPriceAtDate(assetAddress, flowDate)
+          if (flow.role === 'liquidated') {
+            debtPriceChangeOnRepays += flow.bid_underlying * (priceAtEnd - priceAtFlow)
+          } else {
+            debtPriceChangeOnBorrows += flow.bid_underlying * (priceAtEnd - priceAtFlow)
+          }
+        }
+
+        priceChange -= debtPriceChangeOnStart + debtPriceChangeOnBorrows - debtPriceChangeOnRepays
 
         // Calculate borrow BLND emissions using time-weighted balance
         // (periodDays and periodEndDate are calculated once per period at the start of the loop)

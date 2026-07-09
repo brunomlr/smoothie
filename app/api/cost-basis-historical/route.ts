@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { eventsRepository } from '@/lib/db/events-repository'
-import { HistoricalYieldBreakdown } from '@/lib/balance-history-utils'
+import { HistoricalYieldBreakdown, computeShareAwareCostBasis } from '@/lib/balance-history-utils'
 import { resolveWalletAddress } from '@/lib/api'
 
 export interface AssetYieldBreakdown extends HistoricalYieldBreakdown {
@@ -53,7 +53,9 @@ export async function GET(request: NextRequest) {
   }
 
   // Resolve demo wallet aliases to real addresses
-  userAddresses = userAddresses.map(addr => resolveWalletAddress(addr))
+  // Dedupe after alias resolution: the same wallet listed twice (or an alias
+  // plus its resolved address) would double-count every event in the totals
+  userAddresses = [...new Set(userAddresses.map(addr => resolveWalletAddress(addr)))]
 
   // Parse SDK prices (current prices from SDK for calculating current value)
   let sdkPrices: Record<string, number> = {}
@@ -117,8 +119,8 @@ export async function GET(request: NextRequest) {
 
     // Combine events from all wallets into a single map
     const eventsMap = new Map<string, {
-      deposits: Array<{ date: string; tokens: number; priceAtDeposit: number; usdValue: number }>
-      withdrawals: Array<{ date: string; tokens: number; priceAtWithdrawal: number; usdValue: number }>
+      deposits: Array<{ date: string; tokens: number; shares: number; priceAtDeposit: number; usdValue: number }>
+      withdrawals: Array<{ date: string; tokens: number; shares: number; priceAtWithdrawal: number; usdValue: number }>
     }>()
 
     for (let walletIdx = 0; walletIdx < allEventsMaps.length; walletIdx++) {
@@ -181,21 +183,33 @@ export async function GET(request: NextRequest) {
         return d
       })
 
-      // Calculate using AVERAGE COST METHOD
-      // This ensures the weighted average price reflects actual prices paid
-      const totalDepositedUsd = adjustedDeposits.reduce((sum, d) => sum + d.usdValue, 0)
-      const totalDepositedTokens = adjustedDeposits.reduce((sum, d) => sum + d.tokens, 0)
-      const totalWithdrawnTokens = withdrawals.reduce((sum, w) => sum + w.tokens, 0)
-      const netDepositedTokens = totalDepositedTokens - totalWithdrawnTokens
+      // SHARE-AWARE cost basis: withdrawal amounts are underlying (they include
+      // accrued yield), so cost is reduced by the bToken share fraction each
+      // withdrawal burns — never below 0. Closed positions land at exactly 0
+      // instead of a negative phantom basis, and withdrawn yield is reported
+      // as realized instead of double-counting as still-unrealized.
+      const shareAware = computeShareAwareCostBasis(
+        adjustedDeposits.map(d => ({
+          date: d.date,
+          tokens: d.tokens,
+          shares: d.shares,
+          price: d.priceAtDeposit,
+          usdValue: d.usdValue,
+        })),
+        withdrawals.map(w => ({
+          date: w.date,
+          tokens: w.tokens,
+          shares: w.shares,
+          price: w.priceAtWithdrawal,
+          usdValue: w.usdValue,
+        })),
+      )
 
-      // Weighted average deposit price = total USD deposited / total tokens deposited
-      const weightedAvgPrice = totalDepositedTokens > 0
-        ? totalDepositedUsd / totalDepositedTokens
+      const costBasisHistorical = shareAware.costBasisUsd
+      const netDepositedTokens = shareAware.principalTokens
+      const weightedAvgPrice = netDepositedTokens > 0
+        ? costBasisHistorical / netDepositedTokens
         : sdkPrice
-
-      // Cost basis = remaining tokens × avg deposit price (withdrawals reduce at avg cost)
-      const costRemovedByWithdrawals = totalWithdrawnTokens * weightedAvgPrice
-      const costBasisHistorical = totalDepositedUsd - costRemovedByWithdrawals
 
       // We don't have current balance here (it comes from SDK on client side)
       // So we'll just return the cost basis data and let client calculate the full breakdown
@@ -213,6 +227,10 @@ export async function GET(request: NextRequest) {
         currentValueUsd: 0,
         totalEarnedUsd: 0,
         totalEarnedPercent: 0,
+        // Realized components (from withdrawals, valued at withdrawal-time prices)
+        realizedYieldTokens: shareAware.realizedYieldTokens,
+        realizedYieldUsd: shareAware.realizedYieldUsd,
+        realizedPriceChangeUsd: shareAware.realizedPriceChangeUsd,
       }
 
       totalCostBasisHistorical += costBasisHistorical

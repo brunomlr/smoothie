@@ -7,45 +7,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { eventsRepository } from '@/lib/db/events-repository'
 import { getAnalyticsUserIdFromRequest, captureServerEvent, hashWalletAddress } from '@/lib/analytics-server'
-import { resolveWalletAddress } from '@/lib/api'
-import { getOrSet, cacheKey, todayDate, CACHE_TTL } from '@/lib/redis'
-
-// Track when daily_rates was last refreshed (in-memory cache)
-let lastRatesRefresh: number = 0
-let refreshInFlight = false
-const RATES_REFRESH_INTERVAL_MS = 15 * 60 * 1000 // 15 minutes
-
-/**
- * Triggers a daily_rates refresh in the background when the cache is stale.
- *
- * This is intentionally NOT awaited by the request handler. The view is
- * materialized, so it always has data to serve; the worst case is that one
- * request returns rates that are up to ~15 minutes stale while the refresh
- * runs. `REFRESH MATERIALIZED VIEW CONCURRENTLY` can take several seconds,
- * so blocking the request on it made one unlucky user every 15 minutes wait
- * for the entire refresh before any chart data was returned.
- */
-function ensureFreshRates(): void {
-  const now = Date.now()
-  // Skip if a refresh is already running or the cache is still fresh.
-  if (refreshInFlight || now - lastRatesRefresh <= RATES_REFRESH_INTERVAL_MS) {
-    return
-  }
-  refreshInFlight = true
-  // Optimistically advance the timer so concurrent requests don't also trigger
-  // a refresh while this one is in flight.
-  lastRatesRefresh = now
-  eventsRepository
-    .refreshDailyRates()
-    .catch(() => {
-      // Refresh failed - roll back the timer so the next request retries
-      // rather than waiting out the full interval on stale data.
-      lastRatesRefresh = 0
-    })
-    .finally(() => {
-      refreshInFlight = false
-    })
-}
+import { resolveWalletAddress, getTimezone } from '@/lib/api'
+import { get, set, cacheKey, todayDate, CACHE_TTL, ensureFreshRatesInBackground } from '@/lib/redis'
 
 export async function GET(request: NextRequest) {
   try {
@@ -54,7 +17,7 @@ export async function GET(request: NextRequest) {
     const assetsParam = searchParams.get('assets') // Comma-separated asset addresses
     const daysParam = searchParams.get('days') || '30'
     const days = parseInt(daysParam, 10)
-    const timezone = searchParams.get('timezone') || 'UTC'
+    const timezone = getTimezone(searchParams)
     const analyticsUserId = getAnalyticsUserIdFromRequest(request)
 
     // Validate required parameters
@@ -106,46 +69,62 @@ export async function GET(request: NextRequest) {
     }
 
     // Kick off a daily_rates refresh in the background if stale (non-blocking).
-    ensureFreshRates()
+    // Uses the shared Redis-coordinated helper so all routes and instances
+    // dedupe against the same lock (a per-instance in-memory timer ran one
+    // refresh per warm instance and could wedge permanently on serverless).
+    ensureFreshRatesInBackground(() => eventsRepository.refreshDailyRates())
 
     // Cache the computed history per user/assets/day so repeat and concurrent
     // requests for the same wallet skip the heavy per-asset DB queries.
     // The key rotates daily (todayDate) and includes timezone, since date
     // boundaries are timezone-dependent. Assets are sorted so the key is
-    // independent of the order they were passed in. getOrSet degrades to a
-    // plain compute when Redis is disabled and never caches a thrown error.
+    // independent of the order they were passed in.
     const sortedAssetsKey = [...assets].sort().join(',')
-    const results = await getOrSet(
-      cacheKey('balance-history-batch', resolvedUser, sortedAssetsKey, days, timezone, todayDate()),
-      () =>
-        // Fetch all balance histories in parallel
-        Promise.all(
-          assets.map(async (asset) => {
-            try {
-              const { history, firstEventDate } = await eventsRepository.getBalanceHistoryFromEvents(
-                resolvedUser,
-                asset,
-                days,
-                timezone,
-              )
-              return {
-                asset_address: asset,
-                history,
-                firstEventDate,
-                error: null,
-              }
-            } catch (error) {
-              return {
-                asset_address: asset,
-                history: [],
-                firstEventDate: null,
-                error: error instanceof Error ? error.message : 'Unknown error',
-              }
+    const batchCacheKey = cacheKey('balance-history-batch', resolvedUser, sortedAssetsKey, days, timezone, todayDate())
+
+    type BatchResult = {
+      asset_address: string
+      history: unknown[]
+      firstEventDate: string | null
+      error: string | null
+    }
+
+    let results = await get<BatchResult[]>(batchCacheKey)
+    if (!results) {
+      // Fetch all balance histories in parallel
+      results = await Promise.all(
+        assets.map(async (asset): Promise<BatchResult> => {
+          try {
+            const { history, firstEventDate } = await eventsRepository.getBalanceHistoryFromEvents(
+              resolvedUser,
+              asset,
+              days,
+              timezone,
+            )
+            return {
+              asset_address: asset,
+              history,
+              firstEventDate,
+              error: null,
             }
-          })
-        ),
-      { ttl: CACHE_TTL.MEDIUM },
-    )
+          } catch (error) {
+            return {
+              asset_address: asset,
+              history: [],
+              firstEventDate: null,
+              error: error instanceof Error ? error.message : 'Unknown error',
+            }
+          }
+        })
+      )
+
+      // Only cache fully successful batches: a transient per-asset DB error
+      // must not be served as an empty history for 5 minutes (and then pinned
+      // even longer by client-side localStorage placeholders).
+      if (results.every(r => r.error === null)) {
+        await set(batchCacheKey, results, { ttl: CACHE_TTL.MEDIUM })
+      }
+    }
 
     const hashedAddress = hashWalletAddress(user)
     captureServerEvent(analyticsUserId, {

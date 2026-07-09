@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { eventsRepository } from '@/lib/db/events-repository'
-import { HistoricalBorrowBreakdown } from '@/lib/balance-history-utils'
+import { HistoricalBorrowBreakdown, computeShareAwareCostBasis } from '@/lib/balance-history-utils'
 import { resolveWalletAddress } from '@/lib/api'
 
 export interface AssetBorrowBreakdown extends HistoricalBorrowBreakdown {
@@ -58,7 +58,9 @@ export async function GET(request: NextRequest) {
   }
 
   // Resolve demo wallet aliases to real addresses
-  userAddresses = userAddresses.map(addr => resolveWalletAddress(addr))
+  // Dedupe after alias resolution: the same wallet listed twice (or an alias
+  // plus its resolved address) would double-count every event in the totals
+  userAddresses = [...new Set(userAddresses.map(addr => resolveWalletAddress(addr)))]
 
   // Parse SDK prices (current prices from SDK for calculating current value)
   let sdkPrices: Record<string, number> = {}
@@ -123,8 +125,8 @@ export async function GET(request: NextRequest) {
 
     // Combine events from all wallets into a single map
     const eventsMap = new Map<string, {
-      borrows: Array<{ date: string; tokens: number; priceAtBorrow: number; usdValue: number }>
-      repays: Array<{ date: string; tokens: number; priceAtRepay: number; usdValue: number }>
+      borrows: Array<{ date: string; tokens: number; shares: number; priceAtBorrow: number; usdValue: number }>
+      repays: Array<{ date: string; tokens: number; shares: number; priceAtRepay: number; usdValue: number }>
     }>()
 
     for (let walletIdx = 0; walletIdx < allEventsMaps.length; walletIdx++) {
@@ -187,21 +189,33 @@ export async function GET(request: NextRequest) {
         return b
       })
 
-      // Calculate using AVERAGE COST METHOD
-      // This ensures the weighted average price reflects actual prices when borrowed
-      const totalBorrowedUsd = adjustedBorrows.reduce((sum, b) => sum + b.usdValue, 0)
-      const totalBorrowedTokens = adjustedBorrows.reduce((sum, b) => sum + b.tokens, 0)
-      const totalRepaidTokens = repays.reduce((sum, r) => sum + r.tokens, 0)
-      const netBorrowedTokens = totalBorrowedTokens - totalRepaidTokens
+      // SHARE-AWARE borrow cost basis: repay amounts are underlying (they include
+      // accrued interest), so principal is reduced by the dToken share fraction
+      // each repay burns — never below 0. Fully repaid loans land at exactly 0
+      // instead of a negative basis with sign-flipped price impact; interest
+      // actually paid is reported in the realized fields.
+      const shareAware = computeShareAwareCostBasis(
+        adjustedBorrows.map(b => ({
+          date: b.date,
+          tokens: b.tokens,
+          shares: b.shares,
+          price: b.priceAtBorrow,
+          usdValue: b.usdValue,
+        })),
+        repays.map(r => ({
+          date: r.date,
+          tokens: r.tokens,
+          shares: r.shares,
+          price: r.priceAtRepay,
+          usdValue: r.usdValue,
+        })),
+      )
 
-      // Weighted average borrow price = total USD borrowed / total tokens borrowed
-      const weightedAvgPrice = totalBorrowedTokens > 0
-        ? totalBorrowedUsd / totalBorrowedTokens
+      const borrowCostBasisUsd = shareAware.costBasisUsd
+      const netBorrowedTokens = shareAware.principalTokens
+      const weightedAvgPrice = netBorrowedTokens > 0
+        ? borrowCostBasisUsd / netBorrowedTokens
         : sdkPrice
-
-      // Cost basis = remaining borrowed tokens × avg borrow price (repays reduce at avg cost)
-      const costRemovedByRepays = totalRepaidTokens * weightedAvgPrice
-      const borrowCostBasisUsd = totalBorrowedUsd - costRemovedByRepays
 
       // We don't have current debt here (it comes from SDK on client side)
       // So we'll just return the cost basis data and let client calculate the full breakdown
@@ -220,6 +234,10 @@ export async function GET(request: NextRequest) {
         currentDebtUsd: 0,
         totalCostUsd: 0,
         totalCostPercent: 0,
+        // Realized components (interest already paid, valued at repay-time prices)
+        realizedInterestTokens: shareAware.realizedYieldTokens,
+        realizedInterestUsd: shareAware.realizedYieldUsd,
+        realizedPriceChangeOnDebtUsd: shareAware.realizedPriceChangeUsd,
       }
 
       totalBorrowCostBasisUsd += borrowCostBasisUsd

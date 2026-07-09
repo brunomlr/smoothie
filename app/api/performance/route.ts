@@ -127,7 +127,9 @@ export async function GET(request: NextRequest) {
   }
 
   // Resolve demo wallet aliases to real addresses
-  const userAddresses = userAddressParams.map(addr => resolveWalletAddress(addr))
+  // Dedupe after alias resolution: the same wallet listed twice (or an alias
+  // plus its resolved address) would double-count every event in the totals
+  const userAddresses = [...new Set(userAddressParams.map(addr => resolveWalletAddress(addr)))]
 
   try {
     // Build SDK prices map

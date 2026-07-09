@@ -13,28 +13,7 @@ import {
   CACHE_CONFIGS,
   resolveWalletAddress,
 } from '@/lib/api'
-import { cacheKey, todayDate, CACHE_TTL, shouldRefreshRates, markRatesRefreshed, releaseRatesLock } from '@/lib/redis'
-
-function ensureFreshRates(): void {
-  // Refresh daily_rates in the background when stale. This is intentionally
-  // NOT awaited: the view is materialized so it always has data to serve, and
-  // `REFRESH MATERIALIZED VIEW CONCURRENTLY` can take several seconds - awaiting
-  // it made one request every refresh interval wait out the entire refresh
-  // before returning any data. Redis coordination dedupes refreshes across
-  // instances. See balance-history-batch/route.ts for the same rationale.
-  void (async () => {
-    if (await shouldRefreshRates()) {
-      try {
-        await eventsRepository.refreshDailyRates()
-        await markRatesRefreshed()
-      } catch {
-        // Release the lock so other instances can try
-        await releaseRatesLock()
-        // Don't throw - continue with stale data rather than failing
-      }
-    }
-  })()
-}
+import { cacheKey, todayDate, CACHE_TTL, ensureFreshRatesInBackground } from '@/lib/redis'
 
 interface BalanceHistoryResponse {
   user_address: string
@@ -56,9 +35,12 @@ export const GET = createApiHandler<BalanceHistoryResponse>({
       const params = request.nextUrl.searchParams
       return cacheKey(
         'balance-history',
-        params.get('user') || '',
+        resolveWalletAddress(params.get('user') || ''),
         params.get('asset') || '',
         params.get('days') || '30',
+        // Day boundaries and the grid end depend on the user's timezone -
+        // omitting it served one timezone's "today" to users in another
+        params.get('timezone') || 'UTC',
         todayDate() // Include date so cache rotates daily
       )
     },
@@ -80,7 +62,7 @@ export const GET = createApiHandler<BalanceHistoryResponse>({
     const timezone = getTimezone(searchParams)
 
     // Kick off a daily_rates refresh in the background if stale (non-blocking).
-    ensureFreshRates()
+    ensureFreshRatesInBackground(() => eventsRepository.refreshDailyRates())
 
     const { history, firstEventDate } = await eventsRepository.getBalanceHistoryFromEvents(
       user,

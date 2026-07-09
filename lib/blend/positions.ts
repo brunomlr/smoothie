@@ -97,7 +97,7 @@ export interface BlendBackstopPosition {
   // LP token breakdown
   blndAmount: number; // BLND portion of LP (80%)
   usdcAmount: number; // USDC portion of LP (20%)
-  // Queued withdrawal (Q4W) - 21-day lock
+  // Queued withdrawal (Q4W) - 21-day lock on v1 pools, 17-day on v2
   q4wShares: bigint; // Shares queued for withdrawal (total across all chunks)
   q4wLpTokens: number; // LP tokens value of queued shares (total)
   q4wLpTokensUsd: number; // USD value of queued shares (total)
@@ -190,7 +190,10 @@ interface CacheEntry<T> {
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 const POOL_CACHE_TTL = 30 * 1000; // 30 seconds for pool-level data
 
-const backstopCache = new Map<string, Backstop | null>();
+// Backstop data (comet pool balances → BLND/LP prices) moves constantly, so it
+// uses the short pool-level TTL. Failures are NOT cached: a transient RPC error
+// must not blank out backstop positions/prices for the process lifetime.
+const backstopCache = new Map<string, CacheEntry<Backstop>>();
 const tokenMetadataGlobalCache = new Map<string, CacheEntry<TokenMetadata>>();
 const priceGlobalCache = new Map<string, CacheEntry<PriceQuote | null>>();
 
@@ -236,20 +239,24 @@ async function loadBackstop(
     return null;
   }
 
-  if (backstopCache.has(backstopId)) {
-    return backstopCache.get(backstopId)!;
+  const cached = backstopCache.get(backstopId);
+  if (cached && Date.now() - cached.timestamp < POOL_CACHE_TTL) {
+    return cached.data;
   }
 
   try {
     const backstop = await Backstop.load(network, backstopId);
-    backstopCache.set(backstopId, backstop);
+    backstopCache.set(backstopId, { data: backstop, timestamp: Date.now() });
     return backstop;
   } catch (error) {
     console.warn(
       `[blend] Failed to load backstop ${backstopId}:`,
       (error as Error)?.message ?? error
     );
-    backstopCache.set(backstopId, null);
+    // Serve stale data over nothing, but never cache the failure
+    if (cached) {
+      return cached.data;
+    }
     return null;
   }
 }
@@ -784,8 +791,11 @@ function aggregateSnapshot(
     0
   );
 
-  // Net position includes backstop (but not Q4W as it's locked)
-  const netPositionUsd = totalSupplyUsd - totalBorrowUsd + totalBackstopUsd;
+  // Net position includes backstop AND queued withdrawals: queued shares still
+  // convert at the current share rate and keep appreciating from interest
+  // auctions (they only stop earning emissions), so they remain user capital.
+  const netPositionUsd = totalSupplyUsd - totalBorrowUsd + totalBackstopUsd + totalBackstopQ4wUsd;
+  // APY weights intentionally exclude the queued portion (no emissions on Q4W)
   const totalPositionUsd = totalSupplyUsd + totalBackstopUsd;
 
   // Weighted Supply APY includes both supply positions and backstop interest APR
@@ -1294,7 +1304,7 @@ async function fetchWalletBlendSnapshotInternal(
       const q4wChunks: Q4WChunk[] = backstopUser.balance.q4w.map(q4wEntry => {
         const chunkShares = q4wEntry.amount;
         const chunkLpTokens = backstopPool.sharesToBackstopTokensFloat(chunkShares);
-        const expNum = typeof q4wEntry.exp === 'bigint' ? Number(q4wEntry.exp) : Number(q4wEntry.exp);
+        const expNum = Number(q4wEntry.exp);
         return {
           shares: chunkShares,
           lpTokens: chunkLpTokens,

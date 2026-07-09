@@ -62,8 +62,9 @@ export function YieldProjectionGrid({
   const dailyBlndUsd = dailyBlnd * blndPrice
   const dailyLpUsd = dailyLp * (lpTokenPrice || 0)
   const dailyTotalUsd = dailyBlndUsd + dailyLpUsd
-  const monthlyTotalUsd = dailyTotalUsd * 30
   const annualTotalUsd = dailyTotalUsd * 365
+  // annual/12 to match the monthly token amounts shown beneath (x30 days disagreed by ~1.4%)
+  const monthlyTotalUsd = annualTotalUsd / 12
 
   const hasBlndPositions = blndApy > 0 && totalPositionUsd > 0
 

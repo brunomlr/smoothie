@@ -24,6 +24,7 @@ interface BlendPosition {
 }
 
 interface BorrowPositionsProps {
+  isLoading?: boolean
   blendSnapshot: { positions: BlendPosition[] } | null | undefined
   enrichedAssetCards: AssetCardData[]
   poolAssetBorrowCostBasisMap: Map<string, number>
@@ -46,13 +47,13 @@ const BorrowPositionItem = memo(function BorrowPositionItem({
   formatUsdAmount,
   formatInterestValue,
 }: BorrowPositionItemProps) {
-  const usdPrice = position.price?.usdPrice || 1
+  const usdPrice = position.price?.usdPrice || 0
   const borrowCostBasisUsd = borrowCostBasisTokens * usdPrice
   const currentDebtUsd = position.borrowUsdValue
 
-  // Only calculate interest if we have valid cost basis data
-  // Without cost basis, we can't determine how much is original principal vs interest
-  const hasCostBasisData = borrowCostBasisTokens > 0
+  // Only calculate interest if we have valid cost basis data AND a real price -
+  // pricing the cost basis at $1 would fabricate interest equal to the price gap
+  const hasCostBasisData = borrowCostBasisTokens > 0 && usdPrice > 0
   const interestAccrued = hasCostBasisData ? currentDebtUsd - borrowCostBasisUsd : 0
   const interestPercentage = hasCostBasisData && borrowCostBasisUsd > 0
     ? (interestAccrued / borrowCostBasisUsd) * 100
@@ -149,6 +150,7 @@ export function BorrowPositions({
   enrichedAssetCards,
   poolAssetBorrowCostBasisMap,
   onPoolClick,
+  isLoading,
 }: BorrowPositionsProps) {
   const { format: formatInCurrency } = useCurrencyPreference()
 
@@ -234,6 +236,22 @@ export function BorrowPositions({
             </Card>
           )
         })}
+      </div>
+    )
+  }
+
+  // Skeleton while the snapshot is still loading - rendering the empty state
+  // here showed a false "No borrows found" to users who do have borrows
+  if (isLoading || blendSnapshot === undefined || blendSnapshot === null) {
+    return (
+      <div className="grid gap-4 grid-cols-1">
+        <Card className="py-2 gap-0">
+          <CardContent className="px-4 py-4 space-y-3">
+            <div className="h-4 w-1/3 rounded bg-muted animate-pulse" />
+            <div className="h-10 rounded bg-muted animate-pulse" />
+            <div className="h-10 rounded bg-muted animate-pulse" />
+          </CardContent>
+        </Card>
       </div>
     )
   }

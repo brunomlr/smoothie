@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { eventsRepository } from '@/lib/db/events-repository'
 import { LP_TOKEN_ADDRESS } from '@/lib/constants'
-import { resolveWalletAddress } from '@/lib/api'
+import { resolveWalletAddress, getTimezone } from '@/lib/api'
 
 export type PeriodType = '1W' | '1M' | '1Y' | 'All'
 
@@ -97,24 +97,34 @@ function getPeriodStartDate(period: PeriodType, timezone: string = 'UTC'): strin
   let periodStartDay = day
 
   switch (period) {
-    case '1W':
-      // Subtract 7 days
-      const weekAgo = new Date(year, month - 1, day - 7)
+    case '1W': {
+      // 7-day window covering today-6 .. today. The start balance is taken
+      // strictly BEFORE this date (EOD today-7), matching the PnL chart's
+      // 7 daily bars - subtracting 7 here made the card cover 8 days and
+      // never reconcile with the chart.
+      const weekAgo = new Date(year, month - 1, day - 6)
       periodStartYear = weekAgo.getFullYear()
       periodStartMonth = weekAgo.getMonth() + 1
       periodStartDay = weekAgo.getDate()
       break
-    case '1M':
-      // Subtract 30 days
-      const monthAgo = new Date(year, month - 1, day - 30)
+    }
+    case '1M': {
+      // 30-day window covering today-29 .. today (chart shows 30 bars)
+      const monthAgo = new Date(year, month - 1, day - 29)
       periodStartYear = monthAgo.getFullYear()
       periodStartMonth = monthAgo.getMonth() + 1
       periodStartDay = monthAgo.getDate()
       break
-    case '1Y':
-      // Subtract 1 year
-      periodStartYear = year - 1
+    }
+    case '1Y': {
+      // Subtract 1 year via Date so Feb 29 normalizes instead of producing
+      // an invalid YYYY-02-29 string in non-leap years
+      const yearAgo = new Date(year - 1, month - 1, day)
+      periodStartYear = yearAgo.getFullYear()
+      periodStartMonth = yearAgo.getMonth() + 1
+      periodStartDay = yearAgo.getDate()
       break
+    }
     case 'All':
     default:
       // For "All", use a very old date
@@ -188,7 +198,7 @@ export async function GET(request: NextRequest) {
   const backstopPositionsParam = searchParams.get('backstopPositions')
   const lpTokenPriceParam = searchParams.get('lpTokenPrice')
   // Get timezone from query param - should match the chart's timezone for consistent dates
-  const timezone = searchParams.get('timezone') || 'UTC'
+  const timezone = getTimezone(searchParams)
 
   if (!userAddress) {
     return NextResponse.json(
@@ -513,12 +523,25 @@ export async function GET(request: NextRequest) {
           continue
         }
 
-        // Calculate net deposited in period from events
-        // Since lpTokensAtStart is now BEFORE periodStartDate, we include events ON periodStartDate
+        // Calculate net deposited in period from events.
+        // Since lpTokensAtStart is now BEFORE periodStartDate, we include events ON periodStartDate.
+        // IMPORTANT: event `date` fields are UTC dates while periodStartDate and the
+        // balance history are in the user's timezone - re-derive the event date from
+        // its timestamp in the user's timezone or flows near midnight leak into
+        // "interest" (a deposit before UTC midnight but after local midnight would
+        // be excluded from flows while included in the balance delta).
+        const eventDateFormatter = new Intl.DateTimeFormat('en-CA', {
+          timeZone: timezone,
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+        })
+        const eventLocalDate = (e: { date: string; timestamp?: string }): string =>
+          e.timestamp ? eventDateFormatter.format(new Date(e.timestamp)) : e.date
         const poolDepositsInPeriod = backstopEventsData.deposits
-          .filter(d => d.poolAddress === poolAddress && d.date >= periodStartDate)
+          .filter(d => d.poolAddress === poolAddress && eventLocalDate(d) >= periodStartDate)
         const poolWithdrawalsInPeriod = backstopEventsData.withdrawals
-          .filter(w => w.poolAddress === poolAddress && w.date >= periodStartDate)
+          .filter(w => w.poolAddress === poolAddress && eventLocalDate(w) >= periodStartDate)
 
         const poolDepositsTokens = poolDepositsInPeriod.reduce((sum, d) => sum + d.lpTokens, 0)
         const poolWithdrawalsTokens = poolWithdrawalsInPeriod.reduce((sum, w) => sum + w.lpTokens, 0)

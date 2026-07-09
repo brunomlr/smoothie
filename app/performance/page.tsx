@@ -944,7 +944,7 @@ function RealizedYieldContent() {
                                 </Badge>
                               </TooltipTrigger>
                               <TooltipContent>
-                                {data.daysActive && data.daysActive > 0 ? (
+                                {data.daysActive && data.daysActive > 0 && displayTotalPnl / data.totalDepositedUsd > -1 ? (
                                   <>
                                     {((Math.pow(1 + displayTotalPnl / data.totalDepositedUsd, 365 / data.daysActive) - 1) * 100).toFixed(1)}% APY
                                     <span className="text-muted-foreground ml-1">({data.daysActive}d)</span>

@@ -59,6 +59,7 @@ export interface TotalYieldBreakdown {
 interface BackstopEventWithPrice {
   date: string
   lpTokens: number
+  shares?: number // backstop shares; needed for share-aware cost basis
   priceAtEvent: number
   usdValue: number
   poolAddress: string
@@ -410,12 +411,14 @@ export function useHistoricalYieldBreakdown(
           const deposits = poolDeposits.map(d => ({
             date: d.date,
             tokens: d.lpTokens,
+            shares: d.shares,
             priceAtDeposit: d.priceAtEvent,
             usdValue: d.usdValue,
           }))
           const withdrawals = poolWithdrawals.map(w => ({
             date: w.date,
             tokens: w.lpTokens,
+            shares: w.shares,
             priceAtDeposit: w.priceAtEvent,
             usdValue: w.usdValue,
           }))

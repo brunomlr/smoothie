@@ -10,4 +10,4 @@ export {
   CACHE_TTL,
 } from './cache'
 export type { CacheOptions } from './cache'
-export { shouldRefreshRates, markRatesRefreshed, releaseRatesLock } from './rates-refresh'
+export { shouldRefreshRates, markRatesRefreshed, releaseRatesLock, ensureFreshRatesInBackground } from './rates-refresh'
