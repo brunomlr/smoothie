@@ -12,24 +12,13 @@ import {
 import { format, parseISO } from "date-fns"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Skeleton } from "@/components/ui/skeleton"
+import { ChartTooltipContainer } from "@/components/charts/tooltips/chart-tooltip"
 import { usePoolTvlHistory } from "@/hooks/use-pool-tvl-history"
 import { useTooltipDismiss } from "@/hooks/use-tooltip-dismiss"
+import { formatUsdSuffixed } from "@/lib/format-utils"
 
 // Pool display order
 const POOL_ORDER = ['Fixed', 'YieldBlox', 'Orbit', 'Forex', 'Etherfuse']
-
-function formatUsdCompact(value: number): string {
-  if (value >= 1_000_000_000) {
-    return `$${(value / 1_000_000_000).toFixed(2)}B`
-  }
-  if (value >= 1_000_000) {
-    return `$${(value / 1_000_000).toFixed(2)}M`
-  }
-  if (value >= 1_000) {
-    return `$${(value / 1_000).toFixed(0)}K`
-  }
-  return `$${value.toFixed(0)}`
-}
 
 interface ChartDataPoint {
   date: string
@@ -50,25 +39,25 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
   const data = payload[0].payload
 
   return (
-    <div className="bg-black text-white border border-zinc-800 rounded-md px-3 py-2 shadow-lg text-[11px] min-w-[140px]">
+    <ChartTooltipContainer className="px-3 py-2 min-w-[140px]">
       <p className="text-zinc-400 mb-1.5">
         {format(parseISO(data.date), "MMM d, yyyy")}
       </p>
       <div className="space-y-1">
         <div className="flex justify-between gap-4">
           <span className="text-zinc-400">Supply TVL:</span>
-          <span className="font-medium text-emerald-400">
-            {formatUsdCompact(data.tvlUsd)}
+          <span className="font-medium text-positive">
+            {formatUsdSuffixed(data.tvlUsd)}
           </span>
         </div>
         <div className="flex justify-between gap-4">
           <span className="text-zinc-400">Borrowed:</span>
           <span className="font-medium text-orange-400">
-            {formatUsdCompact(data.borrowedUsd)}
+            {formatUsdSuffixed(data.borrowedUsd)}
           </span>
         </div>
       </div>
-    </div>
+    </ChartTooltipContainer>
   )
 }
 

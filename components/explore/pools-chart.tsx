@@ -60,7 +60,7 @@ function CustomTooltip({
       <div className="space-y-1 text-[11px]">
         <div className="flex justify-between gap-4">
           <span className="text-zinc-400">Supply TVL:</span>
-          <span className="font-medium text-emerald-400">
+          <span className="font-medium text-positive">
             {formatUsdCompact(data.supply)}
           </span>
         </div>
@@ -136,7 +136,7 @@ export function PoolsChart({ items, isLoading }: PoolsChartProps) {
         {chartData.map((item) => (
           <div key={item.name} className="flex-1 flex flex-col items-center">
             <div className="flex items-center gap-0.5">
-              <ArrowUpRight className="h-2.5 w-2.5 text-green-500" />
+              <ArrowUpRight className="h-2.5 w-2.5 text-positive" />
               <span className="text-[10px] font-semibold">
                 {formatUsdCompact(item.supply)}
               </span>

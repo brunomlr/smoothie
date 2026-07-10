@@ -22,14 +22,14 @@ export function getAmountDisplay(action: UserAction, currentUserAddress?: string
     if (isLiquidator) {
       return (
         <div className="flex flex-col text-xs text-right">
-          <span className="text-green-600 dark:text-green-400">+{fmt(lotValue)} {lotSymbol}</span>
+          <span className="text-positive">+{fmt(lotValue)} {lotSymbol}</span>
           <span className="text-orange-600 dark:text-orange-400">+{fmt(bidValue)} {bidSymbol} debt</span>
         </div>
       )
     } else {
       return (
         <div className="flex flex-col text-xs text-right">
-          <span className="text-red-600 dark:text-red-400">-{fmt(lotValue)} {lotSymbol}</span>
+          <span className="text-negative">-{fmt(lotValue)} {lotSymbol}</span>
           <span className="text-blue-600 dark:text-blue-400">-{fmt(bidValue)} {bidSymbol} debt</span>
         </div>
       )
@@ -47,7 +47,7 @@ export function getAmountDisplay(action: UserAction, currentUserAddress?: string
                        action.action_type === "backstop_claim" ||
                        action.action_type === "backstop_dequeue_withdrawal"
     const sign = isPositive ? "" : "-"
-    const textColor = isPositive ? "text-white" : "text-red-400"
+    const textColor = isPositive ? "text-white" : "text-negative"
     return (
       <div className={`flex items-center gap-2 font-mono text-xs font-medium ${textColor}`}>
         <div
@@ -69,7 +69,7 @@ export function getAmountDisplay(action: UserAction, currentUserAddress?: string
                        action.action_type === "withdraw_collateral" ||
                        action.action_type === "borrow"
     const sign = isNegative ? "-" : ""
-    const textColor = isNegative ? "text-red-400" : "text-white"
+    const textColor = isNegative ? "text-negative" : "text-white"
     const isBlnd = symbol === "BLND"
     return (
       <div className={`flex items-center gap-2 font-mono text-xs font-medium ${textColor}`}>
@@ -159,7 +159,7 @@ export function AmountWithCurrency({
                        action.action_type === "withdraw_collateral" ||
                        action.action_type === "borrow"
     const sign = isNegative ? "-" : ""
-    const textColor = isNegative ? "text-red-400" : "text-white"
+    const textColor = isNegative ? "text-negative" : "text-white"
     const isBlnd = symbol === "BLND"
 
     return (
@@ -193,7 +193,7 @@ export function AmountWithCurrency({
                      action.action_type === "backstop_claim" ||
                      action.action_type === "backstop_dequeue_withdrawal"
   const sign = isPositive ? "" : "-"
-  const textColor = isPositive ? "text-white" : "text-red-400"
+  const textColor = isPositive ? "text-white" : "text-negative"
 
   return (
     <div className="flex items-center gap-2">

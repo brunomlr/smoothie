@@ -64,7 +64,7 @@ const BorrowPositionItem = memo(function BorrowPositionItem({
 
   const formattedInterest = formatInterestValue(interestAccrued)
   const hasSignificantInterest = hasCostBasisData && Math.abs(interestAccrued) >= 0.01
-  const formattedInterestPercentage = interestPercentage !== 0 ? ` (${interestPercentage >= 0 ? '+' : ''}${interestPercentage.toFixed(2)}%)` : ''
+  const formattedInterestPercentage = Math.abs(interestPercentage) >= 0.005 ? ` (${interestPercentage >= 0 ? '+' : ''}${interestPercentage.toFixed(2)}%)` : ''
 
   return (
     <div className="flex items-center justify-between py-2 gap-3">

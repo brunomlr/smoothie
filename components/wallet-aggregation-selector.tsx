@@ -210,6 +210,11 @@ export function WalletAggregationSelector({
                   )
                 })}
               </div>
+              {isMaxReached && (
+                <p className="text-xs text-muted-foreground">
+                  Up to {MAX_SELECTION} wallets can be combined
+                </p>
+              )}
             </div>
           )}
 

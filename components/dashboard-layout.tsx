@@ -55,7 +55,7 @@ export function DashboardLayout({
       {error && (
         <div className="bg-destructive/10 border border-destructive/20 rounded-md p-4">
           <p className="text-destructive text-sm">
-            Error loading positions: {error instanceof Error ? error.message : "Unknown error"}
+            Error loading data: {error instanceof Error ? error.message : "Unknown error"}
           </p>
         </div>
       )}

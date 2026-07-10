@@ -68,13 +68,13 @@ export function RealizedProfitsLink({
         <div className="flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-2">
             {isPositive ? (
-              <TrendingUp className="h-5 w-5 text-emerald-400" />
+              <TrendingUp className="h-5 w-5 text-positive" />
             ) : (
-              <TrendingDown className="h-5 w-5 text-red-400" />
+              <TrendingDown className="h-5 w-5 text-negative" />
             )}
             <div>
               <div className="text-base font-semibold">
-                <span className={isPositive ? "text-emerald-400" : "text-red-400"}>
+                <span className={isPositive ? "text-positive" : "text-negative"}>
                   {isPositive ? "+" : ""}{formatUsd(data.realizedPnl)}
                 </span>
                 <span className="text-muted-foreground text-sm font-normal ml-1.5">realized</span>

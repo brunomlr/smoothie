@@ -9,6 +9,7 @@ import { useBlendPositions } from "@/hooks/use-blend-positions"
 import { useCurrencyPreference } from "@/hooks/use-currency-preference"
 import { WalletAllocationBar } from "@/components/wallet-allocation-bar"
 import { Card, CardContent } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { WalletTokensSkeleton } from "@/components/wallet-tokens/skeleton"
 import type { Wallet } from "@/types/wallet"
@@ -74,6 +75,8 @@ export function WalletContent({
   const {
     data: singleHorizonData,
     isLoading: isLoadingSingleHorizon,
+    error: singleHorizonError,
+    refetch: refetchSingleHorizon,
   } = useHorizonBalances(isMultiWallet ? undefined : publicKey)
 
   // Multi-wallet mode: Fetch raw balances for all selected wallets (no price enrichment)
@@ -321,6 +324,33 @@ export function WalletContent({
   // Show skeleton while loading
   if (!isHydrated || isLoadingHorizon) {
     return <WalletTokensSkeleton />
+  }
+
+  // Surface balance-fetch failures instead of rendering an empty wallet
+  const balancesError = isMultiWallet
+    ? multiWalletQueries.find((q) => q.error)?.error
+    : singleHorizonError
+  if (balancesError) {
+    return (
+      <div className="py-12 text-center space-y-3">
+        <p className="text-sm text-destructive">
+          Error loading balances: {balancesError instanceof Error ? balancesError.message : "Unknown error"}
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            if (isMultiWallet) {
+              multiWalletQueries.forEach((q) => q.refetch())
+            } else {
+              refetchSingleHorizon()
+            }
+          }}
+        >
+          Try again
+        </Button>
+      </div>
+    )
   }
 
   return (

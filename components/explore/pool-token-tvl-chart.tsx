@@ -14,6 +14,7 @@ import {
 import { format, parseISO } from "date-fns"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Skeleton } from "@/components/ui/skeleton"
+import { ChartTooltipContainer } from "@/components/charts/tooltips/chart-tooltip"
 import {
   usePoolTokenTvlHistory,
   type PoolTokenHistoryData,
@@ -112,7 +113,7 @@ function CustomTooltip({
   const fmt = (v: number) => (unit === "fiat" ? formatFiat(v) : formatTokenCompact(v))
 
   return (
-    <div className="bg-black text-white border border-zinc-800 rounded-md px-3 py-2 shadow-lg text-[11px] min-w-[160px]">
+    <ChartTooltipContainer className="px-3 py-2 min-w-[160px]">
       {date && (
         <p className="text-zinc-400 mb-1.5">
           {format(parseISO(date), "MMM d, yyyy")}
@@ -139,7 +140,7 @@ function CustomTooltip({
           <span className="font-semibold">{fmt(total)}</span>
         </div>
       )}
-    </div>
+    </ChartTooltipContainer>
   )
 }
 

@@ -152,7 +152,7 @@ export function FollowAddressModal({
               />
               {address.trim() && !error && validateAddress(address.trim()) && (
                 <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                  <Check className="h-5 w-5 text-green-600 dark:text-green-400" />
+                  <Check className="h-5 w-5 text-positive" />
                 </div>
               )}
             </div>

@@ -15,6 +15,11 @@ export function resolveAssetLogo(symbol: string | undefined): string | null {
 export function formatAmount(amount: number | null, decimals: number = 7): string {
   if (amount === null) return "-"
   const value = amount / Math.pow(10, decimals)
+  if (value === 0) return "0"
+  // Sub-cent amounts would round to "0.00" / "-0.00"; show more precision instead
+  if (Math.abs(value) < 0.01) {
+    return value.toLocaleString('en-US', { maximumFractionDigits: 7 })
+  }
   const isWholeNumber = value % 1 === 0
   return value.toLocaleString('en-US', {
     minimumFractionDigits: isWholeNumber ? 0 : 2,

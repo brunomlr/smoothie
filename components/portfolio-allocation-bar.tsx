@@ -3,6 +3,7 @@
 import { useMemo } from "react"
 import { Card } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
+import { formatAllocationPercent } from "@/lib/format-utils"
 import {
   Tooltip,
   TooltipContent,
@@ -49,11 +50,6 @@ interface PoolAllocation {
     value: number
     percentage: number // percentage of total portfolio
   }[]
-}
-
-function formatPercentage(value: number): string {
-  if (value < 1) return "<1%"
-  return `${Math.round(value)}%`
 }
 
 export function PortfolioAllocationBar({
@@ -230,7 +226,7 @@ export function PortfolioAllocationBar({
                   }}
                 >
                   <span className="font-medium">{pool.poolName}</span>
-                  <span className="ml-1 opacity-70">{formatPercentage(pool.percentage)}</span>
+                  <span className="ml-1 opacity-70">{formatAllocationPercent(pool.percentage)}</span>
                 </div>
               )
             }
@@ -253,7 +249,7 @@ export function PortfolioAllocationBar({
                 </TooltipTrigger>
                 <TooltipContent>
                   <div className="font-medium">{pool.poolName}</div>
-                  <div className="text-zinc-400">{formatPercentage(pool.percentage)} of portfolio</div>
+                  <div className="text-zinc-400">{formatAllocationPercent(pool.percentage)} of portfolio</div>
                   {poolData && <div className="mt-1">{formatUsd(poolData.totalValue)}</div>}
                 </TooltipContent>
               </Tooltip>
@@ -290,7 +286,7 @@ export function PortfolioAllocationBar({
                   </div>
                   <div className="text-zinc-400">{segment.poolName}</div>
                   <div className="mt-1">
-                    {formatUsd(segment.value)} ({formatPercentage(segment.percentage)})
+                    {formatUsd(segment.value)} ({formatAllocationPercent(segment.percentage)})
                   </div>
                 </TooltipContent>
               </Tooltip>

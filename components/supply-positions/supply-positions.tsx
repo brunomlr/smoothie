@@ -71,10 +71,12 @@ const SupplyAssetItem = memo(function SupplyAssetItem({
         </div>
       </div>
       <div className="flex flex-col gap-1 items-start shrink-0 w-[110px]">
-        <Badge variant="secondary" className="text-xs">
-          <TrendingUp className="mr-1 h-3 w-3" />
-          {asset.apyPercentage.toFixed(2)}% APY
-        </Badge>
+        {asset.apyPercentage > 0.005 && (
+          <Badge variant="secondary" className="text-xs">
+            <TrendingUp className="mr-1 h-3 w-3" />
+            {asset.apyPercentage.toFixed(2)}% APY
+          </Badge>
+        )}
         {asset.growthPercentage > 0.005 && (
           <Badge variant="secondary" className="text-xs">
             <Flame className="mr-1 h-3 w-3" />
@@ -216,7 +218,7 @@ const BackstopPositionItem = memo(function BackstopPositionItem({
                 </p>
               )}
               {backstopPosition.unlockedQ4wLpTokens > 0.001 && (
-                <p className="flex items-center gap-1 text-green-600 dark:text-green-400">
+                <p className="flex items-center gap-1 text-positive">
                   <CheckCircle className="h-3 w-3" />
                   {formatAmount(backstopPosition.unlockedQ4wLpTokens, 2)} LP
                   ready to withdraw

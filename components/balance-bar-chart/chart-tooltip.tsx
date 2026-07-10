@@ -103,7 +103,7 @@ export function BalanceChartTooltip({
                       {pool.yieldEarned !== 0 && (
                         <div className="flex justify-between text-[10px]">
                           <span className="text-zinc-400 pl-2">Yield:</span>
-                          <span className="text-emerald-400">
+                          <span className="text-positive">
                             {yieldFormatter(pool.yieldEarned)}
                           </span>
                         </div>
@@ -126,7 +126,7 @@ export function BalanceChartTooltip({
               {data.yieldEarned !== 0 && (
                 <div className="flex justify-between">
                   <span className="text-zinc-400">Total Yield:</span>
-                  <span className="font-medium text-emerald-400">
+                  <span className="font-medium text-positive">
                     {yieldFormatter(data.yieldEarned)}
                   </span>
                 </div>
@@ -141,7 +141,7 @@ export function BalanceChartTooltip({
               )}
               <div className="flex justify-between mt-1 pt-1 border-t border-zinc-700">
                 <span className="text-zinc-300 font-medium">Combined:</span>
-                <span className="font-medium text-emerald-400">
+                <span className="font-medium text-positive">
                   {yieldFormatter(data.yieldEarned + (data.blndYield || 0))}
                 </span>
               </div>
@@ -160,8 +160,8 @@ export function BalanceChartTooltip({
               <span
                 className={
                   data.yieldEarned >= 0
-                    ? "font-medium text-emerald-400"
-                    : "font-medium text-red-400"
+                    ? "font-medium text-positive"
+                    : "font-medium text-negative"
                 }
               >
                 {yieldFormatter(data.yieldEarned)}

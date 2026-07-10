@@ -2,12 +2,15 @@
 
 import { Suspense, useEffect, useState, useCallback } from "react"
 import { useQueryClient } from "@tanstack/react-query"
+import { History, WalletCards, FileText } from "lucide-react"
 import { TransactionHistory } from "@/components/transaction-history"
 import { WalletActivityHistory } from "@/components/wallet-activity"
+import { GainsLossesTab } from "@/components/activity-reports"
 import { PageTitle } from "@/components/page-title"
 import { useWalletState } from "@/hooks/use-wallet-state"
 import { useAnalytics } from "@/hooks/use-analytics"
 import { AuthenticatedPage } from "@/components/authenticated-page"
+import { PageLoadingShell } from "@/components/page-loading-shell"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Card, CardContent } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
@@ -37,6 +40,8 @@ function HistoryContent() {
       queryClient.invalidateQueries({ queryKey: ["user-actions", activeWallet.publicKey] }),
       queryClient.invalidateQueries({ queryKey: ["wallet-operations", activeWallet.publicKey] }),
       queryClient.invalidateQueries({ queryKey: ["historical-prices"] }),
+      queryClient.invalidateQueries({ queryKey: ["gains-losses-report", activeWallet.publicKey] }),
+      queryClient.invalidateQueries({ queryKey: ["wallet-transfers-report", activeWallet.publicKey] }),
     ])
   }, [activeWallet, queryClient, capture])
 
@@ -51,12 +56,21 @@ function HistoryContent() {
       <div>
         <PageTitle>Activity</PageTitle>
         <Tabs value={activeTab} onValueChange={handleTabChange}>
-          <TabsList className="grid w-full grid-cols-2 h-10 sm:h-11 mb-6 bg-transparent border">
-            <TabsTrigger value="blend">
-              Blend Activity
+          <TabsList className="grid w-full grid-cols-3 h-10 sm:h-11 mb-6 bg-transparent border border-gray-500/20 rounded-lg">
+            <TabsTrigger value="blend" className="gap-1.5 text-xs sm:text-sm">
+              <History className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              <span className="hidden sm:inline">Blend Activity</span>
+              <span className="sm:hidden">Blend</span>
             </TabsTrigger>
-            <TabsTrigger value="wallet">
-              Wallet Activity
+            <TabsTrigger value="wallet" className="gap-1.5 text-xs sm:text-sm">
+              <WalletCards className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              <span className="hidden sm:inline">Wallet Activity</span>
+              <span className="sm:hidden">Wallet</span>
+            </TabsTrigger>
+            <TabsTrigger value="reports" className="gap-1.5 text-xs sm:text-sm">
+              <FileText className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              <span className="hidden sm:inline">Gains & Losses</span>
+              <span className="sm:hidden">Gains</span>
             </TabsTrigger>
           </TabsList>
 
@@ -76,6 +90,13 @@ function HistoryContent() {
               isDemoWallet={activeWallet.isDemoWallet}
             />
           </TabsContent>
+
+          <TabsContent value="reports">
+            <GainsLossesTab
+              publicKey={activeWallet.publicKey}
+              isDemoWallet={activeWallet.isDemoWallet}
+            />
+          </TabsContent>
         </Tabs>
       </div>
     </AuthenticatedPage>
@@ -84,23 +105,15 @@ function HistoryContent() {
 
 function HistoryLoading() {
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header skeleton */}
-      <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container flex h-14 items-center justify-between px-4">
-          <Skeleton className="h-8 w-24" />
-          <Skeleton className="h-9 w-32 rounded-full" />
-        </div>
-      </header>
-
-      <main className="container mx-auto px-4 py-6 space-y-6">
-        {/* Page title and controls skeleton */}
+    <PageLoadingShell>
+      <div className="space-y-6">
+        {/* Tabs and controls skeleton */}
         <div className="flex items-center justify-between">
-          <Skeleton className="h-8 w-24" />
-          <div className="flex gap-2">
-            <Skeleton className="h-8 w-8 rounded-md" />
-            <Skeleton className="h-8 w-8 rounded-md" />
-          </div>
+          <Skeleton className="h-10 sm:h-11 flex-1 rounded-lg" />
+        </div>
+        <div className="flex justify-end gap-2">
+          <Skeleton className="h-8 w-8 rounded-md" />
+          <Skeleton className="h-8 w-8 rounded-md" />
         </div>
 
         {/* Transaction list skeleton */}
@@ -145,8 +158,8 @@ function HistoryLoading() {
             </div>
           </CardContent>
         </Card>
-      </main>
-    </div>
+      </div>
+    </PageLoadingShell>
   )
 }
 

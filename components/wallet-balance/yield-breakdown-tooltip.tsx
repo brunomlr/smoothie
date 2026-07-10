@@ -100,19 +100,19 @@ export function YieldBreakdownTooltip({
         </div>
         <div className="flex justify-between gap-4">
           <span className="text-zinc-400">Yield:</span>
-          <span className={periodYieldBreakdownAPI.totals.protocolYieldUsd >= 0 ? "text-emerald-400" : "text-red-400"}>
+          <span className={periodYieldBreakdownAPI.totals.protocolYieldUsd >= 0 ? "text-positive" : "text-negative"}>
             {formatInCurrency(periodYieldBreakdownAPI.totals.protocolYieldUsd, { showSign: true })}
           </span>
         </div>
         <div className="flex justify-between gap-4">
           <span className="text-zinc-400">Price Change:</span>
-          <span className={periodYieldBreakdownAPI.totals.priceChangeUsd >= 0 ? "text-emerald-400" : "text-red-400"}>
+          <span className={periodYieldBreakdownAPI.totals.priceChangeUsd >= 0 ? "text-positive" : "text-negative"}>
             {formatInCurrency(periodYieldBreakdownAPI.totals.priceChangeUsd, { showSign: true })}
           </span>
         </div>
         <div className="border-t border-zinc-700 pt-1 flex justify-between gap-4 font-medium">
           <span className="text-zinc-300">Total:</span>
-          <span className={periodYieldBreakdownAPI.totals.totalEarnedUsd >= 0 ? "text-emerald-400" : "text-red-400"}>
+          <span className={periodYieldBreakdownAPI.totals.totalEarnedUsd >= 0 ? "text-positive" : "text-negative"}>
             {formatInCurrency(periodYieldBreakdownAPI.totals.totalEarnedUsd, { showSign: true })}
           </span>
         </div>
@@ -169,19 +169,19 @@ export function YieldBreakdownTooltip({
         <div className="font-semibold text-xs text-zinc-200 mb-2">Breakdown (All Time)</div>
         <div className="flex justify-between gap-4">
           <span className="text-zinc-400">Yield:</span>
-          <span className={yieldBreakdown.totalProtocolYieldUsd >= 0 ? "text-emerald-400" : "text-red-400"}>
+          <span className={yieldBreakdown.totalProtocolYieldUsd >= 0 ? "text-positive" : "text-negative"}>
             {formatInCurrency(yieldBreakdown.totalProtocolYieldUsd, { showSign: true })}
           </span>
         </div>
         <div className="flex justify-between gap-4">
           <span className="text-zinc-400">Price Change:</span>
-          <span className={yieldBreakdown.totalPriceChangeUsd >= 0 ? "text-emerald-400" : "text-red-400"}>
+          <span className={yieldBreakdown.totalPriceChangeUsd >= 0 ? "text-positive" : "text-negative"}>
             {formatInCurrency(yieldBreakdown.totalPriceChangeUsd, { showSign: true })}
           </span>
         </div>
         <div className="border-t border-zinc-700 pt-1 flex justify-between gap-4 font-medium">
           <span className="text-zinc-300">Total:</span>
-          <span className={yieldBreakdown.totalEarnedUsd >= 0 ? "text-emerald-400" : "text-red-400"}>
+          <span className={yieldBreakdown.totalEarnedUsd >= 0 ? "text-positive" : "text-negative"}>
             {formatInCurrency(yieldBreakdown.totalEarnedUsd, { showSign: true })}
           </span>
         </div>
@@ -222,16 +222,16 @@ export function YieldBreakdownTooltip({
             </div>
             <div className="flex justify-between gap-4 pl-2">
               <span className="text-zinc-500">Interest APR:</span>
-              <span className="text-emerald-400">{formatPercentage(bp.interestApr)}%</span>
+              <span className="text-positive">{formatPercentage(bp.interestApr)}%</span>
             </div>
             <div className="flex justify-between gap-4 pl-2">
               <span className="text-zinc-500">BLND Emissions:</span>
-              <span className="text-emerald-400">{formatPercentage(bp.emissionApy)}%</span>
+              <span className="text-positive">{formatPercentage(bp.emissionApy)}%</span>
             </div>
             {bp.yieldPercent !== undefined && bp.yieldPercent > 0 && (
               <div className="flex justify-between gap-4 pl-2">
                 <span className="text-zinc-500">Total Yield:</span>
-                <span className="text-emerald-400">+{formatPercentage(bp.yieldPercent)}%</span>
+                <span className="text-positive">+{formatPercentage(bp.yieldPercent)}%</span>
               </div>
             )}
           </div>

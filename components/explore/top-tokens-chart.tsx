@@ -12,6 +12,7 @@ import {
   Rectangle,
 } from "recharts"
 import { Skeleton } from "@/components/ui/skeleton"
+import { ChartTooltipContainer } from "@/components/charts/tooltips/chart-tooltip"
 import { TokenLogo } from "@/components/token-logo"
 import { useTooltipDismiss } from "@/hooks/use-tooltip-dismiss"
 import type { SupplyExploreItem, SortBy } from "@/types/explore"
@@ -114,7 +115,7 @@ function CustomTooltip({
   const data = payload[0].payload as ChartDataPoint
 
   return (
-    <div className="bg-black text-white border border-zinc-800 rounded-md shadow-lg p-2.5 min-w-[140px] select-none z-50">
+    <ChartTooltipContainer className="p-2.5 min-w-[140px] select-none z-50">
       <div className="font-medium text-[11px] mb-1.5">
         {data.symbol}
         <span className="text-zinc-400 ml-1 font-normal">({data.poolName})</span>
@@ -122,7 +123,7 @@ function CustomTooltip({
       <div className="space-y-1 text-[11px]">
         <div className="flex justify-between">
           <span className="text-zinc-400">APY:</span>
-          <span className="font-medium text-emerald-400">{data.apy.toFixed(2)}%</span>
+          <span className="font-medium text-positive">{data.apy.toFixed(2)}%</span>
         </div>
         {data.blnd > 0 && (
           <div className="flex justify-between">
@@ -135,7 +136,7 @@ function CustomTooltip({
           <span className="font-medium text-white">{data.total.toFixed(2)}%</span>
         </div>
       </div>
-    </div>
+    </ChartTooltipContainer>
   )
 }
 

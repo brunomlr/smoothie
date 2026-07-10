@@ -163,8 +163,8 @@ function PoolSummary({
             {formatUsd(estimate.totalSupplied)}
           </p>
           <div className="flex items-center gap-1 mt-1">
-            <TrendingUp className="h-3 w-3 text-emerald-400 shrink-0" />
-            <span className="text-xs text-emerald-400">
+            <TrendingUp className="h-3 w-3 text-positive shrink-0" />
+            <span className="text-xs text-positive">
               {formatPercent(estimate.supplyApy)} APY
             </span>
           </div>
@@ -179,8 +179,8 @@ function PoolSummary({
           </p>
           {estimate.totalBorrowed > 0 ? (
             <div className="flex items-center gap-1 mt-1">
-              <TrendingDown className="h-3 w-3 text-red-400 shrink-0" />
-              <span className="text-xs text-red-400">
+              <TrendingDown className="h-3 w-3 text-negative shrink-0" />
+              <span className="text-xs text-negative">
                 {formatPercent(estimate.borrowApy)} APY
               </span>
             </div>
@@ -196,7 +196,7 @@ function PoolSummary({
         <CardContent className="p-3 md:p-4">
           <p className="text-xs text-muted-foreground mb-1">Net APY</p>
           <p
-            className={`text-lg md:text-xl font-semibold ${estimate.netApy >= 0 ? "text-emerald-400" : "text-red-400"}`}
+            className={`text-lg md:text-xl font-semibold ${estimate.netApy >= 0 ? "text-positive" : "text-negative"}`}
           >
             {formatPercent(estimate.netApy)}
           </p>
@@ -208,12 +208,12 @@ function PoolSummary({
           <p className="text-xs text-muted-foreground mb-1">Borrow Limit</p>
           <div className="flex items-center gap-2">
             <p
-              className={`text-lg md:text-xl font-semibold ${isDanger ? "text-red-400" : isWarning ? "text-yellow-400" : "text-emerald-400"}`}
+              className={`text-lg md:text-xl font-semibold ${isDanger ? "text-negative" : isWarning ? "text-yellow-400" : "text-positive"}`}
             >
               {formatPercent(healthPercent)}
             </p>
             {isDanger && (
-              <AlertTriangle className="h-4 w-4 text-red-400 shrink-0" />
+              <AlertTriangle className="h-4 w-4 text-negative shrink-0" />
             )}
           </div>
           <Progress
@@ -300,8 +300,8 @@ function AssetRow({
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-9 h-9" /> {/* Spacer to align with token logo */}
             <div className="min-w-0 flex-1">
-              <p className="font-medium truncate text-red-400">Borrowed</p>
-              <p className="text-sm text-red-400 truncate">
+              <p className="font-medium truncate text-negative">Borrowed</p>
+              <p className="text-sm text-negative truncate">
                 {formatUsd(position.borrowUsdValue)}
                 <span className="text-xs ml-1">
                   ({formatNumber(position.borrowAmount)} {position.symbol})
@@ -311,7 +311,7 @@ function AssetRow({
           </div>
           <div className="flex flex-col gap-1 items-start shrink-0 w-[110px]">
             <Badge variant="secondary" className="text-xs">
-              <TrendingDown className="mr-1 h-3 w-3 text-red-400" />
+              <TrendingDown className="mr-1 h-3 w-3 text-negative" />
               {formatPercent(position.borrowApy)} APY
             </Badge>
             {position.borrowBlndApy > 0.005 && (
@@ -534,8 +534,8 @@ function MobileAssetCard({
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-9 h-9" /> {/* Spacer to align with token logo */}
             <div className="min-w-0 flex-1">
-              <p className="font-medium truncate text-red-400">Borrowed</p>
-              <p className="text-sm text-red-400 truncate">
+              <p className="font-medium truncate text-negative">Borrowed</p>
+              <p className="text-sm text-negative truncate">
                 {formatUsd(position.borrowUsdValue)}
                 <span className="text-xs ml-1">
                   ({formatNumber(position.borrowAmount)} {position.symbol})
@@ -545,7 +545,7 @@ function MobileAssetCard({
           </div>
           <div className="flex flex-col gap-1 items-start shrink-0 w-[110px]">
             <Badge variant="secondary" className="text-xs">
-              <TrendingDown className="mr-1 h-3 w-3 text-red-400" />
+              <TrendingDown className="mr-1 h-3 w-3 text-negative" />
               {formatPercent(position.borrowApy)} APY
             </Badge>
             {position.borrowBlndApy > 0.005 && (
@@ -950,8 +950,8 @@ function BackstopSection({
             {/* Unlocked Q4W — ready to withdraw */}
             {position.unlockedQ4wLpTokens > 0.001 && (
               <div className="flex flex-wrap items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2">
-                <CheckCircle className="h-4 w-4 shrink-0 text-emerald-400" />
-                <span className="text-sm text-emerald-400 font-medium">
+                <CheckCircle className="h-4 w-4 shrink-0 text-positive" />
+                <span className="text-sm text-positive font-medium">
                   {formatNumber(position.unlockedQ4wLpTokens, 2)} LP ready to
                   withdraw
                 </span>

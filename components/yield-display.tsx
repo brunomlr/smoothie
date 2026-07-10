@@ -43,12 +43,12 @@ export function YieldDisplay({
       : (yieldBreakdown.costBasisHistorical > 0
           ? (yieldBreakdown.protocolYieldUsd / yieldBreakdown.costBasisHistorical) * 100
           : 0)
-    const formattedPct = pct !== 0 ? ` (${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%)` : ''
+    const formattedPct = Math.abs(pct) >= 0.005 ? ` (${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%)` : ''
 
     return (
       <Tooltip>
         <TooltipTrigger asChild>
-          <p className={`text-xs cursor-pointer flex items-center gap-1 ${displayValue >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+          <p className={`text-xs cursor-pointer flex items-center gap-1 ${displayValue >= 0 ? 'text-positive' : 'text-negative'}`}>
             {formatYieldValue(displayValue)}{formattedPct}
             <Info className="h-3 w-3" />
           </p>
@@ -64,19 +64,19 @@ export function YieldDisplay({
             </div>
             <div className="flex justify-between gap-6">
               <span className="text-zinc-400">Yield</span>
-              <span className={yieldBreakdown.protocolYieldUsd >= 0 ? 'text-emerald-400' : 'text-red-400'}>
+              <span className={yieldBreakdown.protocolYieldUsd >= 0 ? 'text-positive' : 'text-negative'}>
                 {formatYieldValue(yieldBreakdown.protocolYieldUsd)}
               </span>
             </div>
             <div className="flex justify-between gap-6">
               <span className="text-zinc-400">Price Change</span>
-              <span className={yieldBreakdown.priceChangeUsd >= 0 ? 'text-emerald-400' : 'text-red-400'}>
+              <span className={yieldBreakdown.priceChangeUsd >= 0 ? 'text-positive' : 'text-negative'}>
                 {formatYieldValue(yieldBreakdown.priceChangeUsd)}
               </span>
             </div>
             <div className="flex justify-between gap-6 border-t border-zinc-700 pt-1 mt-1">
               <span className="text-zinc-300 font-medium">Total</span>
-              <span className={yieldBreakdown.totalEarnedUsd >= 0 ? 'text-emerald-400' : 'text-red-400'}>
+              <span className={yieldBreakdown.totalEarnedUsd >= 0 ? 'text-positive' : 'text-negative'}>
                 {formatYieldValue(yieldBreakdown.totalEarnedUsd)}
               </span>
             </div>
@@ -87,12 +87,12 @@ export function YieldDisplay({
   }
 
   // Fallback when no breakdown is available
-  const formattedYieldPercentage = yieldPercentage !== 0
+  const formattedYieldPercentage = Math.abs(yieldPercentage) >= 0.005
     ? ` (${yieldPercentage >= 0 ? '+' : ''}${yieldPercentage.toFixed(2)}%)`
     : ''
 
   return (
-    <p className={`text-xs ${earnedYield >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+    <p className={`text-xs ${earnedYield >= 0 ? 'text-positive' : 'text-negative'}`}>
       {formatYieldValue(earnedYield)}{formattedYieldPercentage}
     </p>
   )

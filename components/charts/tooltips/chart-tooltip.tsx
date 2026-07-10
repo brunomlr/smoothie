@@ -58,7 +58,7 @@ interface ChartTooltipValueProps {
 export function ChartTooltipValue({
   value,
   label,
-  colorClass = "text-emerald-400",
+  colorClass = "text-positive",
   className = "",
   icon,
 }: ChartTooltipValueProps) {
@@ -74,12 +74,12 @@ export function ChartTooltipValue({
  * Color constants for chart tooltips
  */
 export const TOOLTIP_COLORS = {
-  emerald: "text-emerald-400",
+  emerald: "text-positive",
   purple: "text-purple-400",
   blue: "text-blue-400",
   amber: "text-amber-400",
-  red: "text-red-400",
-  green: "text-green-500",
+  red: "text-negative",
+  green: "text-positive",
 } as const
 
 export type TooltipColorKey = keyof typeof TOOLTIP_COLORS

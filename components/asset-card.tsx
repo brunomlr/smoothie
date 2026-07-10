@@ -24,25 +24,11 @@ import type { AssetCardData, AssetAction } from "@/types/asset-card"
 import { FormattedBalance } from "@/components/formatted-balance"
 import { useLiveBalance } from "@/hooks/use-live-balance"
 import { useCurrencyPreference } from "@/hooks/use-currency-preference"
+import { formatPercent, formatPercentWithSign } from "@/lib/format-utils"
 
 interface AssetCardProps {
   data: AssetCardData
   onAction?: (action: AssetAction, assetId: string) => void
-}
-
-function formatPercentage(value: number): string {
-  if (!Number.isFinite(value)) {
-    return "0.00"
-  }
-  return value.toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })
-}
-
-function formatSignedPercentage(value: number): string {
-  const formatted = formatPercentage(Math.abs(value))
-  return value >= 0 ? `+${formatted}` : `-${formatted}`
 }
 
 function hasNonZeroPercentage(value: number): boolean {
@@ -83,7 +69,8 @@ const AssetCardComponent = ({ data, onAction }: AssetCardProps) => {
 
   // Use yield percentage: (Yield / Cost Basis) * 100
   const yieldPercentage = data.yieldPercentage ?? 0
-  const formattedYieldPercentage = yieldPercentage !== 0 ? ` (${yieldPercentage >= 0 ? '+' : ''}${yieldPercentage.toFixed(2)}%)` : ''
+  // Only show the percentage when it doesn't round to "0.00%"
+  const formattedYieldPercentage = Math.abs(yieldPercentage) >= 0.005 ? ` (${yieldPercentage >= 0 ? '+' : ''}${yieldPercentage.toFixed(2)}%)` : ''
 
   // Yield breakdown for tooltip
   const breakdown = data.yieldBreakdown
@@ -113,7 +100,7 @@ const AssetCardComponent = ({ data, onAction }: AssetCardProps) => {
                 hasBreakdown ? (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span className={`text-sm font-medium tabular-nums cursor-pointer flex items-center gap-1 ${yieldToShow >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                      <span className={`text-sm font-medium tabular-nums cursor-pointer flex items-center gap-1 ${yieldToShow >= 0 ? 'text-positive' : 'text-negative'}`}>
                         {formattedYield} yield{formattedYieldPercentage}
                         <Info className="h-3 w-3" />
                       </span>
@@ -123,7 +110,7 @@ const AssetCardComponent = ({ data, onAction }: AssetCardProps) => {
                         <div className="font-semibold text-xs text-zinc-200 mb-2">Breakdown</div>
                         <div className="flex justify-between gap-4">
                           <span className="text-zinc-400">Yield:</span>
-                          <span className={breakdown.protocolYieldUsd >= 0 ? "text-emerald-400" : "text-red-400"}>
+                          <span className={breakdown.protocolYieldUsd >= 0 ? "text-positive" : "text-negative"}>
                             {formatInCurrency(breakdown.protocolYieldUsd, { showSign: true })}
                           </span>
                         </div>
@@ -132,14 +119,14 @@ const AssetCardComponent = ({ data, onAction }: AssetCardProps) => {
                         </div>
                         <div className="flex justify-between gap-4">
                           <span className="text-zinc-400">Price Change:</span>
-                          <span className={breakdown.priceChangeUsd >= 0 ? "text-emerald-400" : "text-red-400"}>
+                          <span className={breakdown.priceChangeUsd >= 0 ? "text-positive" : "text-negative"}>
                             {formatInCurrency(breakdown.priceChangeUsd, { showSign: true })}
                             {breakdown.priceChangePercent !== 0 && ` (${breakdown.priceChangePercent >= 0 ? '+' : ''}${breakdown.priceChangePercent.toFixed(1)}%)`}
                           </span>
                         </div>
                         <div className="border-t border-zinc-700 pt-1 flex justify-between gap-4 font-medium">
                           <span className="text-zinc-300">Total:</span>
-                          <span className={breakdown.totalEarnedUsd >= 0 ? "text-emerald-400" : "text-red-400"}>
+                          <span className={breakdown.totalEarnedUsd >= 0 ? "text-positive" : "text-negative"}>
                             {formatInCurrency(breakdown.totalEarnedUsd, { showSign: true })}
                           </span>
                         </div>
@@ -157,7 +144,7 @@ const AssetCardComponent = ({ data, onAction }: AssetCardProps) => {
                     </TooltipContent>
                   </Tooltip>
                 ) : (
-                  <span className={`text-sm font-medium tabular-nums ${yieldToShow >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                  <span className={`text-sm font-medium tabular-nums ${yieldToShow >= 0 ? 'text-positive' : 'text-negative'}`}>
                     {formattedYield} yield{formattedYieldPercentage}
                   </span>
                 )
@@ -165,24 +152,26 @@ const AssetCardComponent = ({ data, onAction }: AssetCardProps) => {
             </div>
 
             <div className="flex gap-1.5">
-              <Tooltip>
-                <TooltipTrigger>
-                  <Badge variant="secondary" className="text-xs">
-                    <TrendingUp className="mr-1 h-3 w-3" />
-                    {formatPercentage(data.apyPercentage)}% APY
-                  </Badge>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Annual Percentage Yield</p>
-                </TooltipContent>
-              </Tooltip>
+              {hasNonZeroPercentage(data.apyPercentage) && (
+                <Tooltip>
+                  <TooltipTrigger>
+                    <Badge variant="secondary" className="text-xs">
+                      <TrendingUp className="mr-1 h-3 w-3" />
+                      {formatPercent(data.apyPercentage)} APY
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Annual Percentage Yield</p>
+                  </TooltipContent>
+                </Tooltip>
+              )}
 
               {hasNonZeroPercentage(data.growthPercentage) && (
                 <Tooltip>
                   <TooltipTrigger>
                     <Badge variant="secondary" className="text-xs">
                       <Flame className="mr-1 h-3 w-3" />
-                      {formatSignedPercentage(data.growthPercentage)}% BLND APY
+                      {formatPercentWithSign(data.growthPercentage)} BLND APY
                     </Badge>
                   </TooltipTrigger>
                   <TooltipContent>

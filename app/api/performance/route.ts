@@ -3,11 +3,16 @@ import { eventsRepository } from '@/lib/db/events-repository'
 import { LP_TOKEN_ADDRESS, BLND_TOKEN_ADDRESS } from '@/lib/constants'
 import { getAllDatesBetween, getToday, getFirstDateFromMap, getFirstDateFromSet } from '@/lib/date-utils'
 import { resolveWalletAddress } from '@/lib/api/resolve-wallet'
+import { fetchRemediationPayments } from '@/lib/reports/remediation'
 
 export interface RealizedYieldTransaction {
   date: string
   type: 'deposit' | 'withdraw' | 'claim'
   source: 'pool' | 'backstop'
+  /** Synthetic rows: liquidation legs and incident-remediation payments */
+  kind?: 'liquidation' | 'remediation'
+  /** Claim that was auto-restaked into the backstop (never left the protocol) */
+  restaked?: boolean
   asset: string
   assetAddress: string | null
   amount: number
@@ -38,8 +43,16 @@ export interface RealizedYieldResponse {
   emissions: {
     blndClaimed: number
     lpClaimed: number
+    /** Full earned value, including auto-restaked LP claims */
     usdValue: number
+    /** Only claims that actually reached the wallet (cash-flow view) */
+    receivedUsdValue: number
   }
+
+  /** Incident-remediation payments received (included in realizedPnl) */
+  reimbursementsUsd: number
+  /** Liquidation fills whose debt leg is missing from the DB (proceeds counted as 0) */
+  liquidationDataGaps: number
 
   // Performance metrics
   roiPercent: number | null
@@ -156,21 +169,56 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Fetch data for all addresses in parallel
-    const allDataPromises = userAddresses.map(addr =>
-      eventsRepository.getRealizedYieldData(addr, sdkPrices)
-    )
-    const allData = await Promise.all(allDataPromises)
+    // Fetch data for all addresses in parallel; remediation payments are
+    // best-effort (a Horizon outage must not block the performance page)
+    const [allData, allRemediations] = await Promise.all([
+      Promise.all(userAddresses.map(addr => eventsRepository.getRealizedYieldData(addr, sdkPrices))),
+      Promise.all(
+        userAddresses.map(addr =>
+          fetchRemediationPayments(addr).catch(error => {
+            console.warn('[Performance API] remediation scan failed:', error)
+            return { payments: [], truncated: false }
+          })
+        )
+      ),
+    ])
 
-    // Aggregate data from all wallets
+    // Turn remediation payments into synthetic 'withdraw' transactions (value
+    // returned from the protocol ecosystem) attributed to the related pool,
+    // so totals, ROI and the cumulative series all include them.
+    const remediationPayments = allRemediations.flatMap(r => r.payments)
+    const remediationTransactions: RealizedYieldTransaction[] = await Promise.all(
+      remediationPayments.map(async payment => {
+        const day = payment.date.slice(0, 10)
+        const { price } = await eventsRepository.getHistoricalPriceAtDate(payment.tokenAddress, day, 1)
+        const relatedPool = await eventsRepository.getPool(payment.relatedPoolId)
+        return {
+          date: day,
+          type: 'withdraw' as const,
+          source: 'pool' as const,
+          kind: 'remediation' as const,
+          asset: payment.assetCode,
+          assetAddress: payment.tokenAddress,
+          amount: payment.quantity,
+          priceUsd: price,
+          valueUsd: payment.quantity * price,
+          txHash: payment.txHash,
+          poolId: payment.relatedPoolId,
+          poolName: relatedPool?.name ?? null,
+        }
+      })
+    )
+    const reimbursementsUsd = remediationTransactions.reduce((sum, tx) => sum + tx.valueUsd, 0)
+
+    // Aggregate data from all wallets (reimbursements count as pool proceeds)
     const data = {
       totalDepositedUsd: allData.reduce((sum, d) => sum + d.totalDepositedUsd, 0),
-      totalWithdrawnUsd: allData.reduce((sum, d) => sum + d.totalWithdrawnUsd, 0),
-      realizedPnl: allData.reduce((sum, d) => sum + d.realizedPnl, 0),
+      totalWithdrawnUsd: allData.reduce((sum, d) => sum + d.totalWithdrawnUsd, 0) + reimbursementsUsd,
+      realizedPnl: allData.reduce((sum, d) => sum + d.realizedPnl, 0) + reimbursementsUsd,
       pools: {
         deposited: allData.reduce((sum, d) => sum + d.pools.deposited, 0),
-        withdrawn: allData.reduce((sum, d) => sum + d.pools.withdrawn, 0),
-        realized: allData.reduce((sum, d) => sum + d.pools.realized, 0),
+        withdrawn: allData.reduce((sum, d) => sum + d.pools.withdrawn, 0) + reimbursementsUsd,
+        realized: allData.reduce((sum, d) => sum + d.pools.realized, 0) + reimbursementsUsd,
       },
       backstop: {
         deposited: allData.reduce((sum, d) => sum + d.backstop.deposited, 0),
@@ -181,7 +229,10 @@ export async function GET(request: NextRequest) {
         blndClaimed: allData.reduce((sum, d) => sum + d.emissions.blndClaimed, 0),
         lpClaimed: allData.reduce((sum, d) => sum + d.emissions.lpClaimed, 0),
         usdValue: allData.reduce((sum, d) => sum + d.emissions.usdValue, 0),
+        receivedUsdValue: allData.reduce((sum, d) => sum + d.emissions.receivedUsdValue, 0),
       },
+      reimbursementsUsd,
+      liquidationDataGaps: allData.reduce((sum, d) => sum + d.liquidationDataGaps, 0),
       // Use earliest first activity date and latest last activity date
       firstActivityDate: allData
         .map(d => d.firstActivityDate)
@@ -193,19 +244,28 @@ export async function GET(request: NextRequest) {
         .sort()
         .reverse()[0] ?? null,
       // Combine all transactions
-      transactions: allData.flatMap(d => d.transactions),
+      transactions: [...allData.flatMap(d => d.transactions), ...remediationTransactions]
+        .sort((a, b) => a.date.localeCompare(b.date)),
     }
 
     // Group transactions by date and calculate running totals
     const dateMap = new Map<string, { deposited: number; withdrawn: number; realizedPnl: number }>()
 
     for (const tx of data.transactions) {
+      // Restaked claims never left the protocol — excluded from cash-flow
+      // series, matching the summary totals
+      if (tx.restaked) continue
+
       const existing = dateMap.get(tx.date) || { deposited: 0, withdrawn: 0, realizedPnl: 0 }
 
       if (tx.type === 'deposit') {
         existing.deposited += tx.valueUsd
       } else if (tx.type === 'claim') {
         // Claims are pure realized profit
+        existing.withdrawn += tx.valueUsd
+        existing.realizedPnl += tx.valueUsd
+      } else if (tx.kind === 'remediation') {
+        // Reimbursements are pure realized profit (they offset prior losses)
         existing.withdrawn += tx.valueUsd
         existing.realizedPnl += tx.valueUsd
       } else {
@@ -257,12 +317,14 @@ export async function GET(request: NextRequest) {
     const backstopDateMap = new Map<string, { deposited: number; withdrawn: number; realizedPnl: number }>()
 
     for (const tx of data.transactions) {
+      if (tx.restaked) continue
+
       const targetMap = tx.source === 'pool' ? poolsDateMap : backstopDateMap
       const existing = targetMap.get(tx.date) || { deposited: 0, withdrawn: 0, realizedPnl: 0 }
 
       if (tx.type === 'deposit') {
         existing.deposited += tx.valueUsd
-      } else if (tx.type === 'claim') {
+      } else if (tx.type === 'claim' || tx.kind === 'remediation') {
         existing.withdrawn += tx.valueUsd
         existing.realizedPnl += tx.valueUsd
       } else {
@@ -327,6 +389,7 @@ export async function GET(request: NextRequest) {
 
     for (const tx of data.transactions) {
       if (tx.type !== 'claim') continue // Only track claims/emissions for realized P&L
+      if (tx.restaked) continue // Restaked claims realize when the LP is withdrawn
 
       let poolData = poolDateMaps.get(tx.poolId)
       if (!poolData) {
@@ -417,6 +480,8 @@ export async function GET(request: NextRequest) {
       pools: data.pools,
       backstop: data.backstop,
       emissions: data.emissions,
+      reimbursementsUsd: data.reimbursementsUsd,
+      liquidationDataGaps: data.liquidationDataGaps,
       roiPercent,
       annualizedRoiPercent,
       daysActive,

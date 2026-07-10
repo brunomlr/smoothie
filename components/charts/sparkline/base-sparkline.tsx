@@ -31,7 +31,7 @@ function SparklineTooltip({ active, payload, config }: CustomTooltipProps) {
       <ChartTooltipValue
         value={config.formatValue(value)}
         label={config.label}
-        colorClass={config.tooltipColorClass || "text-emerald-400"}
+        colorClass={config.tooltipColorClass || "text-positive"}
         icon={config.tooltipIcon}
       />
     </ChartTooltipContainer>
@@ -173,7 +173,7 @@ export function BaseSparkline({
                 {config.periodLabel || config.averageLabel}
               </p>
               {config.statsMode === "change" ? (
-                <p className={`text-xs ${isPositive ? 'text-emerald-400' : 'text-red-400'}`}>
+                <p className={`text-xs ${isPositive ? 'text-positive' : 'text-negative'}`}>
                   {isPositive ? "+" : ""}{changePercent.toFixed(1)}%
                 </p>
               ) : (

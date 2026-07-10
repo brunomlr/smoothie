@@ -3,6 +3,7 @@
 import { useMemo } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { fetchWithTimeout } from "@/lib/fetch-utils"
+import { formatPrice } from "@/lib/format-utils"
 import { BaseSparkline } from "@/components/charts/sparkline/base-sparkline"
 import type { SparklineConfig } from "@/components/charts/sparkline/types"
 
@@ -33,16 +34,6 @@ async function fetchTokenPriceHistory(
 
   const data = await response.json()
   return data.history || []
-}
-
-function formatPrice(value: number): string {
-  if (value >= 1) {
-    return `$${value.toFixed(2)}`
-  }
-  if (value >= 0.01) {
-    return `$${value.toFixed(4)}`
-  }
-  return `$${value.toFixed(6)}`
 }
 
 function createConfig(tokenSymbol: string): SparklineConfig {

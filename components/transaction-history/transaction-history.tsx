@@ -14,6 +14,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { format } from "date-fns"
+import { toast } from "sonner"
 import { useQuery } from "@tanstack/react-query"
 import { useInfiniteUserActions } from "@/hooks/use-user-actions"
 import type { ActionType } from "@/lib/db/types"
@@ -233,6 +234,7 @@ export function TransactionHistory({
       document.body.removeChild(a)
     } catch (error) {
       console.error('Export failed:', error)
+      toast.error(error instanceof Error ? error.message : 'Export failed')
     } finally {
       setIsExporting(false)
     }

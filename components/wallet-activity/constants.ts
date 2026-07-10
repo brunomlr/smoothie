@@ -36,7 +36,7 @@ export const OPERATION_CONFIG: Record<string, OperationConfig> = {
   create_account: {
     label: "Account Created",
     icon: UserPlus,
-    color: "text-green-600 dark:text-green-400",
+    color: "text-positive",
     bgColor: "bg-green-100 dark:bg-green-900/30",
   },
   change_trust: {
@@ -84,13 +84,13 @@ export const OPERATION_CONFIG: Record<string, OperationConfig> = {
   manage_sell_offer: {
     label: "Sell Offer",
     icon: ArrowUpRight,
-    color: "text-red-600 dark:text-red-400",
+    color: "text-negative",
     bgColor: "bg-red-100 dark:bg-red-900/30",
   },
   manage_buy_offer: {
     label: "Buy Offer",
     icon: ArrowDownRight,
-    color: "text-green-600 dark:text-green-400",
+    color: "text-positive",
     bgColor: "bg-green-100 dark:bg-green-900/30",
   },
   create_passive_sell_offer: {

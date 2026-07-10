@@ -12,6 +12,7 @@ import { BlndApySparkline } from "@/components/blnd-apy-sparkline"
 import { TokenPriceSparkline } from "@/components/token-price-sparkline"
 import { ApySimulatorContainer } from "@/components/apy-simulator"
 import { DollarSign } from "lucide-react"
+import { useUsdFormatters } from "./use-usd-formatters"
 import type { SupplyExploreItem, SortBy } from "@/types/explore"
 
 interface SupplyResultsProps {
@@ -40,22 +41,6 @@ function resolveAssetLogo(symbol: string): string {
 function formatApy(value: number | null): string {
   if (value === null) return "—"
   return `${value.toFixed(2)}%`
-}
-
-function formatUsdCompact(value: number | null): string {
-  if (value === null || !Number.isFinite(value)) return "—"
-  if (value >= 1_000_000) {
-    return `$${(value / 1_000_000).toFixed(2)}M`
-  }
-  if (value >= 1_000) {
-    return `$${(value / 1_000).toFixed(2)}K`
-  }
-  return `$${value.toFixed(2)}`
-}
-
-function formatUsdFull(value: number | null): string {
-  if (value === null || !Number.isFinite(value)) return "—"
-  return `$${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
 function formatTokens(value: number | null): string {
@@ -182,6 +167,7 @@ function SupplyRowCharts({ item }: { item: SupplyExploreItem }) {
 
 function SupplyRow({ item, sortBy }: { item: SupplyExploreItem; sortBy: SortBy }) {
   const [isExpanded, setIsExpanded] = useState(false)
+  const { usdCompact: formatUsdCompact, usdFull: formatUsdFull } = useUsdFormatters()
   const logoUrl = resolveAssetLogo(item.tokenSymbol)
 
   return (
@@ -212,7 +198,7 @@ function SupplyRow({ item, sortBy }: { item: SupplyExploreItem; sortBy: SortBy }
                         onClick={(e) => e.stopPropagation()}
                         onTouchStart={(e) => e.stopPropagation()}
                       >
-                        <ArrowUpRight className="h-3 w-3 text-green-500" />
+                        <ArrowUpRight className="h-3 w-3 text-positive" />
                         {formatUsdCompact(item.totalSupplied)}
                       </span>
                     </TooltipTrigger>

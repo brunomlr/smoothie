@@ -2,7 +2,8 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
-import { Wallet, Check, Plus, LogOut, Copy, ChevronDown, Eye, Smile, Pencil } from "lucide-react"
+import { Wallet, Check, Plus, LogOut, Copy, ChevronDown, Eye, Smile, Pencil, Trash2 } from "lucide-react"
+import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
@@ -57,6 +58,7 @@ export function WalletSelector({
   const [isLoadingWallets, setIsLoadingWallets] = React.useState(false)
   const [customizerOpen, setCustomizerOpen] = React.useState(false)
   const [focusNameOnOpen, setFocusNameOnOpen] = React.useState(false)
+  const [connectingWalletId, setConnectingWalletId] = React.useState<string | null>(null)
   const { disconnect: disconnectWallet, getSupportedWallets, connectWallet } = useStellarWalletKit()
   const { capture } = useAnalytics()
   const { getDisplayName, setCustomName, customNames } = useWalletCustomNames()
@@ -80,6 +82,8 @@ export function WalletSelector({
   }
 
   const handleWalletSelect = async (wallet: SupportedWallet) => {
+    if (connectingWalletId) return
+    setConnectingWalletId(wallet.id)
     try {
       const address = await connectWallet(wallet.id)
       // If address already exists, select the existing wallet
@@ -106,6 +110,11 @@ export function WalletSelector({
         error: error instanceof Error ? error.message : 'Unknown error'
       })
       console.error("Failed to connect wallet:", error)
+      toast.error(`Could not connect to ${wallet.name}`, {
+        description: error instanceof Error ? error.message : undefined,
+      })
+    } finally {
+      setConnectingWalletId(null)
     }
   }
 
@@ -146,6 +155,7 @@ export function WalletSelector({
       setTimeout(() => setCopiedAddress(null), 2000)
     } catch (error) {
       console.error("Failed to copy address:", error)
+      toast.error("Could not copy address to clipboard")
     }
   }
 
@@ -162,11 +172,14 @@ export function WalletSelector({
       setIsOpen(false)
     } catch (error) {
       console.error("Failed to disconnect:", error)
+      toast.error("Could not disconnect wallet")
     }
   }
 
+  // Followed addresses are stored with a "Watch <addr>" name; match the exact
+  // prefix so a user-chosen name like "Watchtower" isn't treated as watched
   const isWatched = (wallet: WalletType) =>
-    wallet.name?.toLowerCase().includes('watch')
+    /^watch(\s|$)/i.test(wallet.name ?? '')
 
   const findExistingWallet = (address: string) =>
     wallets.find((w) => w.publicKey.toLowerCase() === address.toLowerCase())
@@ -224,6 +237,7 @@ export function WalletSelector({
           wallets={supportedWallets}
           isLoadingWallets={isLoadingWallets}
           isFirstWallet={wallets.length === 0}
+          connectingWalletId={connectingWalletId}
         />
 
         <FollowAddressModal
@@ -416,7 +430,7 @@ export function WalletSelector({
                               className={cn(
                                 "h-7 px-2.5 text-xs flex-1",
                                 "hover:bg-background/80",
-                                copiedAddress === wallet.publicKey && "text-green-600"
+                                copiedAddress === wallet.publicKey && "text-positive"
                               )}
                               onClick={(e) => handleCopyAddress(e, wallet.publicKey)}
                             >
@@ -442,8 +456,17 @@ export function WalletSelector({
                             )}
                             onClick={(e) => handleDisconnect(e, wallet)}
                           >
-                            <LogOut className="h-3 w-3 mr-1.5" />
-                            Disconnect
+                            {watched ? (
+                              <>
+                                <Trash2 className="h-3 w-3 mr-1.5" />
+                                Remove
+                              </>
+                            ) : (
+                              <>
+                                <LogOut className="h-3 w-3 mr-1.5" />
+                                Disconnect
+                              </>
+                            )}
                           </Button>
                         </div>
                       )}
@@ -484,6 +507,7 @@ export function WalletSelector({
         wallets={supportedWallets}
         isLoadingWallets={isLoadingWallets}
         isFirstWallet={wallets.length === 0}
+        connectingWalletId={connectingWalletId}
       />
 
       <FollowAddressModal

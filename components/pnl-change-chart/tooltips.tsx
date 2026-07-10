@@ -35,7 +35,7 @@ export function YieldTooltip({
       <div className="font-medium text-[11px] mb-1.5 flex items-center gap-2">
         {data.period}
         {data.isLive && (
-          <span className="text-[9px] text-emerald-400 bg-emerald-400/10 px-1.5 py-0.5 rounded">
+          <span className="text-[9px] text-positive bg-emerald-400/10 px-1.5 py-0.5 rounded">
             Live
           </span>
         )}
@@ -75,7 +75,7 @@ export function YieldTooltip({
                 <div className={`w-2 h-2 rounded-sm ${data.backstopYield >= 0 ? "bg-violet-500" : "bg-red-500"}`} />
                 <span className="text-zinc-400">Backstop Yield</span>
               </div>
-              <span className={`tabular-nums ${data.backstopYield >= 0 ? "text-violet-400" : "text-red-400"}`}>
+              <span className={`tabular-nums ${data.backstopYield >= 0 ? "text-violet-400" : "text-negative"}`}>
                 {formatValue(data.backstopYield)}
               </span>
             </div>
@@ -121,7 +121,7 @@ export function YieldTooltip({
             <span className="text-zinc-300 font-medium">Total Yield</span>
             <span
               className={`tabular-nums font-medium ${
-                data.yieldTotal >= 0 ? "text-emerald-400" : "text-red-400"
+                data.yieldTotal >= 0 ? "text-positive" : "text-negative"
               }`}
             >
               {formatValue(data.yieldTotal)}
@@ -159,7 +159,7 @@ export function PriceChangeTooltip({
       <div className="font-medium text-[11px] mb-1.5 flex items-center gap-2">
         {data.period}
         {data.isLive && (
-          <span className="text-[9px] text-emerald-400 bg-emerald-400/10 px-1.5 py-0.5 rounded">
+          <span className="text-[9px] text-positive bg-emerald-400/10 px-1.5 py-0.5 rounded">
             Live
           </span>
         )}
@@ -176,7 +176,7 @@ export function PriceChangeTooltip({
         </div>
         <span
           className={`tabular-nums font-medium ${
-            data.priceChange >= 0 ? "text-emerald-400" : "text-red-400"
+            data.priceChange >= 0 ? "text-positive" : "text-negative"
           }`}
         >
           {formatValue(data.priceChange)}

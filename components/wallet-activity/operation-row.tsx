@@ -66,7 +66,7 @@ function OperationAmount({
     const logo = getAssetLogo(assetCode)
     const isReceiving = to === currentUserAddress
     const prefix = isReceiving ? "+" : "-"
-    const colorClass = isReceiving ? "text-green-600 dark:text-green-400" : ""
+    const colorClass = isReceiving ? "text-positive" : ""
 
     return (
       <div className="flex items-center gap-2">

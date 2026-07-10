@@ -10,6 +10,7 @@ import { PoolLogo } from "@/components/pool-logo"
 import { PoolsChart } from "@/components/explore/pools-chart"
 import { PoolTvlHistoryChart } from "@/components/explore/pool-tvl-history-chart"
 import { PoolTokenTvlChart } from "@/components/explore/pool-token-tvl-chart"
+import { useUsdFormatters } from "./use-usd-formatters"
 import type { PoolExploreItem, PoolTokenItem } from "@/types/explore"
 
 interface PoolsResultsProps {
@@ -34,36 +35,8 @@ function resolveAssetLogo(symbol: string): string {
   return ASSET_LOGO_MAP[normalized] ?? `/tokens/${symbol.toLowerCase()}.png`
 }
 
-function formatUsdCompact(value: number | null): string {
-  if (value === null || !Number.isFinite(value)) return "—"
-  if (value >= 1_000_000) {
-    return `$${(value / 1_000_000).toFixed(2)}M`
-  }
-  if (value >= 1_000) {
-    return `$${(value / 1_000).toFixed(2)}K`
-  }
-  return `$${value.toFixed(2)}`
-}
-
-function formatUsdFull(value: number | null): string {
-  if (value === null || !Number.isFinite(value)) return "—"
-  return `$${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-}
-
-function formatChange(value: number): string {
-  if (!Number.isFinite(value) || Math.abs(value) < 0.01) return ""
-  const absValue = Math.abs(value)
-  const sign = value >= 0 ? "+" : "-"
-  if (absValue >= 1_000_000) {
-    return `${sign}$${(absValue / 1_000_000).toFixed(2)}M`
-  }
-  if (absValue >= 1_000) {
-    return `${sign}$${(absValue / 1_000).toFixed(2)}K`
-  }
-  return `${sign}$${absValue.toFixed(2)}`
-}
-
 function TokenRow({ token }: { token: PoolTokenItem }) {
+  const { usdCompact: formatUsdCompact } = useUsdFormatters()
   const logoUrl = resolveAssetLogo(token.tokenSymbol)
 
   return (
@@ -75,7 +48,7 @@ function TokenRow({ token }: { token: PoolTokenItem }) {
       <div className="flex items-center gap-2 sm:gap-4 mr-5">
         <div className="min-w-[80px] sm:min-w-[90px]">
           <div className="flex items-center gap-1">
-            <ArrowUpRight className="h-2.5 w-2.5 text-green-500" />
+            <ArrowUpRight className="h-2.5 w-2.5 text-positive" />
             <span className="text-xs font-medium">{formatUsdCompact(token.totalSupplied)}</span>
           </div>
         </div>
@@ -92,6 +65,7 @@ function TokenRow({ token }: { token: PoolTokenItem }) {
 
 function PoolRow({ item }: { item: PoolExploreItem }) {
   const [isExpanded, setIsExpanded] = useState(false)
+  const { usdCompact: formatUsdCompact, usdChange: formatChange } = useUsdFormatters()
 
   const supplyChange = formatChange(item.supplyChange24h)
   const borrowChange = formatChange(item.borrowChange24h)
@@ -115,7 +89,7 @@ function PoolRow({ item }: { item: PoolExploreItem }) {
           {/* TVL */}
           <div className="text-right min-w-[80px] sm:min-w-[90px]">
             <div className="flex items-center justify-end gap-1">
-              <ArrowUpRight className="h-3 w-3 text-green-500" />
+              <ArrowUpRight className="h-3 w-3 text-positive" />
               <span className="font-medium text-sm">{formatUsdCompact(item.totalTvl)}</span>
             </div>
             {supplyChange && (
@@ -186,6 +160,7 @@ function PoolRowSkeleton() {
 }
 
 function TotalsSummary({ items, isLoading }: { items: PoolExploreItem[]; isLoading: boolean }) {
+  const { usdFull: formatUsdFull, usdChange: formatChange } = useUsdFormatters()
   const totalTvl = items.reduce((sum, item) => sum + item.totalTvl, 0)
   const totalBorrowed = items.reduce((sum, item) => sum + item.totalBorrowed, 0)
   const totalSupplyChange = items.reduce((sum, item) => sum + item.supplyChange24h, 0)
@@ -220,7 +195,7 @@ function TotalsSummary({ items, isLoading }: { items: PoolExploreItem[]; isLoadi
       <Card>
         <CardContent className="p-3 sm:p-4">
           <div className="flex items-center gap-1.5 text-xs sm:text-sm text-muted-foreground mb-1">
-            <ArrowUpRight className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-green-500" />
+            <ArrowUpRight className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-positive" />
             Total TVL
           </div>
           <p className="text-lg sm:text-2xl font-bold">{formatUsdFull(totalTvl)}</p>

@@ -10,6 +10,7 @@ import { WalletAvatar } from "@/components/wallet-avatar"
 import { useWalletAvatarCustomization, AVATAR_GRADIENTS } from "@/hooks/use-wallet-avatar-customization"
 import { useWalletCustomNames } from "@/hooks/use-wallet-custom-names"
 import { useCurrencyPreference } from "@/hooks/use-currency-preference"
+import { formatAllocationPercent } from "@/lib/format-utils"
 import type { Wallet } from "@/types/wallet"
 
 // Default colors for wallets without customization (cycle through)
@@ -41,11 +42,6 @@ interface WalletAllocationBarProps {
     totalUsdValue: number
   }>
   isLoading?: boolean
-}
-
-function formatPercentage(value: number): string {
-  if (value < 1) return "<1%"
-  return `${Math.round(value)}%`
 }
 
 export function WalletAllocationBar({
@@ -145,7 +141,7 @@ export function WalletAllocationBar({
                 <TooltipContent>
                   <div className="font-medium">{allocation.name}</div>
                   <div className="text-zinc-400">
-                    {formatPercentage(allocation.percentage)} of total
+                    {formatAllocationPercent(allocation.percentage)} of total
                   </div>
                   <div className="mt-1">{formatUsd(allocation.totalValue)}</div>
                 </TooltipContent>
@@ -186,7 +182,7 @@ export function WalletAllocationBar({
                     {allocation.name}
                   </div>
                   <div className="text-zinc-400 mt-1">
-                    {formatUsd(allocation.totalValue)} ({formatPercentage(allocation.percentage)})
+                    {formatUsd(allocation.totalValue)} ({formatAllocationPercent(allocation.percentage)})
                   </div>
                 </TooltipContent>
               </Tooltip>

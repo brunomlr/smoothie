@@ -316,8 +316,17 @@ export function BlndRewardsCard({
   return (
     <Card className="overflow-hidden p-0 gap-0">
       <div
+        role="button"
+        tabIndex={0}
+        aria-expanded={isExpanded}
         className="cursor-pointer select-none flex items-center justify-between px-4 py-3"
         onClick={() => setIsExpanded(!isExpanded)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault()
+            setIsExpanded(!isExpanded)
+          }
+        }}
       >
         <div className="flex items-center gap-2">
           <Flame className="h-5 w-5 text-muted-foreground" />
@@ -368,7 +377,7 @@ export function BlndRewardsCard({
         </div>
       </div>
       <div
-        className={`overflow-hidden transition-[max-height,opacity] duration-300 ease-out ${isExpanded ? 'max-h-[700px] opacity-100' : 'max-h-0 opacity-0'}`}
+        className={`overflow-hidden transition-[max-height,opacity] duration-300 ease-out ${isExpanded ? 'max-h-[4000px] opacity-100' : 'max-h-0 opacity-0'}`}
       >
         <div className="px-4 pt-2 pb-4">
           {/* Table-like structure */}
@@ -389,7 +398,7 @@ export function BlndRewardsCard({
                 >
                   <div className="flex items-center gap-2 text-muted-foreground truncate" title={row.name}>
                     <span className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${
-                      row.type === 'deposit' ? 'bg-green-500' :
+                      row.type === 'deposit' ? 'bg-positive' :
                       row.type === 'borrow' ? 'bg-orange-500' :
                       'bg-purple-500'
                     }`} />
@@ -419,7 +428,7 @@ export function BlndRewardsCard({
                 {pendingSupplyEmissions > 0 && (
                   <div className="grid grid-cols-[1fr_auto_auto] gap-2 text-xs py-1">
                     <div className="flex items-center gap-2 text-muted-foreground">
-                      <span className="inline-block w-2 h-2 rounded-full flex-shrink-0 bg-green-500" />
+                      <span className="inline-block w-2 h-2 rounded-full flex-shrink-0 bg-positive" />
                       <span>Deposit</span>
                     </div>
                     <div className="w-20 text-right tabular-nums font-medium flex items-center justify-end gap-1">
@@ -453,7 +462,7 @@ export function BlndRewardsCard({
                 {pendingSupplyEmissions === 0 && pendingBorrowEmissions === 0 && poolClaimedBlnd > 0 && (
                   <div className="grid grid-cols-[1fr_auto_auto] gap-2 text-xs py-1">
                     <div className="flex items-center gap-2 text-muted-foreground">
-                      <span className="inline-block w-2 h-2 rounded-full flex-shrink-0 bg-green-500" />
+                      <span className="inline-block w-2 h-2 rounded-full flex-shrink-0 bg-positive" />
                       <span>Deposit</span>
                     </div>
                     <div className="w-20 text-right tabular-nums font-medium">-</div>

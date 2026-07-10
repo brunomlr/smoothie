@@ -55,3 +55,6 @@ export {
   resolveWalletAddresses,
   isDemoWalletParam,
 } from './resolve-wallet'
+
+// Demo wallet transaction hash placeholder
+export { generatePlaceholderHash } from './placeholder-hash'

@@ -37,7 +37,7 @@ const BACKSTOP_APY_CONFIG: SparklineConfig = {
   color: "#34d399", // emerald-400
   label: "APR",
   formatValue: formatPercent,
-  tooltipColorClass: "text-emerald-400",
+  tooltipColorClass: "text-positive",
   averageLabel: "6mo avg",
 }
 

@@ -10,6 +10,7 @@ import { BackstopApySparkline } from "@/components/backstop-apy-sparkline"
 import { BlndApySparkline } from "@/components/blnd-apy-sparkline"
 import { LpPriceSparkline } from "@/components/lp-price-sparkline"
 import { Q4wSparkline } from "@/components/q4w-sparkline"
+import { useUsdFormatters } from "./use-usd-formatters"
 import type { BackstopExploreItem, SortBy, LpPriceDataPoint } from "@/types/explore"
 
 interface BackstopResultsProps {
@@ -22,22 +23,6 @@ interface BackstopResultsProps {
 
 function formatApy(value: number): string {
   return `${value.toFixed(2)}%`
-}
-
-function formatUsdCompact(value: number | null): string {
-  if (value === null || !Number.isFinite(value)) return "—"
-  if (value >= 1_000_000) {
-    return `$${(value / 1_000_000).toFixed(2)}M`
-  }
-  if (value >= 1_000) {
-    return `$${(value / 1_000).toFixed(2)}K`
-  }
-  return `$${value.toFixed(2)}`
-}
-
-function formatUsdFull(value: number | null): string {
-  if (value === null || !Number.isFinite(value)) return "—"
-  return `$${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
 function sortItems(items: BackstopExploreItem[], sortBy: SortBy): BackstopExploreItem[] {
@@ -132,6 +117,7 @@ function BackstopRowCharts({ item, lpTokenPrice, lpPriceHistory }: { item: Backs
 
 function BackstopRow({ item, sortBy, lpTokenPrice, lpPriceHistory }: { item: BackstopExploreItem; sortBy: SortBy; lpTokenPrice: number | null; lpPriceHistory: LpPriceDataPoint[] }) {
   const [isExpanded, setIsExpanded] = useState(false)
+  const { usdCompact: formatUsdCompact, usdFull: formatUsdFull } = useUsdFormatters()
 
   return (
     <div className="border-b border-border/50 last:border-b-0">
@@ -166,7 +152,7 @@ function BackstopRow({ item, sortBy, lpTokenPrice, lpPriceHistory }: { item: Bac
                         onClick={(e) => e.stopPropagation()}
                         onTouchStart={(e) => e.stopPropagation()}
                       >
-                        <ArrowUpRight className="h-3 w-3 text-green-500" />
+                        <ArrowUpRight className="h-3 w-3 text-positive" />
                         {formatUsdCompact(item.totalDeposited)}
                       </span>
                     </TooltipTrigger>

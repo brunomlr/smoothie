@@ -5,8 +5,10 @@ import { useQuery } from "@tanstack/react-query"
 import { LineChart, Line, ResponsiveContainer, YAxis, Tooltip as RechartsTooltip } from "recharts"
 import { fetchWithTimeout } from "@/lib/fetch-utils"
 import { getTodayInUserTimezone } from "@/lib/date-utils"
+import { formatPrice } from "@/lib/format-utils"
 import { TrendingUp, TrendingDown } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { ChartTooltipContainer, ChartTooltipDate } from "@/components/charts/tooltips/chart-tooltip"
 
 interface PriceDataPoint {
   date: string
@@ -48,26 +50,7 @@ async function fetchTokenPriceHistory(tokenAddress: string, period: SparklinePer
   return data.history || []
 }
 
-// Format price for display
-function formatPrice(price: number): string {
-  if (price >= 1) {
-    return `$${price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-  } else if (price >= 0.01) {
-    return `$${price.toFixed(4)}`
-  } else {
-    return `$${price.toFixed(6)}`
-  }
-}
-
-// Format date for tooltip
-function formatDate(dateStr: string): string {
-  // Parse date as local time to avoid timezone shift
-  const [year, month, day] = dateStr.split('-').map(Number)
-  const date = new Date(year, month - 1, day)
-  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" })
-}
-
-// Custom tooltip component
+// Custom tooltip component (shared chart tooltip styling)
 function SparklineTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload: PriceDataPoint }> }) {
   if (!active || !payload?.length) {
     return null
@@ -75,10 +58,10 @@ function SparklineTooltip({ active, payload }: { active?: boolean; payload?: Arr
 
   const data = payload[0].payload
   return (
-    <div className="rounded-md bg-zinc-900 border border-zinc-700 px-2 py-1 shadow-lg">
-      <p className="text-xs text-zinc-400">{formatDate(data.date)}</p>
+    <ChartTooltipContainer>
+      <ChartTooltipDate date={data.date} />
       <p className="text-sm font-medium text-white">{formatPrice(data.price)}</p>
-    </div>
+    </ChartTooltipContainer>
   )
 }
 
@@ -163,7 +146,7 @@ export function TokenSparkline({
     return null
   }
 
-  const strokeColor = trend === "up" ? "#22c55e" : trend === "down" ? "#ff3b30" : "rgba(255, 255, 255, 0.25)" // green-500, vibrant red
+  const strokeColor = trend === "up" ? "var(--positive)" : trend === "down" ? "var(--negative)" : "rgba(255, 255, 255, 0.25)"
 
   return (
     <div className={`h-6 w-full max-w-48 ${className}`}>
@@ -260,7 +243,7 @@ export function Token30dChange({
     return null
   }
 
-  const colorClass = trend === "up" ? "text-green-500" : trend === "down" ? "text-[#ff3b30]" : "text-white/25"
+  const colorClass = trend === "up" ? "text-positive" : trend === "down" ? "text-negative" : "text-white/25"
   const Icon = trend === "up" ? TrendingUp : trend === "down" ? TrendingDown : null
 
   // Label based on period

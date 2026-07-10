@@ -64,25 +64,25 @@ export const ACTION_CONFIG: Record<ActionType, ActionConfig> = {
   supply: {
     label: "Supplied",
     icon: ArrowDownRight,
-    color: "text-green-600 dark:text-green-400",
+    color: "text-positive",
     bgColor: "bg-green-100 dark:bg-green-900/30",
   },
   supply_collateral: {
     label: "Added Collateral",
     icon: ArrowDownRight,
-    color: "text-green-600 dark:text-green-400",
+    color: "text-positive",
     bgColor: "bg-green-100 dark:bg-green-900/30",
   },
   withdraw: {
     label: "Withdrew",
     icon: ArrowUpRight,
-    color: "text-red-600 dark:text-red-400",
+    color: "text-negative",
     bgColor: "bg-red-100 dark:bg-red-900/30",
   },
   withdraw_collateral: {
     label: "Withdrew Collateral",
     icon: ArrowUpRight,
-    color: "text-red-600 dark:text-red-400",
+    color: "text-negative",
     bgColor: "bg-red-100 dark:bg-red-900/30",
   },
   borrow: {
@@ -118,7 +118,7 @@ export const ACTION_CONFIG: Record<ActionType, ActionConfig> = {
   fill_auction: {
     label: "Liquidation",
     icon: Gavel,
-    color: "text-red-600 dark:text-red-400",
+    color: "text-negative",
     bgColor: "bg-red-100 dark:bg-red-900/30",
   },
   delete_auction: {
@@ -137,7 +137,7 @@ export const ACTION_CONFIG: Record<ActionType, ActionConfig> = {
   backstop_withdraw: {
     label: "Backstop Withdraw",
     icon: Shield,
-    color: "text-red-600 dark:text-red-400",
+    color: "text-negative",
     bgColor: "bg-red-100 dark:bg-red-900/30",
   },
   backstop_queue_withdrawal: {

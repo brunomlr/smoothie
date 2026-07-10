@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { Eye, ChevronRight, Loader2, Download } from "lucide-react"
+import { Eye, ChevronRight, Loader2, Download, Wallet as WalletIcon } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -21,6 +21,8 @@ interface WalletConnectionModalProps {
   wallets: SupportedWallet[]
   isLoadingWallets: boolean
   isFirstWallet?: boolean
+  /** ID of the wallet currently awaiting the extension's connect response */
+  connectingWalletId?: string | null
 }
 
 export function WalletConnectionModal({
@@ -31,13 +33,17 @@ export function WalletConnectionModal({
   wallets,
   isLoadingWallets,
   isFirstWallet = false,
+  connectingWalletId = null,
 }: WalletConnectionModalProps) {
+  const [failedIcons, setFailedIcons] = React.useState<Record<string, boolean>>({})
+
   const handleFollowAddressClick = () => {
     onFollowAddress()
     onOpenChange(false)
   }
 
   const handleWalletClick = (wallet: SupportedWallet) => {
+    if (connectingWalletId) return
     if (!wallet.isAvailable) {
       window.open(wallet.url, "_blank", "noopener,noreferrer")
       return
@@ -100,22 +106,34 @@ export function WalletConnectionModal({
                   <button
                     key={wallet.id}
                     onClick={() => handleWalletClick(wallet)}
+                    disabled={!!connectingWalletId}
                     className={cn(
                       "group relative flex flex-col items-center gap-2 rounded-xl p-3 transition-all",
                       "hover:bg-accent/50",
                       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                       "active:scale-95",
-                      !wallet.isAvailable && "opacity-50"
+                      "disabled:pointer-events-none",
+                      !wallet.isAvailable && "opacity-50",
+                      connectingWalletId && connectingWalletId !== wallet.id && "opacity-50"
                     )}
                     >
                       <div className="relative">
                         <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted overflow-hidden shadow-sm transition-transform group-hover:scale-105">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={wallet.icon}
-                            alt={wallet.name}
-                            className="h-10 w-10 object-contain"
-                        />
+                          {connectingWalletId === wallet.id ? (
+                            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                          ) : failedIcons[wallet.id] ? (
+                            <WalletIcon className="h-6 w-6 text-muted-foreground" />
+                          ) : (
+                            /* eslint-disable-next-line @next/next/no-img-element */
+                            <img
+                              src={wallet.icon}
+                              alt={wallet.name}
+                              className="h-10 w-10 object-contain"
+                              onError={() =>
+                                setFailedIcons((prev) => ({ ...prev, [wallet.id]: true }))
+                              }
+                            />
+                          )}
                       </div>
                       {!wallet.isAvailable && (
                         <div className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-muted-foreground/80 text-background">

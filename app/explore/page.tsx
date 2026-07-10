@@ -12,6 +12,7 @@ import { BackstopResults } from "@/components/explore/backstop-results"
 import { PoolsResults } from "@/components/explore/pools-results"
 import { useExplore } from "@/hooks/use-explore"
 import { AuthenticatedPage } from "@/components/authenticated-page"
+import { PageLoadingShell } from "@/components/page-loading-shell"
 import { useAnalytics } from "@/hooks/use-analytics"
 import { Skeleton } from "@/components/ui/skeleton"
 import type { ExploreFilters as ExploreFiltersType } from "@/types/explore"
@@ -27,7 +28,7 @@ function ExploreContent() {
     sortBy: "total",
   })
 
-  const { isLoading, supplyItems, backstopItems, poolItems, lpTokenPrice, lpPriceHistory } = useExplore(filters)
+  const { isLoading, error, supplyItems, backstopItems, poolItems, lpTokenPrice, lpPriceHistory } = useExplore(filters)
 
   // Track page view
   useEffect(() => {
@@ -46,7 +47,7 @@ function ExploreContent() {
   }, [queryClient, capture])
 
   return (
-    <AuthenticatedPage onRefresh={handleRefresh}>
+    <AuthenticatedPage onRefresh={handleRefresh} error={error}>
       <div>
         <PageTitle>Explore</PageTitle>
 
@@ -89,19 +90,8 @@ function ExploreContent() {
 
 function ExploreLoading() {
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header skeleton */}
-      <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container flex h-14 items-center justify-between px-4">
-          <Skeleton className="h-8 w-24" />
-          <Skeleton className="h-9 w-32 rounded-full" />
-        </div>
-      </header>
-
-      <main className="container mx-auto px-4 py-6 space-y-6">
-        {/* Page title skeleton */}
-        <Skeleton className="h-8 w-24" />
-
+    <PageLoadingShell>
+      <div className="space-y-6">
         {/* Tabs skeleton */}
         <div className="grid grid-cols-3 gap-1 p-1 rounded-lg border">
           <Skeleton className="h-10 rounded-md" />
@@ -141,8 +131,8 @@ function ExploreLoading() {
             </div>
           ))}
         </div>
-      </main>
-    </div>
+      </div>
+    </PageLoadingShell>
   )
 }
 

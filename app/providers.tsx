@@ -8,6 +8,7 @@ import { DisplayPreferencesProvider } from "@/contexts/display-preferences-conte
 import { WalletProvider } from "@/contexts/wallet-context"
 import { NavigationWrapper } from "@/components/navigation-wrapper"
 import { TooltipProvider } from "@/components/ui/tooltip"
+import { Toaster } from "@/components/ui/sonner"
 import posthog from "posthog-js"
 
 if (typeof window !== "undefined" && process.env.NEXT_PUBLIC_POSTHOG_KEY) {
@@ -54,6 +55,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
                     {children}
                   </NavigationWrapper>
                 </React.Suspense>
+                <Toaster position="bottom-center" />
               </TooltipProvider>
             </WalletProvider>
           </DisplayPreferencesProvider>

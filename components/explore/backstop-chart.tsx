@@ -13,6 +13,7 @@ import {
 } from "recharts"
 import { Shield } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
+import { ChartTooltipContainer } from "@/components/charts/tooltips/chart-tooltip"
 import { useTooltipDismiss } from "@/hooks/use-tooltip-dismiss"
 import type { BackstopExploreItem } from "@/types/explore"
 
@@ -60,7 +61,7 @@ function CustomTooltip({
   const data = payload[0].payload as ChartDataPoint
 
   return (
-    <div className="bg-black text-white border border-zinc-800 rounded-md shadow-lg p-2.5 min-w-[140px] select-none z-50">
+    <ChartTooltipContainer className="p-2.5 min-w-[140px] select-none z-50">
       <div className="font-medium text-[11px] mb-1.5">
         {data.poolName}
       </div>
@@ -68,7 +69,7 @@ function CustomTooltip({
         {data.apr > 0 && (
           <div className="flex justify-between">
             <span className="text-zinc-400">APR:</span>
-            <span className="font-medium text-emerald-400">{data.apr.toFixed(2)}%</span>
+            <span className="font-medium text-positive">{data.apr.toFixed(2)}%</span>
           </div>
         )}
         {data.blnd > 0 && (
@@ -82,7 +83,7 @@ function CustomTooltip({
           <span className="font-medium text-white">{data.total.toFixed(2)}%</span>
         </div>
       </div>
-    </div>
+    </ChartTooltipContainer>
   )
 }
 

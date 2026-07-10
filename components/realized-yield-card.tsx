@@ -14,6 +14,14 @@ import {
 import { useRealizedYield } from "@/hooks/use-realized-yield"
 import { useCurrencyPreference } from "@/hooks/use-currency-preference"
 
+// Date-only strings parse as UTC midnight; render those in UTC so users
+// behind UTC don't see the previous day
+function formatActivityDate(dateStr: string): string {
+  const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(dateStr)
+  const date = new Date(isDateOnly ? `${dateStr}T12:00:00Z` : dateStr)
+  return date.toLocaleDateString(undefined, isDateOnly ? { timeZone: "UTC" } : undefined)
+}
+
 interface RealizedYieldCardProps {
   publicKey: string
   blndPrice?: number
@@ -82,18 +90,27 @@ export function RealizedYieldCard({
   return (
     <Card className="overflow-hidden p-0 gap-0">
       <div
+        role="button"
+        tabIndex={0}
+        aria-expanded={isExpanded}
         className="cursor-pointer select-none flex items-center justify-between px-4 py-3"
         onClick={() => setIsExpanded(!isExpanded)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault()
+            setIsExpanded(!isExpanded)
+          }
+        }}
       >
         <div className="flex items-center gap-2">
           {isPositive ? (
-            <TrendingUp className="h-5 w-5 text-emerald-400" />
+            <TrendingUp className="h-5 w-5 text-positive" />
           ) : (
-            <TrendingDown className="h-5 w-5 text-red-400" />
+            <TrendingDown className="h-5 w-5 text-negative" />
           )}
           <div>
             <div className="text-base font-semibold">
-              <span className={isPositive ? "text-emerald-400" : "text-red-400"}>
+              <span className={isPositive ? "text-positive" : "text-negative"}>
                 {isPositive ? "+" : ""}{formatUsd(data.realizedPnl)}
               </span>
               <span className="text-muted-foreground text-sm font-normal ml-1.5">realized</span>
@@ -109,7 +126,7 @@ export function RealizedYieldCard({
               <TooltipTrigger onClick={(e) => e.stopPropagation()}>
                 <Badge
                   variant="outline"
-                  className={`text-xs ${isPositive ? "text-emerald-400 border-emerald-400/30" : "text-red-400 border-red-400/30"}`}
+                  className={`text-xs ${isPositive ? "text-positive border-emerald-400/30" : "text-negative border-red-400/30"}`}
                 >
                   {isPositive ? "+" : ""}{data.roiPercent.toFixed(1)}% ROI
                 </Badge>
@@ -131,7 +148,7 @@ export function RealizedYieldCard({
       </div>
 
       <div
-        className={`overflow-hidden transition-[max-height,opacity] duration-300 ease-out ${isExpanded ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'}`}
+        className={`overflow-hidden transition-[max-height,opacity] duration-300 ease-out ${isExpanded ? 'max-h-[4000px] opacity-100' : 'max-h-0 opacity-0'}`}
       >
         <div className="px-4 pt-2 pb-4">
           {/* Summary row */}
@@ -146,7 +163,7 @@ export function RealizedYieldCard({
             </div>
             <div>
               <div className="text-xs text-muted-foreground mb-0.5">Net Realized</div>
-              <div className={`font-semibold tabular-nums text-sm ${isPositive ? "text-emerald-400" : "text-red-400"}`}>
+              <div className={`font-semibold tabular-nums text-sm ${isPositive ? "text-positive" : "text-negative"}`}>
                 {isPositive ? "+" : ""}{formatUsd(data.realizedPnl)}
               </div>
             </div>
@@ -179,7 +196,7 @@ export function RealizedYieldCard({
                 <div className="w-20 text-right tabular-nums">
                   {data.pools.withdrawn > 0 ? formatUsd(data.pools.withdrawn) : '-'}
                 </div>
-                <div className={`w-20 text-right tabular-nums font-medium ${data.pools.realized >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                <div className={`w-20 text-right tabular-nums font-medium ${data.pools.realized >= 0 ? "text-positive" : "text-negative"}`}>
                   {data.pools.realized !== 0 ? (data.pools.realized >= 0 ? "+" : "") + formatUsd(data.pools.realized) : '-'}
                 </div>
               </div>
@@ -198,13 +215,13 @@ export function RealizedYieldCard({
                 <div className="w-20 text-right tabular-nums">
                   {data.backstop.withdrawn > 0 ? formatUsd(data.backstop.withdrawn) : '-'}
                 </div>
-                <div className={`w-20 text-right tabular-nums font-medium ${data.backstop.realized >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                <div className={`w-20 text-right tabular-nums font-medium ${data.backstop.realized >= 0 ? "text-positive" : "text-negative"}`}>
                   {data.backstop.realized !== 0 ? (data.backstop.realized >= 0 ? "+" : "") + formatUsd(data.backstop.realized) : '-'}
                 </div>
               </div>
             )}
 
-            {/* Emissions row */}
+            {/* Emissions row (cash-flow columns exclude auto-restaked claims) */}
             {data.emissions.usdValue > 0 && (
               <div className="grid grid-cols-[1fr_auto_auto_auto] gap-2 text-xs py-1">
                 <div className="flex items-center gap-2 text-muted-foreground">
@@ -213,10 +230,10 @@ export function RealizedYieldCard({
                 </div>
                 <div className="w-20 text-right tabular-nums text-muted-foreground">-</div>
                 <div className="w-20 text-right tabular-nums">
-                  {formatUsd(data.emissions.usdValue)}
+                  {data.emissions.receivedUsdValue > 0 ? formatUsd(data.emissions.receivedUsdValue) : '-'}
                 </div>
-                <div className="w-20 text-right tabular-nums font-medium text-emerald-400">
-                  +{formatUsd(data.emissions.usdValue)}
+                <div className="w-20 text-right tabular-nums font-medium text-positive">
+                  {data.emissions.receivedUsdValue > 0 ? `+${formatUsd(data.emissions.receivedUsdValue)}` : '-'}
                 </div>
               </div>
             )}
@@ -226,10 +243,22 @@ export function RealizedYieldCard({
               <div>Total</div>
               <div className="w-20 text-right tabular-nums">{formatUsd(data.totalDepositedUsd)}</div>
               <div className="w-20 text-right tabular-nums">{formatUsd(data.totalWithdrawnUsd)}</div>
-              <div className={`w-20 text-right tabular-nums ${isPositive ? "text-emerald-400" : "text-red-400"}`}>
+              <div className={`w-20 text-right tabular-nums ${isPositive ? "text-positive" : "text-negative"}`}>
                 {isPositive ? "+" : ""}{formatUsd(data.realizedPnl)}
               </div>
             </div>
+
+            {data.emissions.usdValue - data.emissions.receivedUsdValue > 1 && (
+              <p className="text-[11px] text-muted-foreground pt-1">
+                Restaked emissions ({formatUsd(data.emissions.usdValue - data.emissions.receivedUsdValue)}) are
+                counted when the LP is withdrawn.
+              </p>
+            )}
+            {data.reimbursementsUsd > 0 && (
+              <p className="text-[11px] text-muted-foreground pt-1">
+                Pools include an incident remediation payment of {formatUsd(data.reimbursementsUsd)}.
+              </p>
+            )}
           </div>
 
           {/* Total P&L summary including unrealized */}
@@ -239,19 +268,19 @@ export function RealizedYieldCard({
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Realized P&L</span>
-                  <span className={`font-semibold tabular-nums ${isPositive ? "text-emerald-400" : "text-red-400"}`}>
+                  <span className={`font-semibold tabular-nums ${isPositive ? "text-positive" : "text-negative"}`}>
                     {isPositive ? "+" : ""}{formatUsd(data.realizedPnl)}
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Unrealized P&L</span>
-                  <span className={`font-semibold tabular-nums ${unrealizedPnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                  <span className={`font-semibold tabular-nums ${unrealizedPnl >= 0 ? "text-positive" : "text-negative"}`}>
                     {unrealizedPnl >= 0 ? "+" : ""}{formatUsd(unrealizedPnl)}
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-sm pt-2 border-t border-border/50">
                   <span className="font-medium">Total Lifetime P&L</span>
-                  <span className={`font-bold tabular-nums ${totalPnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                  <span className={`font-bold tabular-nums ${totalPnl >= 0 ? "text-positive" : "text-negative"}`}>
                     {totalPnl >= 0 ? "+" : ""}{formatUsd(totalPnl)}
                   </span>
                 </div>
@@ -267,7 +296,7 @@ export function RealizedYieldCard({
           {/* Activity period */}
           {data.firstActivityDate && (
             <div className="mt-4 text-xs text-muted-foreground text-center">
-              Active since {new Date(data.firstActivityDate).toLocaleDateString()} ({data.daysActive} days)
+              Active since {formatActivityDate(data.firstActivityDate)} ({data.daysActive} days)
             </div>
           )}
         </div>

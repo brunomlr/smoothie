@@ -1057,6 +1057,66 @@ export class EventsRepository {
   }
 
   /**
+   * Get b_rate/d_rate for multiple (pool, asset) pairs at multiple dates,
+   * forward-filled (most recent daily rate on/before each date).
+   * Returns a map keyed `${poolId}|${assetAddress}|${date}`.
+   */
+  async getRatesAtDates(
+    pairs: Array<{ poolId: string; assetAddress: string }>,
+    dates: string[]
+  ): Promise<Map<string, { bRate: number | null; dRate: number | null }>> {
+    if (!pool) {
+      throw new Error('Database pool not initialized')
+    }
+
+    const result = new Map<string, { bRate: number | null; dRate: number | null }>()
+    if (pairs.length === 0 || dates.length === 0) {
+      return result
+    }
+
+    const uniquePairs = [...new Map(pairs.map(p => [`${p.poolId}|${p.assetAddress}`, p])).values()]
+    const uniqueDates = [...new Set(dates)]
+
+    const queryResult = await pool.query(
+      `
+      WITH pairs AS (
+        SELECT unnest($1::text[]) AS pool_id, unnest($2::text[]) AS asset_address
+      ),
+      dates AS (
+        SELECT unnest($3::text[])::date AS target_date
+      )
+      SELECT
+        p.pool_id,
+        p.asset_address,
+        d.target_date::text,
+        r.b_rate,
+        r.d_rate
+      FROM pairs p
+      CROSS JOIN dates d
+      LEFT JOIN LATERAL (
+        SELECT b_rate, d_rate
+        FROM daily_rates
+        WHERE pool_id = p.pool_id
+          AND asset_address = p.asset_address
+          AND rate_date <= d.target_date
+        ORDER BY rate_date DESC
+        LIMIT 1
+      ) r ON true
+      `,
+      [uniquePairs.map(p => p.poolId), uniquePairs.map(p => p.assetAddress), uniqueDates]
+    )
+
+    for (const row of queryResult.rows) {
+      result.set(`${row.pool_id}|${row.asset_address}|${row.target_date}`, {
+        bRate: row.b_rate != null ? parseFloat(row.b_rate) : null,
+        dRate: row.d_rate != null ? parseFloat(row.d_rate) : null,
+      })
+    }
+
+    return result
+  }
+
+  /**
    * Refresh the daily_rates materialized view
    */
   async refreshDailyRates(): Promise<void> {
@@ -2547,8 +2607,15 @@ export class EventsRepository {
     emissions: {
       blndClaimed: number
       lpClaimed: number
+      /** Full earned value, including auto-restaked LP claims */
       usdValue: number
+      /** Only claims that actually reached the wallet (cash-flow view) */
+      receivedUsdValue: number
     }
+
+    // Liquidation fills whose debt leg is missing from the DB (proceeds
+    // recorded as 0 for those; surfaced so the UI can flag it)
+    liquidationDataGaps: number
 
     // Metadata
     firstActivityDate: string | null
@@ -2559,6 +2626,10 @@ export class EventsRepository {
       date: string
       type: 'deposit' | 'withdraw' | 'claim'
       source: 'pool' | 'backstop'
+      /** Synthetic rows: liquidation legs and (route-added) remediation payments */
+      kind?: 'liquidation' | 'remediation'
+      /** Claim that was auto-restaked into the backstop (never left the protocol) */
+      restaked?: boolean
       asset: string
       assetAddress: string | null
       amount: number
@@ -2755,6 +2826,67 @@ export class EventsRepository {
       [userAddress, LP_TOKEN_ADDRESS]
     )
 
+    // Get user-liquidation fills (auction_type 0) with the collateral (lot)
+    // converted via b_rate and the extinguished debt (bid) via d_rate + USD price.
+    // For the liquidated user the debt relief is the proceeds of the forced
+    // disposal; for a liquidator it is the cost of the acquired collateral.
+    const liquidationEventsResult = await pool.query(
+      `
+      SELECT
+        pe.pool_id,
+        p.name AS pool_name,
+        pe.transaction_hash,
+        (pe.ledger_closed_at AT TIME ZONE 'UTC')::date::text AS event_date,
+        pe.ledger_closed_at,
+        CASE WHEN pe.user_address = $1 THEN 'liquidated' ELSE 'liquidator' END AS role,
+        pe.lot_asset,
+        lt.symbol AS lot_symbol,
+        CASE WHEN pe.lot_amount IS NULL THEN NULL
+             ELSE (pe.lot_amount / 1e7) * COALESCE(lot_rate.b_rate, 1.0) END AS lot_underlying,
+        pe.bid_asset,
+        CASE WHEN pe.bid_amount IS NULL THEN NULL
+             ELSE (pe.bid_amount / 1e7) * COALESCE(bid_rate.d_rate, 1.0) END AS bid_underlying,
+        bid_price.usd_price AS bid_price
+      FROM parsed_events pe
+      LEFT JOIN pools p ON pe.pool_id = p.pool_id
+      LEFT JOIN tokens lt ON lt.asset_address = pe.lot_asset
+      LEFT JOIN LATERAL (
+        SELECT b_rate FROM daily_rates
+        WHERE pool_id = pe.pool_id AND asset_address = pe.lot_asset
+          AND rate_date <= (pe.ledger_closed_at AT TIME ZONE 'UTC')::date
+        ORDER BY rate_date DESC LIMIT 1
+      ) lot_rate ON true
+      LEFT JOIN LATERAL (
+        SELECT d_rate FROM daily_rates
+        WHERE pool_id = pe.pool_id AND asset_address = pe.bid_asset
+          AND rate_date <= (pe.ledger_closed_at AT TIME ZONE 'UTC')::date
+        ORDER BY rate_date DESC LIMIT 1
+      ) bid_rate ON true
+      LEFT JOIN LATERAL (
+        SELECT usd_price FROM daily_token_prices
+        WHERE token_address = pe.bid_asset
+          AND price_date <= (pe.ledger_closed_at AT TIME ZONE 'UTC')::date
+        ORDER BY price_date DESC LIMIT 1
+      ) bid_price ON true
+      WHERE pe.action_type = 'fill_auction'
+        AND pe.auction_type = 0
+        AND (pe.user_address = $1 OR pe.filler_address = $1)
+      ORDER BY pe.ledger_closed_at
+      `,
+      [userAddress]
+    )
+
+    // Restaked backstop emissions: a claim and a deposit sharing a transaction
+    // hash are one auto-compound. The LP never reached the wallet, so it is
+    // neither external cash-in (deposit) nor received value (claim) — both
+    // sides are excluded from the cash-flow totals (net PnL is unchanged).
+    // The emissions breakdown still reports the full claimed amount as earned.
+    const claimLpByTx = new Map<string, number>()
+    for (const row of backstopClaimsResult.rows) {
+      const lpTokens = parseFloat(row.lp_tokens) || 0
+      claimLpByTx.set(row.transaction_hash, (claimLpByTx.get(row.transaction_hash) || 0) + lpTokens)
+    }
+
     // Process pool events
     let poolDeposited = 0
     let poolWithdrawn = 0
@@ -2762,6 +2894,8 @@ export class EventsRepository {
       date: string
       type: 'deposit' | 'withdraw' | 'claim'
       source: 'pool' | 'backstop'
+      kind?: 'liquidation' | 'remediation'
+      restaked?: boolean
       asset: string
       assetAddress: string | null
       amount: number
@@ -2803,16 +2937,25 @@ export class EventsRepository {
     let backstopDeposited = 0
     let backstopWithdrawn = 0
     const sdkLpPrice = sdkPrices.get(LP_TOKEN_ADDRESS) || 0
+    // Per-tx allowance of claim LP still to match against deposits (restakes)
+    const restakeAllowance = new Map(claimLpByTx)
 
     for (const row of backstopEventsResult.rows) {
-      const lpTokens = parseFloat(row.lp_tokens) || 0
+      let lpTokens = parseFloat(row.lp_tokens) || 0
       const price = row.price ? parseFloat(row.price) : sdkLpPrice
-      const usdValue = lpTokens * price
 
       if (row.action_type === 'deposit') {
-        backstopDeposited += usdValue
+        // Skip the restaked portion (claim LP auto-compounded in the same tx)
+        const allowance = restakeAllowance.get(row.transaction_hash) || 0
+        if (allowance > 0) {
+          const covered = Math.min(allowance, lpTokens)
+          restakeAllowance.set(row.transaction_hash, allowance - covered)
+          lpTokens -= covered
+        }
+        if (lpTokens <= 0) continue
+        backstopDeposited += lpTokens * price
       } else {
-        backstopWithdrawn += usdValue
+        backstopWithdrawn += lpTokens * price
       }
 
       transactions.push({
@@ -2823,9 +2966,53 @@ export class EventsRepository {
         assetAddress: LP_TOKEN_ADDRESS,
         amount: lpTokens,
         priceUsd: price,
-        valueUsd: usdValue,
+        valueUsd: lpTokens * price,
         txHash: row.transaction_hash,
         poolId: row.pool_address,
+        poolName: row.pool_name,
+      })
+    }
+
+    // Process liquidation fills (auction_type 0)
+    let liquidationDataGaps = 0
+
+    for (const row of liquidationEventsResult.rows) {
+      const lotUnderlying = row.lot_underlying != null ? parseFloat(row.lot_underlying) || 0 : 0
+      const bidUnderlying = row.bid_underlying != null ? parseFloat(row.bid_underlying) : null
+      const bidPrice = row.bid_price != null
+        ? parseFloat(row.bid_price)
+        : (row.bid_asset ? sdkPrices.get(row.bid_asset) || 0 : 0)
+
+      // Debt relief (liquidated) / debt assumed (liquidator)
+      let reliefUsd = 0
+      if (bidUnderlying === null) {
+        // The event's debt leg was not recorded — proceeds unknown, flag it
+        liquidationDataGaps++
+      } else {
+        reliefUsd = bidUnderlying * bidPrice
+      }
+
+      const isLiquidated = row.role === 'liquidated'
+      if (isLiquidated) {
+        // Forced disposal: collateral left the position in exchange for debt relief
+        poolWithdrawn += reliefUsd
+      } else {
+        // Liquidator: acquired the collateral by assuming the debt
+        poolDeposited += reliefUsd
+      }
+
+      transactions.push({
+        date: row.event_date,
+        type: isLiquidated ? 'withdraw' : 'deposit',
+        source: 'pool',
+        kind: 'liquidation',
+        asset: row.lot_symbol || 'Collateral',
+        assetAddress: row.lot_asset,
+        amount: lotUnderlying,
+        priceUsd: lotUnderlying > 0 ? reliefUsd / lotUnderlying : 0,
+        valueUsd: reliefUsd,
+        txHash: row.transaction_hash,
+        poolId: row.pool_id,
         poolName: row.pool_name,
       })
     }
@@ -2859,39 +3046,68 @@ export class EventsRepository {
     }
 
     // Process backstop LP claims
+    // Restaked portion per tx = claim LP matched against a same-tx deposit
+    // (allowance was consumed in the deposit loop above)
+    const restakedByTx = new Map<string, number>()
+    for (const [txHash, claimLp] of claimLpByTx) {
+      restakedByTx.set(txHash, claimLp - (restakeAllowance.get(txHash) || 0))
+    }
+
     let lpClaimed = 0
-    let lpClaimsUsd = 0
+    let lpClaimsUsd = 0 // full earned value (emissions breakdown)
+    let lpClaimsReceivedUsd = 0 // only LP that actually reached the wallet (cash-flow)
 
     for (const row of backstopClaimsResult.rows) {
       const lpTokens = parseFloat(row.lp_tokens) || 0
       const price = row.price ? parseFloat(row.price) : sdkLpPrice
-      const usdValue = lpTokens * price
 
       lpClaimed += lpTokens
-      lpClaimsUsd += usdValue
+      lpClaimsUsd += lpTokens * price
 
-      transactions.push({
-        date: row.claim_date,
-        type: 'claim',
-        source: 'backstop',
+      const restakedRemaining = restakedByTx.get(row.transaction_hash) || 0
+      const restakedPortion = Math.min(lpTokens, restakedRemaining)
+      restakedByTx.set(row.transaction_hash, restakedRemaining - restakedPortion)
+      const receivedPortion = lpTokens - restakedPortion
+      lpClaimsReceivedUsd += receivedPortion * price
+
+      const base = {
+        date: row.claim_date as string,
+        type: 'claim' as const,
+        source: 'backstop' as const,
         asset: 'BLND-USDC LP',
         assetAddress: LP_TOKEN_ADDRESS,
-        amount: lpTokens,
         priceUsd: price,
-        valueUsd: usdValue,
-        txHash: row.transaction_hash,
-        poolId: row.pool_address,
-        poolName: row.pool_name,
-      })
+        txHash: row.transaction_hash as string,
+        poolId: row.pool_address as string,
+        poolName: row.pool_name as string | null,
+      }
+      if (restakedPortion > 0) {
+        transactions.push({
+          ...base,
+          restaked: true,
+          amount: restakedPortion,
+          valueUsd: restakedPortion * price,
+        })
+      }
+      if (receivedPortion > 0) {
+        transactions.push({
+          ...base,
+          amount: receivedPortion,
+          valueUsd: receivedPortion * price,
+        })
+      }
     }
 
     // Sort transactions by date
     transactions.sort((a, b) => a.date.localeCompare(b.date))
 
     // Calculate totals
-    // For realized P&L: withdrawals + claims - deposits
+    // For realized P&L: withdrawals + received claims - deposits.
+    // Restaked claims and their matching deposits are excluded from both
+    // sides (net PnL unchanged) so "deposited"/"withdrawn" reflect actual
+    // cash in/out of the protocol.
     const totalDepositedUsd = poolDeposited + backstopDeposited
-    const totalWithdrawnUsd = poolWithdrawn + backstopWithdrawn + blndClaimsUsd + lpClaimsUsd
+    const totalWithdrawnUsd = poolWithdrawn + backstopWithdrawn + blndClaimsUsd + lpClaimsReceivedUsd
     const realizedPnl = totalWithdrawnUsd - totalDepositedUsd
 
     // Get first and last activity dates
@@ -2917,7 +3133,9 @@ export class EventsRepository {
         blndClaimed,
         lpClaimed,
         usdValue: blndClaimsUsd + lpClaimsUsd,
+        receivedUsdValue: blndClaimsUsd + lpClaimsReceivedUsd,
       },
+      liquidationDataGaps,
       firstActivityDate,
       lastActivityDate,
       transactions,

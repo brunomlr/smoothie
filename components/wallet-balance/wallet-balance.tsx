@@ -456,7 +456,7 @@ const WalletBalanceComponent = ({
           ) ? (
             <Tooltip>
               <TooltipTrigger>
-                  <p className={`text-sm font-medium flex items-center gap-1 ${displayYield >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                  <p className={`text-sm font-medium flex items-center gap-1 ${displayYield >= 0 ? 'text-positive' : 'text-negative'}`}>
                     {formattedLiveGrowth} {periodLabel}
                     {showPercentageGain && (
                       <span className="ml-1">
@@ -479,7 +479,7 @@ const WalletBalanceComponent = ({
                 </TooltipContent>
             </Tooltip>
           ) : (
-            <p className={`text-sm font-medium ${displayYield >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+            <p className={`text-sm font-medium ${displayYield >= 0 ? 'text-positive' : 'text-negative'}`}>
               {formattedLiveGrowth} {periodLabel}
               {showPercentageGain && (
                 <span className="ml-1">

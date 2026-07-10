@@ -111,6 +111,46 @@ export function formatTokenAmount(value: number): string {
   })
 }
 
+/**
+ * Format a token/asset price with magnitude-aware precision.
+ * Prices >= $1 get 2 decimals, small prices get enough decimals to be meaningful.
+ * @example formatPrice(1234.5) => "$1,234.50"; formatPrice(0.0042) => "$0.004200"
+ */
+export function formatPrice(value: number): string {
+  if (!Number.isFinite(value)) return "$0.00"
+  if (Math.abs(value) >= 1) {
+    return `$${usdFormatter.format(value)}`
+  }
+  if (Math.abs(value) >= 0.01) {
+    return `$${value.toFixed(4)}`
+  }
+  return `$${value.toFixed(6)}`
+}
+
+/**
+ * Format an allocation share as a whole percent, with "<1%" for tiny slices.
+ * @example formatAllocationPercent(42.4) => "42%"; formatAllocationPercent(0.3) => "<1%"
+ */
+export function formatAllocationPercent(value: number): string {
+  if (!Number.isFinite(value)) return "0%"
+  if (value < 1) return "<1%"
+  return `${Math.round(value)}%`
+}
+
+/**
+ * Format a USD value compactly with a magnitude suffix.
+ * @example formatUsdSuffixed(1_234_000) => "$1.23M"
+ */
+export function formatUsdSuffixed(value: number): string {
+  if (!Number.isFinite(value)) return "$0"
+  const abs = Math.abs(value)
+  const sign = value < 0 ? "-" : ""
+  if (abs >= 1_000_000_000) return `${sign}$${(abs / 1_000_000_000).toFixed(2)}B`
+  if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(2)}M`
+  if (abs >= 1_000) return `${sign}$${(abs / 1_000).toFixed(0)}K`
+  return `${sign}$${abs.toFixed(0)}`
+}
+
 // Legacy functions preserved for backwards compatibility
 // (These were the original functions in this file)
 

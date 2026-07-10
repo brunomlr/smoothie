@@ -3,6 +3,7 @@
 import { useMemo } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { fetchWithTimeout } from "@/lib/fetch-utils"
+import { formatPrice } from "@/lib/format-utils"
 import { getUserTimezone } from "@/lib/date-utils"
 import { BaseSparkline } from "@/components/charts/sparkline/base-sparkline"
 import type { SparklineConfig } from "@/components/charts/sparkline/types"
@@ -31,10 +32,6 @@ async function fetchLpPriceHistory(timezone: string): Promise<PriceDataPoint[]> 
 
   const data = await response.json()
   return data.history || []
-}
-
-function formatPrice(value: number): string {
-  return `$${value.toFixed(4)}`
 }
 
 const LP_PRICE_CONFIG: SparklineConfig = {

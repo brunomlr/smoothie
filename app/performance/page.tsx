@@ -5,6 +5,7 @@ import { useQueryClient } from "@tanstack/react-query"
 import { TrendingUp, Shield, PiggyBank, Calendar, Banknote } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Separator } from "@/components/ui/separator"
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
@@ -18,6 +19,7 @@ import { useHistoricalYieldBreakdown } from "@/hooks/use-historical-yield-breakd
 import { useBorrowYieldBreakdown } from "@/hooks/use-borrow-yield-breakdown"
 import { useAnalytics } from "@/hooks/use-analytics"
 import { AuthenticatedPage } from "@/components/authenticated-page"
+import { PageLoadingShell } from "@/components/page-loading-shell"
 import { PageTitle } from "@/components/page-title"
 import { useWalletState } from "@/hooks/use-wallet-state"
 import { useWalletContext } from "@/contexts/wallet-context"
@@ -28,15 +30,17 @@ import { PnlChangeChart } from "@/components/pnl-change-chart"
 import { usePnlChangeChart, type PnlPeriodType } from "@/hooks/use-pnl-change-chart"
 import { usePnlChangeChartMulti } from "@/hooks/use-pnl-change-chart-multi"
 
-const YIELDBLOX_POOL_ID = "CCCCIQSDILITHMM7PBSLVDT5MISSY7R26MNZXCX4H7J5JQ5FPIYOGYFS"
-const YIELDBLOX_INCIDENT_LINK = "https://x.com/script3official/status/2025403423840141450"
+import { YIELDBLOX_POOL_ID, YIELDBLOX_INCIDENT_LINK } from "@/lib/config/blockchain"
 
 function formatDate(dateStr: string): string {
-  const date = new Date(dateStr)
+  // Date-only strings parse as UTC midnight; render in UTC so users behind
+  // UTC don't see the previous day
+  const date = new Date(/^\d{4}-\d{2}-\d{2}$/.test(dateStr) ? `${dateStr}T12:00:00Z` : dateStr)
   return date.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
+    ...(/^\d{4}-\d{2}-\d{2}$/.test(dateStr) ? { timeZone: "UTC" } : {}),
   })
 }
 
@@ -196,7 +200,7 @@ function RealizedYieldContent() {
   })
 
   // Unified realized yield data
-  const { data, isLoading } = isMultiWallet ? multiRealizedYield : singleRealizedYield
+  const { data, isLoading, error, refetch } = isMultiWallet ? multiRealizedYield : singleRealizedYield
 
   // Use same yield breakdown calculation as home page for consistency
   // Pass all selected addresses for multi-wallet aggregation
@@ -703,14 +707,17 @@ function RealizedYieldContent() {
   return (
     <AuthenticatedPage onRefresh={handleRefresh}>
       <div>
-        <PageTitle badge="Beta">Performance</PageTitle>
+        <PageTitle>Performance</PageTitle>
 
         <div className="space-y-4 sm:space-y-6">
         {hasOrHadYieldBloxExposure && (
           <Card className="border-amber-500/40 bg-amber-500/5 py-2 gap-0">
             <CardContent className="py-0 text-sm text-amber-700 dark:text-amber-300">
-              Some pool events related to the recent incident with  the Yieldblox pool may be missing from this page&apos;s
-              calculations, so performance figures may be inaccurate.{" "}
+              This wallet was affected by the Yieldblox pool incident. The bad-debt loss
+              {data && data.reimbursementsUsd > 0
+                ? ` and the remediation payment received (${formatUsd(data.reimbursementsUsd)})`
+                : ""}{" "}
+              {data && data.reimbursementsUsd > 0 ? "are" : "is"} included in these figures.{" "}
               <a
                 href={YIELDBLOX_INCIDENT_LINK}
                 target="_blank"
@@ -720,6 +727,15 @@ function RealizedYieldContent() {
                 Learn more
               </a>
               .
+            </CardContent>
+          </Card>
+        )}
+        {data && data.liquidationDataGaps > 0 && (
+          <Card className="border-amber-500/40 bg-amber-500/5 py-2 gap-0">
+            <CardContent className="py-0 text-sm text-amber-700 dark:text-amber-300">
+              {data.liquidationDataGaps} liquidation event{data.liquidationDataGaps === 1 ? "" : "s"} in this
+              wallet&apos;s history {data.liquidationDataGaps === 1 ? "is" : "are"} missing the repaid-debt amount,
+              so realized figures may be slightly understated.
             </CardContent>
           </Card>
         )}
@@ -904,7 +920,19 @@ function RealizedYieldContent() {
               </Card>
             </div>
           </div>
-        ) : !data || (data.totalDepositedUsd === 0 && data.totalWithdrawnUsd === 0) ? (
+        ) : error || !data ? (
+          <Card>
+            <CardContent className="py-12 text-center">
+              <h3 className="font-semibold mb-1">Could not load performance data</h3>
+              <p className="text-sm text-destructive max-w-sm mx-auto mb-4">
+                {error?.message || "Something went wrong while loading this wallet's data."}
+              </p>
+              <Button variant="outline" size="sm" onClick={() => refetch()}>
+                Try again
+              </Button>
+            </CardContent>
+          </Card>
+        ) : data.totalDepositedUsd === 0 && data.totalWithdrawnUsd === 0 ? (
           <Card>
             <CardContent className="py-12 text-center">
               <TrendingUp className="h-10 w-10 mx-auto mb-3 text-muted-foreground" />
@@ -933,13 +961,13 @@ function RealizedYieldContent() {
                           />
                         </p>
                         <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-                          <p className={`text-2xl sm:text-3xl font-bold tabular-nums ${totalPnlPositive ? "text-emerald-400" : "text-red-400"}`}>
+                          <p className={`text-2xl sm:text-3xl font-bold tabular-nums ${totalPnlPositive ? "text-positive" : "text-negative"}`}>
                             {totalPnlPositive ? "+" : ""}{formatUsd(displayTotalPnl)}
                           </p>
                           {data.totalDepositedUsd > 0 && (
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <Badge variant="outline" className={`cursor-help ${totalPnlPositive ? "text-emerald-400 border-emerald-400/30" : "text-red-400 border-red-400/30"}`}>
+                                <Badge variant="outline" className={`cursor-help ${totalPnlPositive ? "text-positive border-emerald-400/30" : "text-negative border-red-400/30"}`}>
                                   {totalPnlPositive ? "+" : ""}{((displayTotalPnl / data.totalDepositedUsd) * 100).toFixed(1)}%
                                 </Badge>
                               </TooltipTrigger>
@@ -957,12 +985,14 @@ function RealizedYieldContent() {
                           )}
                         </div>
                       </div>
-                      <WalletAggregationSelector
-                        wallets={wallets}
-                        activeWalletId={activeWallet?.id ?? null}
-                        selectedWalletIds={effectiveSelectedWalletIds}
-                        onApply={handleWalletSelectionApply}
-                      />
+                      {wallets.length > 1 && (
+                        <WalletAggregationSelector
+                          wallets={wallets}
+                          activeWalletId={activeWallet?.id ?? null}
+                          selectedWalletIds={effectiveSelectedWalletIds}
+                          onApply={handleWalletSelectionApply}
+                        />
+                      )}
                     </div>
                     {/* P&L Breakdown when user has borrows */}
                     {hasBorrows && (
@@ -971,7 +1001,7 @@ function RealizedYieldContent() {
                           <span className="text-muted-foreground">
                             <InfoLabel label="Supply P&L" tooltip="Profit from lending: Yield earned + Price changes on deposits" />
                           </span>
-                          <span className={`tabular-nums font-medium ${(displayPnl.totalUnrealized + displayPnl.realizedFromWithdrawals) >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                          <span className={`tabular-nums font-medium ${(displayPnl.totalUnrealized + displayPnl.realizedFromWithdrawals) >= 0 ? "text-positive" : "text-negative"}`}>
                             {(displayPnl.totalUnrealized + displayPnl.realizedFromWithdrawals) >= 0 ? "+" : ""}{formatUsd(displayPnl.totalUnrealized + displayPnl.realizedFromWithdrawals)}
                           </span>
                         </div>
@@ -979,7 +1009,7 @@ function RealizedYieldContent() {
                           <span className="text-muted-foreground">
                             <InfoLabel label="Borrow Cost" tooltip="Cost of borrowing: Interest accrued + Price changes on debt" />
                           </span>
-                          <span className={`tabular-nums font-medium ${displayPnl.borrowTotalCost > 0 ? "text-orange-400" : "text-emerald-400"}`}>
+                          <span className={`tabular-nums font-medium ${displayPnl.borrowTotalCost > 0 ? "text-orange-400" : "text-positive"}`}>
                             {displayPnl.borrowTotalCost > 0 ? "-" : "+"}{formatUsd(Math.abs(displayPnl.borrowTotalCost))}
                           </span>
                         </div>
@@ -1015,16 +1045,18 @@ function RealizedYieldContent() {
                         <p className="text-sm font-medium text-muted-foreground mb-1">
                           {data.realizedPnl >= 0 ? "Realized Profits" : "Net Cash Flow"}
                         </p>
-                        <p className={`text-2xl sm:text-3xl font-bold tabular-nums ${data.realizedPnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                        <p className={`text-2xl sm:text-3xl font-bold tabular-nums ${data.realizedPnl >= 0 ? "text-positive" : "text-negative"}`}>
                           {data.realizedPnl >= 0 ? "+" : ""}{formatUsd(data.realizedPnl)}
                         </p>
                       </div>
-                      <WalletAggregationSelector
-                        wallets={wallets}
-                        activeWalletId={activeWallet?.id ?? null}
-                        selectedWalletIds={effectiveSelectedWalletIds}
-                        onApply={handleWalletSelectionApply}
-                      />
+                      {wallets.length > 1 && (
+                        <WalletAggregationSelector
+                          wallets={wallets}
+                          activeWalletId={activeWallet?.id ?? null}
+                          selectedWalletIds={effectiveSelectedWalletIds}
+                          onApply={handleWalletSelectionApply}
+                        />
+                      )}
                     </div>
                     <Separator className="my-4" />
                     <div className="grid grid-cols-2 gap-4">
@@ -1100,7 +1132,7 @@ function RealizedYieldContent() {
                           <span className="text-muted-foreground">
                             <InfoLabel label="Yield" tooltip="Interest earned from lending. This is protocol yield (tokens earned × current price)." />
                           </span>
-                          <span className={`tabular-nums ${displayPnl.poolsYield >= 0 ? "" : "text-red-400"}`}>{formatUsd(displayPnl.poolsYield)}</span>
+                          <span className={`tabular-nums ${displayPnl.poolsYield >= 0 ? "" : "text-negative"}`}>{formatUsd(displayPnl.poolsYield)}</span>
                         </div>
                       )}
                       {showPriceChanges && displayPnl.poolsPriceChange !== 0 && (
@@ -1111,7 +1143,7 @@ function RealizedYieldContent() {
                               tooltip="Impact of price changes on your deposited assets. Price increase = your deposits are worth more."
                             />
                           </span>
-                          <span className={`tabular-nums ${displayPnl.poolsPriceChange >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                          <span className={`tabular-nums ${displayPnl.poolsPriceChange >= 0 ? "text-positive" : "text-negative"}`}>
                             {displayPnl.poolsPriceChange >= 0 ? "+" : ""}{formatUsd(displayPnl.poolsPriceChange)}
                           </span>
                         </div>
@@ -1123,11 +1155,11 @@ function RealizedYieldContent() {
                               <InfoLabel label="Unrealized P&L" tooltip="Current Balance minus Cost Basis. Profit still in the protocol." />
                             </span>
                             <div className="flex items-center gap-2">
-                              <span className={`tabular-nums ${displayPnl.poolsUnrealized >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                              <span className={`tabular-nums ${displayPnl.poolsUnrealized >= 0 ? "text-positive" : "text-negative"}`}>
                                 {displayPnl.poolsUnrealized >= 0 ? "+" : ""}{formatUsd(displayPnl.poolsUnrealized)}
                               </span>
                               {data.pools.deposited > 0 && (
-                                <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${displayPnl.poolsUnrealized >= 0 ? "text-emerald-400 border-emerald-400/30" : "text-red-400 border-red-400/30"}`}>
+                                <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${displayPnl.poolsUnrealized >= 0 ? "text-positive border-emerald-400/30" : "text-negative border-red-400/30"}`}>
                                   {displayPnl.poolsUnrealized >= 0 ? "+" : ""}{((displayPnl.poolsUnrealized / data.pools.deposited) * 100).toFixed(1)}%
                                 </Badge>
                               )}
@@ -1138,11 +1170,11 @@ function RealizedYieldContent() {
                               <InfoLabel label="P&L" tooltip="Total profit: (Current Balance + Withdrawn) - Deposited" />
                             </span>
                             <div className="flex items-center gap-2">
-                              <span className={`tabular-nums ${poolsCashflowPnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                              <span className={`tabular-nums ${poolsCashflowPnl >= 0 ? "text-positive" : "text-negative"}`}>
                                 {poolsCashflowPnl >= 0 ? "+" : ""}{formatUsd(poolsCashflowPnl)}
                               </span>
                               {data.pools.deposited > 0 && (
-                                <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${poolsCashflowPnl >= 0 ? "text-emerald-400 border-emerald-400/30" : "text-red-400 border-red-400/30"}`}>
+                                <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${poolsCashflowPnl >= 0 ? "text-positive border-emerald-400/30" : "text-negative border-red-400/30"}`}>
                                   {poolsCashflowPnl >= 0 ? "+" : ""}{((poolsCashflowPnl / data.pools.deposited) * 100).toFixed(1)}%
                                 </Badge>
                               )}
@@ -1183,7 +1215,7 @@ function RealizedYieldContent() {
                           <span className="text-muted-foreground">
                             <InfoLabel label="Yield" tooltip="LP token appreciation from backstop positions. This is protocol yield." />
                           </span>
-                          <span className={`tabular-nums ${displayPnl.backstopYield >= 0 ? "" : "text-red-400"}`}>{formatUsd(displayPnl.backstopYield)}</span>
+                          <span className={`tabular-nums ${displayPnl.backstopYield >= 0 ? "" : "text-negative"}`}>{formatUsd(displayPnl.backstopYield)}</span>
                         </div>
                       )}
                       {showPriceChanges && displayPnl.backstopPriceChange !== 0 && (
@@ -1194,7 +1226,7 @@ function RealizedYieldContent() {
                               tooltip="Impact of LP token price changes on your backstop position. Price increase = your position is worth more."
                             />
                           </span>
-                          <span className={`tabular-nums ${displayPnl.backstopPriceChange >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                          <span className={`tabular-nums ${displayPnl.backstopPriceChange >= 0 ? "text-positive" : "text-negative"}`}>
                             {displayPnl.backstopPriceChange >= 0 ? "+" : ""}{formatUsd(displayPnl.backstopPriceChange)}
                           </span>
                         </div>
@@ -1221,9 +1253,9 @@ function RealizedYieldContent() {
                             <InfoLabel label="Realized P&L" tooltip="Profits already withdrawn from the protocol (emissions claimed)." />
                           </span>
                           <div className="flex items-center gap-2">
-                            <span className="tabular-nums text-emerald-400">+{formatUsd(emissionsBySource.backstop.usd)}</span>
+                            <span className="tabular-nums text-positive">+{formatUsd(emissionsBySource.backstop.usd)}</span>
                             {data.backstop.deposited > 0 && (
-                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-emerald-400 border-emerald-400/30">
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-positive border-emerald-400/30">
                                 +{((emissionsBySource.backstop.usd / data.backstop.deposited) * 100).toFixed(1)}%
                               </Badge>
                             )}
@@ -1237,11 +1269,11 @@ function RealizedYieldContent() {
                               <InfoLabel label="Unrealized P&L" tooltip="Current Balance minus Cost Basis. Profit still in the protocol." />
                             </span>
                             <div className="flex items-center gap-2">
-                              <span className={`tabular-nums ${displayPnl.backstopUnrealized >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                              <span className={`tabular-nums ${displayPnl.backstopUnrealized >= 0 ? "text-positive" : "text-negative"}`}>
                                 {displayPnl.backstopUnrealized >= 0 ? "+" : ""}{formatUsd(displayPnl.backstopUnrealized)}
                               </span>
                               {data.backstop.deposited > 0 && (
-                                <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${displayPnl.backstopUnrealized >= 0 ? "text-emerald-400 border-emerald-400/30" : "text-red-400 border-red-400/30"}`}>
+                                <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${displayPnl.backstopUnrealized >= 0 ? "text-positive border-emerald-400/30" : "text-negative border-red-400/30"}`}>
                                   {displayPnl.backstopUnrealized >= 0 ? "+" : ""}{((displayPnl.backstopUnrealized / data.backstop.deposited) * 100).toFixed(1)}%
                                 </Badge>
                               )}
@@ -1252,11 +1284,11 @@ function RealizedYieldContent() {
                               <InfoLabel label="P&L" tooltip="Total profit: (Current Balance + Withdrawn) - Deposited" />
                             </span>
                             <div className="flex items-center gap-2">
-                              <span className={`tabular-nums ${backstopCashflowPnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                              <span className={`tabular-nums ${backstopCashflowPnl >= 0 ? "text-positive" : "text-negative"}`}>
                                 {backstopCashflowPnl >= 0 ? "+" : ""}{formatUsd(backstopCashflowPnl)}
                               </span>
                               {data.backstop.deposited > 0 && (
-                                <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${backstopCashflowPnl >= 0 ? "text-emerald-400 border-emerald-400/30" : "text-red-400 border-red-400/30"}`}>
+                                <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${backstopCashflowPnl >= 0 ? "text-positive border-emerald-400/30" : "text-negative border-red-400/30"}`}>
                                   {backstopCashflowPnl >= 0 ? "+" : ""}{((backstopCashflowPnl / data.backstop.deposited) * 100).toFixed(1)}%
                                 </Badge>
                               )}
@@ -1302,7 +1334,7 @@ function RealizedYieldContent() {
                               tooltip="Impact of price changes on debt. Price increase = debt is more expensive to repay (bad for borrower)."
                             />
                           </span>
-                          <span className={`tabular-nums ${displayPnl.borrowPriceChangeCost > 0 ? "text-red-400" : "text-emerald-400"}`}>
+                          <span className={`tabular-nums ${displayPnl.borrowPriceChangeCost > 0 ? "text-negative" : "text-positive"}`}>
                             {displayPnl.borrowPriceChangeCost > 0 ? "-" : "+"}{formatUsd(Math.abs(displayPnl.borrowPriceChangeCost))}
                           </span>
                         </div>
@@ -1312,11 +1344,11 @@ function RealizedYieldContent() {
                           <InfoLabel label="Borrow Cost" tooltip="Total cost of borrowing: Interest + Price Impact (negative = cost to you)" />
                         </span>
                         <div className="flex items-center gap-2">
-                          <span className={`tabular-nums ${displayPnl.borrowTotalCost > 0 ? "text-orange-400" : "text-emerald-400"}`}>
+                          <span className={`tabular-nums ${displayPnl.borrowTotalCost > 0 ? "text-orange-400" : "text-positive"}`}>
                             {displayPnl.borrowTotalCost > 0 ? "-" : "+"}{formatUsd(Math.abs(displayPnl.borrowTotalCost))}
                           </span>
                           {borrowBreakdown.totalBorrowCostBasisUsd > 0 && (
-                            <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${displayPnl.borrowTotalCost > 0 ? "text-orange-400 border-orange-400/30" : "text-emerald-400 border-emerald-400/30"}`}>
+                            <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${displayPnl.borrowTotalCost > 0 ? "text-orange-400 border-orange-400/30" : "text-positive border-emerald-400/30"}`}>
                               {displayPnl.borrowTotalCost > 0 ? "-" : "+"}{Math.abs((displayPnl.borrowTotalCost / borrowBreakdown.totalBorrowCostBasisUsd) * 100).toFixed(1)}%
                             </Badge>
                           )}
@@ -1375,7 +1407,7 @@ function RealizedYieldContent() {
                               : "Total profit: (Current Value + Withdrawn) - Deposited"}
                           />
                         </p>
-                        <p className={`text-lg font-bold tabular-nums ${displayTotalPnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                        <p className={`text-lg font-bold tabular-nums ${displayTotalPnl >= 0 ? "text-positive" : "text-negative"}`}>
                           {displayTotalPnl >= 0 ? "+" : ""}{formatUsd(displayTotalPnl)}
                         </p>
                       </div>
@@ -1384,7 +1416,7 @@ function RealizedYieldContent() {
                   {unrealizedData.totalCurrentUsd === 0 && (
                     <div className="flex items-center justify-between bg-muted/50 -mx-4 px-4 py-2 rounded-md mt-3">
                       <p className="font-semibold">{data.realizedPnl >= 0 ? "Realized Profit" : "Net Cash Flow"}</p>
-                      <p className={`text-lg font-bold tabular-nums ${data.realizedPnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                      <p className={`text-lg font-bold tabular-nums ${data.realizedPnl >= 0 ? "text-positive" : "text-negative"}`}>
                         {data.realizedPnl >= 0 ? "+" : ""}{formatUsd(data.realizedPnl)}
                       </p>
                     </div>
@@ -1506,7 +1538,7 @@ function RealizedYieldContent() {
                                         : "Interest earned from lending (realized when withdrawn)."}
                                     />
                                   </span>
-                                  <span className={`tabular-nums ${lendingProtocolYield >= 0 ? "" : "text-red-400"}`}>{formatUsd(lendingProtocolYield)}</span>
+                                  <span className={`tabular-nums ${lendingProtocolYield >= 0 ? "" : "text-negative"}`}>{formatUsd(lendingProtocolYield)}</span>
                                 </div>
                               )}
                               {showPriceChanges && lendingPriceChange !== 0 && (
@@ -1517,7 +1549,7 @@ function RealizedYieldContent() {
                                       tooltip="Impact of price changes on your deposited assets."
                                     />
                                   </span>
-                                  <span className={`tabular-nums ${lendingPriceChange >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                                  <span className={`tabular-nums ${lendingPriceChange >= 0 ? "text-positive" : "text-negative"}`}>
                                     {lendingPriceChange >= 0 ? "+" : ""}{formatUsd(lendingPriceChange)}
                                   </span>
                                 </div>
@@ -1528,11 +1560,11 @@ function RealizedYieldContent() {
                                   <InfoLabel label="P&L" tooltip="Total profit: (Current Balance + Withdrawn) - Deposited" />
                                 </span>
                                 <div className="flex items-center gap-2">
-                                  <span className={`tabular-nums ${lendingCashflowPnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                                  <span className={`tabular-nums ${lendingCashflowPnl >= 0 ? "text-positive" : "text-negative"}`}>
                                     {lendingCashflowPnl >= 0 ? "+" : ""}{formatUsd(lendingCashflowPnl)}
                                   </span>
                                   {poolData.lending.deposited > 0 && (
-                                    <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${lendingCashflowPnl >= 0 ? "text-emerald-400 border-emerald-400/30" : "text-red-400 border-red-400/30"}`}>
+                                    <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${lendingCashflowPnl >= 0 ? "text-positive border-emerald-400/30" : "text-negative border-red-400/30"}`}>
                                       {lendingCashflowPnl >= 0 ? "+" : ""}{((lendingCashflowPnl / poolData.lending.deposited) * 100).toFixed(1)}%
                                     </Badge>
                                   )}
@@ -1576,7 +1608,7 @@ function RealizedYieldContent() {
                                         : "LP token appreciation (realized when withdrawn)."}
                                     />
                                   </span>
-                                  <span className={`tabular-nums ${backstopProtocolYield >= 0 ? "" : "text-red-400"}`}>{formatUsd(backstopProtocolYield)}</span>
+                                  <span className={`tabular-nums ${backstopProtocolYield >= 0 ? "" : "text-negative"}`}>{formatUsd(backstopProtocolYield)}</span>
                                 </div>
                               )}
                               {showPriceChanges && backstopPriceChange !== 0 && (
@@ -1587,7 +1619,7 @@ function RealizedYieldContent() {
                                       tooltip="Impact of LP token price changes on your backstop position."
                                     />
                                   </span>
-                                  <span className={`tabular-nums ${backstopPriceChange >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                                  <span className={`tabular-nums ${backstopPriceChange >= 0 ? "text-positive" : "text-negative"}`}>
                                     {backstopPriceChange >= 0 ? "+" : ""}{formatUsd(backstopPriceChange)}
                                   </span>
                                 </div>
@@ -1606,11 +1638,11 @@ function RealizedYieldContent() {
                                   <InfoLabel label="P&L" tooltip="Total profit: (Current Balance + Withdrawn) - Deposited" />
                                 </span>
                                 <div className="flex items-center gap-2">
-                                  <span className={`tabular-nums ${backstopCashflowPnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                                  <span className={`tabular-nums ${backstopCashflowPnl >= 0 ? "text-positive" : "text-negative"}`}>
                                     {backstopCashflowPnl >= 0 ? "+" : ""}{formatUsd(backstopCashflowPnl)}
                                   </span>
                                   {poolData.backstop.deposited > 0 && (
-                                    <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${backstopCashflowPnl >= 0 ? "text-emerald-400 border-emerald-400/30" : "text-red-400 border-red-400/30"}`}>
+                                    <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${backstopCashflowPnl >= 0 ? "text-positive border-emerald-400/30" : "text-negative border-red-400/30"}`}>
                                       {backstopCashflowPnl >= 0 ? "+" : ""}{((backstopCashflowPnl / poolData.backstop.deposited) * 100).toFixed(1)}%
                                     </Badge>
                                   )}
@@ -1653,7 +1685,7 @@ function RealizedYieldContent() {
                                   <span className="text-muted-foreground">
                                     <InfoLabel label="Price Change" tooltip="Impact of price changes on debt. Price increase = debt is more expensive to repay." />
                                   </span>
-                                  <span className={`tabular-nums ${poolBorrow.priceChangeOnDebtUsd > 0 ? "text-red-400" : "text-emerald-400"}`}>
+                                  <span className={`tabular-nums ${poolBorrow.priceChangeOnDebtUsd > 0 ? "text-negative" : "text-positive"}`}>
                                     {poolBorrow.priceChangeOnDebtUsd > 0 ? "-" : "+"}{formatUsd(Math.abs(poolBorrow.priceChangeOnDebtUsd))}
                                   </span>
                                 </div>
@@ -1664,11 +1696,11 @@ function RealizedYieldContent() {
                                   <InfoLabel label="Borrow Cost" tooltip="Total cost of borrowing: Interest + Price Impact" />
                                 </span>
                                 <div className="flex items-center gap-2">
-                                  <span className={`tabular-nums ${poolBorrowCost > 0 ? "text-orange-400" : "text-emerald-400"}`}>
+                                  <span className={`tabular-nums ${poolBorrowCost > 0 ? "text-orange-400" : "text-positive"}`}>
                                     {poolBorrowCost > 0 ? "-" : "+"}{formatUsd(Math.abs(poolBorrowCost))}
                                   </span>
                                   {poolBorrow.principalUsd > 0 && (
-                                    <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${poolBorrowCost > 0 ? "text-orange-400 border-orange-400/30" : "text-emerald-400 border-emerald-400/30"}`}>
+                                    <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${poolBorrowCost > 0 ? "text-orange-400 border-orange-400/30" : "text-positive border-emerald-400/30"}`}>
                                       {poolBorrowCost > 0 ? "-" : "+"}{Math.abs((poolBorrowCost / poolBorrow.principalUsd) * 100).toFixed(1)}%
                                     </Badge>
                                   )}
@@ -1708,7 +1740,7 @@ function RealizedYieldContent() {
                           )}
                           <div className="flex justify-between items-center bg-muted/50 -mx-4 px-4 py-2 rounded-md mt-3">
                             <span className="font-semibold">{poolBorrow && poolBorrow.currentDebtUsd > 0 ? "Net P&L" : "Total P&L"}</span>
-                            <p className={`text-lg font-bold tabular-nums ${poolDisplayPnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                            <p className={`text-lg font-bold tabular-nums ${poolDisplayPnl >= 0 ? "text-positive" : "text-negative"}`}>
                               {poolDisplayPnl >= 0 ? "+" : ""}{formatUsd(poolDisplayPnl)}
                             </p>
                           </div>
@@ -1731,22 +1763,8 @@ function RealizedYieldContent() {
 
 function PerformanceSkeleton() {
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header skeleton */}
-      <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container flex h-14 items-center justify-between px-4">
-          <Skeleton className="h-8 w-24" />
-          <Skeleton className="h-9 w-32 rounded-full" />
-        </div>
-      </header>
-
-      <main className="container mx-auto px-4 py-6 space-y-4 sm:space-y-6">
-        {/* Page title skeleton */}
-        <div className="flex items-center gap-2">
-          <Skeleton className="h-8 w-32" />
-          <Skeleton className="h-5 w-10 rounded-full" />
-        </div>
-
+    <PageLoadingShell>
+      <div className="space-y-4 sm:space-y-6">
         {/* Hero Summary Card Skeleton */}
         <Card>
           <CardContent>
@@ -1922,8 +1940,8 @@ function PerformanceSkeleton() {
             </CardContent>
           </Card>
         </div>
-      </main>
-    </div>
+      </div>
+    </PageLoadingShell>
   )
 }
 
