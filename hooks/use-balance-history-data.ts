@@ -5,28 +5,30 @@ import { useQuery } from "@tanstack/react-query"
 import { fetchWithTimeout } from "@/lib/fetch-utils"
 import { fillMissingDates, detectPositionChanges, calculateEarningsStats } from "@/lib/balance-history-utils"
 import type { AssetCardData } from "@/types/asset-card"
-import type { BalanceHistoryRecord, ChartDataPoint, EarningsStats, PositionChange } from "@/types/balance-history"
+import type { BalanceHistoryPoint, ChartDataPoint, EarningsStats, PositionChange } from "@/types/balance-history"
+import { decodeBalanceHistory } from "@/lib/balance-history-codec"
+import { LP_TOKEN_ADDRESS } from "@/lib/constants"
+import type { BalanceHistoryBatchResponse } from "@/app/api/balance-history-batch/route"
 
 // localStorage cache for instant repeat loads
-const HISTORY_CACHE_KEY = "balance-history-cache"
+// v2: columnar wire format; the key is bumped so v1 blobs are ignored, not decoded.
+const HISTORY_CACHE_KEY = "balance-history-cache-v2"
 const HISTORY_CACHE_MAX_AGE = 4 * 60 * 60 * 1000 // 4 hours (historical data changes slowly)
 
 interface HistoryCache {
-  data: { results: BalanceHistoryResult[] }
+  data: BalanceHistoryBatchResponse
   timestamp: number
   publicKey: string
-  assets: string
 }
 
-function getCachedHistory(publicKey: string, assets: string): { results: BalanceHistoryResult[] } | undefined {
+function getCachedHistory(publicKey: string): BalanceHistoryBatchResponse | undefined {
   if (typeof window === "undefined") return undefined
   try {
     const cached = localStorage.getItem(HISTORY_CACHE_KEY)
     if (!cached) return undefined
     const parsed: HistoryCache = JSON.parse(cached)
-    // Validate cache: same wallet, same assets, and not expired
+    // Validate cache: same wallet and not expired
     if (parsed.publicKey !== publicKey) return undefined
-    if (parsed.assets !== assets) return undefined
     if (Date.now() - parsed.timestamp > HISTORY_CACHE_MAX_AGE) {
       localStorage.removeItem(HISTORY_CACHE_KEY)
       return undefined
@@ -37,39 +39,28 @@ function getCachedHistory(publicKey: string, assets: string): { results: Balance
   }
 }
 
-function setCachedHistory(publicKey: string, assets: string, data: { results: BalanceHistoryResult[] }): void {
+function setCachedHistory(publicKey: string, data: BalanceHistoryBatchResponse): void {
   if (typeof window === "undefined") return
   try {
-    const cache: HistoryCache = { data, timestamp: Date.now(), publicKey, assets }
+    const cache: HistoryCache = { data, timestamp: Date.now(), publicKey }
     localStorage.setItem(HISTORY_CACHE_KEY, JSON.stringify(cache))
   } catch {
     // localStorage full or unavailable - ignore
   }
 }
 
-interface BalanceHistoryResult {
-  asset_address: string
-  history: BalanceHistoryRecordWithBorrow[]
-  firstEventDate: string | null
-  error: string | null
-}
-
 interface BalanceHistoryQueryResult {
-  data: { history: BalanceHistoryRecordWithBorrow[]; firstEventDate: string | null } | undefined
+  data: { history: BalanceHistoryPoint[]; firstEventDate: string | null } | undefined
   isLoading: boolean
   isError: boolean
   error: Error | null
-}
-
-interface BalanceHistoryRecordWithBorrow extends BalanceHistoryRecord {
-  borrow_cost_basis?: number | null
 }
 
 interface BalanceHistoryDataEntry {
   chartData: ChartDataPoint[]
   positionChanges: PositionChange[]
   earningsStats: EarningsStats
-  rawData: BalanceHistoryRecordWithBorrow[]
+  rawData: BalanceHistoryPoint[]
   isLoading: boolean
   error: Error | null
 }
@@ -85,6 +76,13 @@ interface BackstopBalanceHistoryData {
 
 export interface UseBalanceHistoryDataReturn {
   uniqueAssetAddresses: string[]
+  /** Every asset the history response covers, plus the LP token. Superset of
+   *  uniqueAssetAddresses, available without waiting for the wallet snapshot. */
+  historyTokenAddresses: string[]
+  /** Every date the chart can plot, from the earliest event (minus the baseline
+   *  day fillMissingDates prepends) through today. Superset of the chart's own
+   *  dates, available without waiting for the wallet snapshot. */
+  historyDateRange: string[]
   balanceHistoryQueries: BalanceHistoryQueryResult[]
   backstopBalanceHistoryQuery: {
     data: BackstopBalanceHistoryData | undefined
@@ -124,30 +122,22 @@ export function useBalanceHistoryData(
     return Array.from(addresses)
   }, [assetCards, blendSnapshot?.positions])
 
-  // Create stable assets key for caching (sorted for consistent cache key)
-  const assetsKey = useMemo(
-    () => [...uniqueAssetAddresses].sort().join(','),
-    [uniqueAssetAddresses]
-  )
-
   // Get cached data for instant display on repeat visits
   const cachedData = useMemo(
-    () => publicKey && assetsKey ? getCachedHistory(publicKey, assetsKey) : undefined,
-    [publicKey, assetsKey]
+    () => publicKey ? getCachedHistory(publicKey) : undefined,
+    [publicKey]
   )
 
-  // Batch fetch balance history for all assets in a single request
-  // This reduces HTTP overhead by consolidating multiple requests into one
-  const balanceHistoryBatchQuery = useQuery<{ results: BalanceHistoryResult[] }, Error>({
-    queryKey: ["balance-history-batch", publicKey || '', assetsKey, 365, userTimezone],
+  // Batch fetch balance history for every asset this wallet has ever touched,
+  // in a single request. The asset list is derived server-side, so this fires
+  // as soon as the public key is known instead of queueing behind the SDK
+  // wallet snapshot. Which of those assets end up on the chart is still decided
+  // client-side by uniqueAssetAddresses below.
+  const balanceHistoryBatchQuery = useQuery<BalanceHistoryBatchResponse, Error>({
+    queryKey: ["balance-history-batch", publicKey || '', 365, userTimezone],
     queryFn: async ({ signal }) => {
-      if (uniqueAssetAddresses.length === 0) {
-        return { results: [] }
-      }
-
       const params = new URLSearchParams({
         user: publicKey || '',
-        assets: assetsKey,
         days: '365',
         timezone: userTimezone,
       })
@@ -159,9 +149,9 @@ export function useBalanceHistoryData(
         throw new Error(error.message || "Failed to fetch balance history")
       }
 
-      return response.json() as Promise<{ results: BalanceHistoryResult[] }>
+      return response.json() as Promise<BalanceHistoryBatchResponse>
     },
-    enabled: !!publicKey && uniqueAssetAddresses.length > 0,
+    enabled: !!publicKey,
     staleTime: 5 * 60 * 1000, // 5 minutes (historical data doesn't change frequently)
     refetchOnWindowFocus: false,
     retry: 2,
@@ -170,10 +160,23 @@ export function useBalanceHistoryData(
 
   // Update localStorage cache when fresh data arrives
   useEffect(() => {
-    if (publicKey && assetsKey && balanceHistoryBatchQuery.data && !balanceHistoryBatchQuery.isPlaceholderData) {
-      setCachedHistory(publicKey, assetsKey, balanceHistoryBatchQuery.data)
+    if (publicKey && balanceHistoryBatchQuery.data && !balanceHistoryBatchQuery.isPlaceholderData) {
+      setCachedHistory(publicKey, balanceHistoryBatchQuery.data)
     }
-  }, [publicKey, assetsKey, balanceHistoryBatchQuery.data, balanceHistoryBatchQuery.isPlaceholderData])
+  }, [publicKey, balanceHistoryBatchQuery.data, balanceHistoryBatchQuery.isPlaceholderData])
+
+  // Decode the columnar payload once per response, keyed by asset address.
+  const decodedResults = useMemo(() => {
+    const map = new Map<string, { history: BalanceHistoryPoint[]; firstEventDate: string | null; error: string | null }>()
+    balanceHistoryBatchQuery.data?.results?.forEach((result) => {
+      map.set(result.asset_address, {
+        history: decodeBalanceHistory(result.columns),
+        firstEventDate: result.firstEventDate,
+        error: result.error,
+      })
+    })
+    return map
+  }, [balanceHistoryBatchQuery.data])
 
   // Check if we have fresh data (not placeholder/cached data)
   const hasFreshHistoryData = balanceHistoryBatchQuery.data && !balanceHistoryBatchQuery.isPlaceholderData
@@ -184,7 +187,7 @@ export function useBalanceHistoryData(
     // Show loading until fresh data arrives (not just cached/placeholder data)
     const isStillLoading = balanceHistoryBatchQuery.isLoading || !hasFreshHistoryData
 
-    if (!balanceHistoryBatchQuery.data?.results) {
+    if (decodedResults.size === 0) {
       return uniqueAssetAddresses.map(() => ({
         data: undefined,
         isLoading: isStillLoading,
@@ -193,13 +196,8 @@ export function useBalanceHistoryData(
       }))
     }
 
-    // Create a map for quick lookup
-    const resultMap = new Map<string, BalanceHistoryResult>(
-      balanceHistoryBatchQuery.data.results.map((r) => [r.asset_address, r])
-    )
-
     return uniqueAssetAddresses.map((assetAddress) => {
-      const result = resultMap.get(assetAddress)
+      const result = decodedResults.get(assetAddress)
       if (!result) {
         return {
           data: { history: [], firstEventDate: null },
@@ -219,7 +217,7 @@ export function useBalanceHistoryData(
         error: result.error ? new Error(result.error) : null,
       }
     })
-  }, [balanceHistoryBatchQuery.data, balanceHistoryBatchQuery.isLoading, balanceHistoryBatchQuery.isError, balanceHistoryBatchQuery.error, uniqueAssetAddresses, hasFreshHistoryData])
+  }, [decodedResults, balanceHistoryBatchQuery.isLoading, balanceHistoryBatchQuery.isError, balanceHistoryBatchQuery.error, uniqueAssetAddresses, hasFreshHistoryData])
 
   // Fetch backstop balance history (LP tokens over time)
   const backstopBalanceHistoryQuery = useQuery({
@@ -333,8 +331,58 @@ export function useBalanceHistoryData(
     return map
   }, [uniqueAssetAddresses, balanceHistoryQueries])
 
+  // Token list and date span for the historical-price lookup. Both are derived
+  // from the history response alone, so the price request no longer waits for
+  // the wallet snapshot; both are supersets of what the chart plots, which
+  // forward-filled prices tolerate.
+  const historyTokenAddresses = useMemo(() => {
+    const addresses = Array.from(decodedResults.keys())
+    if (!addresses.includes(LP_TOKEN_ADDRESS)) {
+      addresses.push(LP_TOKEN_ADDRESS)
+    }
+    return addresses
+  }, [decodedResults])
+
+  const backstopHistory = (backstopBalanceHistoryQuery.data as BackstopBalanceHistoryData | undefined)?.history
+
+  const historyDateRange = useMemo(() => {
+    let earliest: string | null = null
+    decodedResults.forEach((result) => {
+      for (const candidate of [result.firstEventDate, result.history[result.history.length - 1]?.snapshot_date]) {
+        if (candidate && (earliest === null || candidate < earliest)) {
+          earliest = candidate
+        }
+      }
+    })
+    backstopHistory?.forEach((point) => {
+      if (point.date && (earliest === null || point.date < earliest)) {
+        earliest = point.date
+      }
+    })
+    if (!earliest) return []
+
+    // One day before the first event: fillMissingDates prepends a baseline day.
+    const cursor = new Date(`${(earliest as string).slice(0, 10)}T00:00:00Z`)
+    cursor.setUTCDate(cursor.getUTCDate() - 1)
+
+    const now = new Date()
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+
+    const dates: string[] = []
+    // Guard against a bad earliest date spinning forever.
+    while (dates.length < 800) {
+      const date = cursor.toISOString().slice(0, 10)
+      dates.push(date)
+      if (date >= today) break
+      cursor.setUTCDate(cursor.getUTCDate() + 1)
+    }
+    return dates
+  }, [decodedResults, backstopHistory])
+
   return {
     uniqueAssetAddresses,
+    historyTokenAddresses,
+    historyDateRange,
     balanceHistoryQueries,
     backstopBalanceHistoryQuery: {
       data: backstopBalanceHistoryQuery.data as BackstopBalanceHistoryData | undefined,

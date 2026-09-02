@@ -63,6 +63,8 @@ export function HomeContent() {
   // Fetch balance history data for all assets
   const {
     uniqueAssetAddresses,
+    historyTokenAddresses,
+    historyDateRange,
     balanceHistoryQueries,
     backstopBalanceHistoryQuery,
     poolAssetCostBasisMap,
@@ -89,41 +91,17 @@ export function HomeContent() {
     return map
   }, [blendSnapshot, lpTokenPrice])
 
-  // Extract all unique dates from balance history for historical price lookups
-  const chartDates = useMemo(() => {
-    const datesSet = new Set<string>()
-
-    // Collect dates from all asset histories
-    balanceHistoryDataMap.forEach((historyData) => {
-      historyData.chartData.forEach((point) => {
-        datesSet.add(point.date)
-      })
-    })
-
-    // Also add backstop dates
-    backstopBalanceHistoryQuery.data?.history?.forEach((point) => {
-      datesSet.add(point.date)
-    })
-
-    return Array.from(datesSet).sort()
-  }, [balanceHistoryDataMap, backstopBalanceHistoryQuery.data?.history])
-
-  // Build the full list of token addresses for historical prices (assets + LP token)
-  const allTokenAddresses = useMemo(() => {
-    const addresses = [...uniqueAssetAddresses]
-    // Include LP token for backstop historical pricing
-    if (backstopPositions.length > 0 && !addresses.includes(LP_TOKEN_ADDRESS)) {
-      addresses.push(LP_TOKEN_ADDRESS)
-    }
-    return addresses
-  }, [uniqueAssetAddresses, backstopPositions.length])
+  // Historical prices cover the full span and token set the history response
+  // reports, which is a superset of what the chart plots. Deriving them from
+  // the history alone lets this request run alongside the wallet snapshot
+  // instead of after it.
 
   // Fetch historical prices for chart data
   const historicalPrices = useChartHistoricalPrices({
-    tokenAddresses: allTokenAddresses,
-    dates: chartDates,
+    tokenAddresses: historyTokenAddresses,
+    dates: historyDateRange,
     sdkPrices: sdkPricesMap,
-    enabled: chartDates.length > 0 && allTokenAddresses.length > 0,
+    enabled: historyDateRange.length > 0 && historyTokenAddresses.length > 0,
   })
 
   // Compute derived balance data (enriched cards, aggregated history, etc.)

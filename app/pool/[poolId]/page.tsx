@@ -40,6 +40,9 @@ import {
   type BlendBackstopPosition,
 } from "@/lib/blend/positions";
 import { fetchWithTimeout } from "@/lib/fetch-utils";
+import { decodeBalanceHistory } from "@/lib/balance-history-codec";
+import type { BalanceHistoryPoint } from "@/types/balance-history";
+import type { BalanceHistoryBatchResponse } from "@/app/api/balance-history-batch/route";
 import type { BackstopCostBasis } from "@/lib/db/types";
 import { toTrackedPools } from "@/lib/blend/pools";
 import { usePoolsOnly } from "@/hooks/use-metadata";
@@ -79,16 +82,10 @@ interface BackstopClaimData {
   last_claim_date: string | null;
 }
 
-interface BalanceHistoryRecord {
-  pool_id: string;
-  total_cost_basis: number | null;
-  [key: string]: unknown;
-}
-
 interface BalanceHistoryResult {
   assetAddress: string;
   data: {
-    history: BalanceHistoryRecord[];
+    history: BalanceHistoryPoint[];
     firstEventDate: string | null;
   };
 }
@@ -1110,21 +1107,15 @@ export default function PoolDetailsPage() {
         `/api/balance-history-batch?${params.toString()}`,
       );
       if (!response.ok) return [];
-      const data = await response.json();
+      const data = (await response.json()) as BalanceHistoryBatchResponse;
       // Transform batch results to match the expected format
-      return (data.results || []).map(
-        (result: {
-          asset_address: string;
-          history: BalanceHistoryRecord[];
-          firstEventDate: string | null;
-        }) => ({
-          assetAddress: result.asset_address,
-          data: {
-            history: result.history,
-            firstEventDate: result.firstEventDate,
-          },
-        }),
-      );
+      return (data.results || []).map((result) => ({
+        assetAddress: result.asset_address,
+        data: {
+          history: decodeBalanceHistory(result.columns),
+          firstEventDate: result.firstEventDate,
+        },
+      }));
     },
     staleTime: 60_000,
   });

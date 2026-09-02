@@ -24,16 +24,14 @@ export interface ChartHistoricalPrices {
 
 async function fetchHistoricalPrices(
   tokenAddresses: string[],
-  dates: string[],
-  sdkPrices: Record<string, number>
+  dates: string[]
 ): Promise<HistoricalPricesResponse> {
-  // IMPORTANT: SDK prices must be in the same order as tokenAddresses
-  const orderedSdkPrices = tokenAddresses.map(addr => sdkPrices[addr] || 0)
-
+  // No SDK prices are sent: the API omits dates it has no price for and
+  // getPrice() below falls back to the SDK price client-side. That keeps this
+  // request off the wallet snapshot's critical path.
   const params = new URLSearchParams({
     tokens: tokenAddresses.join(','),
     dates: dates.join(','),
-    sdkPrices: orderedSdkPrices.join(','),
   })
 
   const response = await fetch(`/api/historical-prices?${params}`)
@@ -50,15 +48,6 @@ export function useChartHistoricalPrices({
   sdkPrices,
   enabled = true,
 }: UseChartHistoricalPricesParams): ChartHistoricalPrices {
-  // Convert SDK prices map to object for the API call
-  const sdkPricesObj = useMemo(() => {
-    const obj: Record<string, number> = {}
-    sdkPrices.forEach((price, address) => {
-      obj[address] = price
-    })
-    return obj
-  }, [sdkPrices])
-
   // Create a stable key for the query
   const queryKey = useMemo(() => {
     const tokensKey = tokenAddresses.slice().sort().join(',')
@@ -68,7 +57,7 @@ export function useChartHistoricalPrices({
 
   const query = useQuery({
     queryKey,
-    queryFn: () => fetchHistoricalPrices(tokenAddresses, dates, sdkPricesObj),
+    queryFn: () => fetchHistoricalPrices(tokenAddresses, dates),
     enabled: enabled && tokenAddresses.length > 0 && dates.length > 0,
     staleTime: 30 * 60 * 1000, // 30 minutes - historical prices rarely change
     gcTime: 60 * 60 * 1000, // 1 hour

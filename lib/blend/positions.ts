@@ -1052,14 +1052,95 @@ async function fetchWalletBlendSnapshotInternal(
     )
   ).filter((snapshot): snapshot is PoolSnapshot => snapshot !== null);
 
-  const snapshotsWithUsers = await Promise.all(
-    poolSnapshots.map((snapshot) =>
-      ensureUserLoaded(snapshot, walletPublicKey)
-    )
-  );
-
   const tokenMetadataCache = new Map<string, TokenMetadata>();
   const priceCache = new Map<string, PriceQuote | null>();
+
+  // Every reserve across every pool that loaded. Token metadata and oracle
+  // prices are keyed by (pool, asset) and never depend on the user, so they are
+  // driven off the pool instances instead of waiting for the user positions.
+  const reserveRefs: Array<{ snapshot: PoolSnapshot; reserve: Reserve }> = [];
+  for (const snapshot of poolSnapshots) {
+    for (const reserve of snapshot.pool.reserves.values()) {
+      reserveRefs.push({ snapshot, reserve });
+    }
+  }
+
+  // Oracle decimals and token metadata are independent of each other; prices
+  // need both. Two round-trips instead of three.
+  const quotesPromise = (async () => {
+    const uniqueOracleIds = [...new Set(
+      reserveRefs
+        .map(({ snapshot }) => snapshot.metadata.oracle)
+        .filter((oracleId): oracleId is string => !!oracleId)
+    )];
+
+    const [, tokenMetadataResults] = await Promise.all([
+      Promise.all(
+        uniqueOracleIds.map(async (oracleId) => {
+          if (context.oracleDecimals.has(oracleId)) {
+            return;
+          }
+          try {
+            const result = await getOracleDecimals(context.network, oracleId);
+            context.oracleDecimals.set(oracleId, result.decimals ?? 14);
+          } catch (error) {
+            console.warn(`[blend] Failed to pre-fetch oracle decimals for ${oracleId}:`, error);
+            context.oracleDecimals.set(oracleId, 14); // Default fallback
+          }
+        })
+      ),
+      Promise.all(
+        reserveRefs.map(({ reserve }) =>
+          getTokenMetadata(context.network, reserve.assetId, tokenMetadataCache)
+        )
+      ),
+    ]);
+
+    const priceResults = await Promise.all(
+      reserveRefs.map(({ snapshot, reserve }, i) =>
+        getPriceQuote(context, snapshot, reserve, tokenMetadataResults[i], priceCache)
+      )
+    );
+
+    // Keyed by pool+asset so the position pass can look each reserve up without
+    // depending on reserveRefs ordering.
+    const byReserve = new Map<string, { metadata: TokenMetadata | null; price: PriceQuote | null }>();
+    reserveRefs.forEach(({ snapshot, reserve }, i) => {
+      byReserve.set(`${snapshot.tracked.id}:${reserve.assetId}`, {
+        metadata: tokenMetadataResults[i],
+        price: priceResults[i],
+      });
+    });
+    return byReserve;
+  })();
+
+  // Pools whose backstop config is already known from the pool instance - the
+  // backstop user load does not need the user positions either.
+  const poolsWithBackstop = poolSnapshots.filter(
+    (s) => s.backstop && s.metadata.backstop
+  );
+  const backstopUserPromise = Promise.all(
+    poolsWithBackstop.map(async (poolSnapshot) => {
+      try {
+        const backstopUser = await BackstopPoolUser.load(
+          context.network,
+          poolSnapshot.metadata.backstop!,
+          poolSnapshot.tracked.id,
+          walletPublicKey
+        );
+        return { poolSnapshot, backstopUser, error: null };
+      } catch (error) {
+        return { poolSnapshot, backstopUser: null, error };
+      }
+    })
+  );
+
+  const [snapshotsWithUsers, reserveQuotes] = await Promise.all([
+    Promise.all(
+      poolSnapshots.map((snapshot) => ensureUserLoaded(snapshot, walletPublicKey))
+    ),
+    quotesPromise,
+  ]);
 
   // Calculate total emissions and per-reserve claimable BLND across all pools
   // With breakdown by source: supply (deposits) vs borrow
@@ -1111,69 +1192,26 @@ async function fetchWalletBlendSnapshotInternal(
 
   const positionResults: (BlendReservePosition | null)[] = [];
 
-  // Collect all reserve data from all snapshots for parallel fetching
-  const allReserveData: Array<{
-    snapshot: typeof snapshotsWithUsers[0];
-    reserve: Reserve;
-    poolEmissions: Map<string, number> | undefined;
-  }> = [];
-
   for (const snapshot of snapshotsWithUsers) {
     if (!snapshot.user) {
       continue;
     }
-    const reserves = Array.from(snapshot.pool.reserves.values());
     const poolEmissions = perReserveEmissions.get(snapshot.tracked.id);
 
-    for (const reserve of reserves) {
-      allReserveData.push({ snapshot, reserve, poolEmissions });
-    }
-  }
+    for (const reserve of snapshot.pool.reserves.values()) {
+      const quote = reserveQuotes.get(`${snapshot.tracked.id}:${reserve.assetId}`);
+      const claimableBlnd = poolEmissions?.get(reserve.assetId) ?? 0;
 
-  // Pre-fetch oracle decimals for all unique oracles (optimization: prevents redundant calls during parallel price fetching)
-  const uniqueOracleIds = [...new Set(
-    allReserveData
-      .map(({ snapshot }) => snapshot.metadata.oracle)
-      .filter((oracleId): oracleId is string => !!oracleId)
-  )];
-  await Promise.all(
-    uniqueOracleIds.map(async (oracleId) => {
-      if (!context.oracleDecimals.has(oracleId)) {
-        try {
-          const result = await getOracleDecimals(context.network, oracleId);
-          context.oracleDecimals.set(oracleId, result.decimals ?? 14);
-        } catch (error) {
-          console.warn(`[blend] Failed to pre-fetch oracle decimals for ${oracleId}:`, error);
-          context.oracleDecimals.set(oracleId, 14); // Default fallback
-        }
+      const position = buildPosition(
+        snapshot,
+        reserve,
+        quote?.metadata ?? null,
+        quote?.price ?? null,
+        claimableBlnd
+      );
+      if (position) {
+        positionResults.push(position);
       }
-    })
-  );
-
-  // Fetch all token metadata in parallel
-  const tokenMetadataResults = await Promise.all(
-    allReserveData.map(({ reserve }) =>
-      getTokenMetadata(context.network, reserve.assetId, tokenMetadataCache)
-    )
-  );
-
-  // Fetch all prices in parallel (now that we have metadata and oracle decimals are cached)
-  const priceResults = await Promise.all(
-    allReserveData.map(({ snapshot, reserve }, i) =>
-      getPriceQuote(context, snapshot, reserve, tokenMetadataResults[i], priceCache)
-    )
-  );
-
-  // Build all positions (sync, no awaits needed)
-  for (let i = 0; i < allReserveData.length; i++) {
-    const { snapshot, reserve, poolEmissions } = allReserveData[i];
-    const tokenMetadata = tokenMetadataResults[i];
-    const price = priceResults[i];
-    const claimableBlnd = poolEmissions?.get(reserve.assetId) ?? 0;
-
-    const position = buildPosition(snapshot, reserve, tokenMetadata, price, claimableBlnd);
-    if (position) {
-      positionResults.push(position);
     }
   }
 
@@ -1214,28 +1252,12 @@ async function fetchWalletBlendSnapshotInternal(
 
   // Load backstop positions for each pool (parallelized)
   const backstopPositions: BlendBackstopPosition[] = [];
+  // Comet deposit simulations are one RPC each and independent per pool, so
+  // they are collected here and awaited together instead of inside the loop.
+  const pendingEmissionSimulations: Promise<void>[] = [];
 
-  // Filter to pools with backstop config
-  const poolsWithBackstop = snapshotsWithUsers.filter(
-    (s) => s.backstop && s.metadata.backstop
-  );
-
-  // Step 1: Load all BackstopPoolUser in parallel
-  const backstopUserResults = await Promise.all(
-    poolsWithBackstop.map(async (poolSnapshot) => {
-      try {
-        const backstopUser = await BackstopPoolUser.load(
-          context.network,
-          poolSnapshot.metadata.backstop!,
-          poolSnapshot.tracked.id,
-          walletPublicKey
-        );
-        return { poolSnapshot, backstopUser, error: null };
-      } catch (error) {
-        return { poolSnapshot, backstopUser: null, error };
-      }
-    })
-  );
+  // Step 1: BackstopPoolUser loads were started alongside the user/price fetches
+  const backstopUserResults = await backstopUserPromise;
 
   // Step 2: Filter to users with actual positions
   const usersWithPositions = backstopUserResults.filter(
@@ -1376,18 +1398,26 @@ async function fetchWalletBlendSnapshotInternal(
 
       // Simulate the exact LP tokens from emissions via on-chain RPC
       // This replicates what Blend UI does with cometContract.depositTokenInGetLPOut()
-      let simulatedEmissionsLp: number | null = null;
+      // Started here, awaited after the loop; the result is patched into the
+      // position pushed immediately below (index known before the push).
+      const simulatedEmissionsLp: number | null = null;
       if (backstopClaimableBlnd > 0 && poolSnapshot.backstop) {
-        try {
-          simulatedEmissionsLp = await simulateCometDeposit(
-            poolSnapshot.backstop.backstopToken.id, // comet pool address
-            poolSnapshot.backstop.config.blndTkn, // BLND token address
-            poolSnapshot.backstop.id, // backstop address (used as "user" in simulation)
+        const positionIndex = backstopPositions.length;
+        const backstop = poolSnapshot.backstop;
+        pendingEmissionSimulations.push(
+          simulateCometDeposit(
+            backstop.backstopToken.id, // comet pool address
+            backstop.config.blndTkn, // BLND token address
+            backstop.id, // backstop address (used as "user" in simulation)
             backstopClaimableBlnd // BLND amount to simulate depositing
-          );
-        } catch (e) {
-          console.warn(`[blend] Failed to simulate comet deposit for pool ${poolId}:`, e);
-        }
+          )
+            .then((result) => {
+              backstopPositions[positionIndex].simulatedEmissionsLp = result;
+            })
+            .catch((e) => {
+              console.warn(`[blend] Failed to simulate comet deposit for pool ${poolId}:`, e);
+            })
+        );
       }
 
       backstopPositions.push({
@@ -1427,6 +1457,8 @@ async function fetchWalletBlendSnapshotInternal(
       );
     }
   }
+
+  await Promise.all(pendingEmissionSimulations);
 
   const estimatesResult = computeNetApyFromEstimates(snapshotsWithUsers);
   const snapshot = aggregateSnapshot(

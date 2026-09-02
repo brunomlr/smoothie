@@ -338,6 +338,50 @@ export class EventsRepository {
   }
 
   /**
+   * Every asset address this user has ever touched, including assets that only
+   * appear as the lot or bid side of a liquidation auction.
+   *
+   * Lets /api/balance-history-batch run without the caller first resolving the
+   * wallet's positions, which takes the request off the SDK snapshot's critical
+   * path.
+   */
+  async getUserAssetAddresses(userAddress: string): Promise<string[]> {
+    if (!pool) {
+      throw new Error('Database pool not initialized')
+    }
+
+    const result = await pool.query(
+      `
+      SELECT DISTINCT asset_address FROM (
+        SELECT asset_address
+        FROM parsed_events
+        WHERE user_address = $1 AND asset_address IS NOT NULL
+
+        UNION
+
+        SELECT lot_asset AS asset_address
+        FROM parsed_events
+        WHERE (user_address = $1 OR filler_address = $1)
+          AND action_type = 'fill_auction'
+          AND lot_asset IS NOT NULL
+
+        UNION
+
+        SELECT bid_asset AS asset_address
+        FROM parsed_events
+        WHERE (user_address = $1 OR filler_address = $1)
+          AND action_type = 'fill_auction'
+          AND bid_asset IS NOT NULL
+      ) assets
+      ORDER BY asset_address
+      `,
+      [userAddress],
+    )
+
+    return result.rows.map((row) => row.asset_address as string)
+  }
+
+  /**
    * Get balance history from events - computes running positions and applies daily rates
    * This replaces Dune for historical balance data
    * Updated: 2025-12-08 - Added support for fill_auction events (liquidations)
@@ -1218,7 +1262,7 @@ export class EventsRepository {
         )::date AS date
       ),
       -- Cumulative pool state by date
-      pool_cumulative AS (
+      pool_cumulative AS MATERIALIZED (
         SELECT
           ledger_closed_at::date AS event_date,
           SUM(CASE
@@ -1298,7 +1342,7 @@ export class EventsRepository {
         SELECT DISTINCT pool_address
         FROM backstop_events
       ),
-      pool_cumulative AS (
+      pool_cumulative AS MATERIALIZED (
         SELECT
           pool_address,
           ledger_closed_at::date AS event_date,
@@ -1425,7 +1469,7 @@ export class EventsRepository {
           AND pool_address = $2
         GROUP BY (ledger_closed_at AT TIME ZONE 'UTC' AT TIME ZONE $4)::date
       ),
-      user_cumulative AS (
+      user_cumulative AS MATERIALIZED (
         SELECT
           event_date,
           SUM(shares_change) OVER (ORDER BY event_date) AS cumulative_shares
@@ -1457,7 +1501,7 @@ export class EventsRepository {
         WHERE pool_address = $2
         GROUP BY (ledger_closed_at AT TIME ZONE 'UTC' AT TIME ZONE $4)::date
       ),
-      pool_cumulative AS (
+      pool_cumulative AS MATERIALIZED (
         SELECT
           event_date,
           SUM(lp_change) OVER (ORDER BY event_date) AS total_lp_tokens,
@@ -1558,7 +1602,7 @@ export class EventsRepository {
           AND pool_address = ANY($2)
         GROUP BY pool_address, (ledger_closed_at AT TIME ZONE 'UTC' AT TIME ZONE $4)::date
       ),
-      user_cumulative AS (
+      user_cumulative AS MATERIALIZED (
         SELECT
           pool_address,
           event_date,
@@ -1584,7 +1628,7 @@ export class EventsRepository {
         WHERE pool_address = ANY($2)
         GROUP BY pool_address, (ledger_closed_at AT TIME ZONE 'UTC' AT TIME ZONE $4)::date
       ),
-      pool_cumulative AS (
+      pool_cumulative AS MATERIALIZED (
         SELECT
           pool_address,
           event_date,
@@ -1733,6 +1777,9 @@ export class EventsRepository {
         MAX(ledger_closed_at)::text AS last_activity_date
       FROM backstop_events
       WHERE user_address = $1
+        -- 'claim' events have no pool_address; without this they collapse into a
+        -- phantom NULL pool that callers treat as a real backstop position.
+        AND pool_address IS NOT NULL
       GROUP BY pool_address
       `,
       [userAddress]

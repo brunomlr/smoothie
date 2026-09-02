@@ -180,3 +180,30 @@ export interface EarningsStats {
  * Re-exported from @/lib/config for backwards compatibility
  */
 export { POOL_NAMES, POOL_COLORS } from '@/lib/config'
+
+/**
+ * The subset of a balance-history row that the chart pipeline actually reads.
+ *
+ * The batch API ships rows in this shape (columnar on the wire, see
+ * lib/balance-history-codec.ts). The dropped columns - user_address,
+ * asset_address, snapshot_timestamp, ledger_sequence, entry_hash,
+ * ledger_entry_change, d_rate and total_interest_accrued - were constant per
+ * result, duplicated, or unread, and accounted for most of the payload.
+ * net_balance is derived rather than sent.
+ */
+export interface BalanceHistoryPoint {
+  pool_id: string
+  snapshot_date: string
+  supply_balance: number
+  collateral_balance: number
+  debt_balance: number
+  /** Always supply_balance + collateral_balance - debt_balance; recomputed on decode. */
+  net_balance: number
+  supply_btokens: number
+  collateral_btokens: number
+  liabilities_dtokens: number
+  b_rate: number
+  total_cost_basis: number | null
+  total_yield: number | null
+  borrow_cost_basis?: number | null
+}

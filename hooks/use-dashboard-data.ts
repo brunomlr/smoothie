@@ -74,41 +74,18 @@ export function useDashboardData(
     return map
   }, [positions.data, positions.lpTokenPrice])
 
-  // 4. Extract all unique dates from balance history
-  const chartDates = useMemo(() => {
-    const datesSet = new Set<string>()
-
-    // Collect dates from all asset histories
-    balanceHistory.balanceHistoryDataMap.forEach((historyData) => {
-      historyData.chartData.forEach((point) => {
-        datesSet.add(point.date)
-      })
-    })
-
-    // Also add backstop dates
-    balanceHistory.backstopBalanceHistoryQuery.data?.history?.forEach((point) => {
-      datesSet.add(point.date)
-    })
-
-    return Array.from(datesSet).sort()
-  }, [balanceHistory.balanceHistoryDataMap, balanceHistory.backstopBalanceHistoryQuery.data?.history])
-
-  // 5. Build token addresses list including LP token
-  const allTokenAddresses = useMemo(() => {
-    const addresses = [...balanceHistory.uniqueAssetAddresses]
-    // Include LP token for backstop historical pricing
-    if (positions.backstopPositions.length > 0 && !addresses.includes(LP_TOKEN_ADDRESS)) {
-      addresses.push(LP_TOKEN_ADDRESS)
-    }
-    return addresses
-  }, [balanceHistory.uniqueAssetAddresses, positions.backstopPositions.length])
+  // 4/5. Token set and date span for historical prices. Both come from the
+  // history response alone (supersets of what the chart plots), so this request
+  // runs alongside the wallet snapshot rather than after it.
 
   // 6. Fetch historical prices for chart data
   const historicalPrices = useChartHistoricalPrices({
-    tokenAddresses: allTokenAddresses,
-    dates: chartDates,
+    tokenAddresses: balanceHistory.historyTokenAddresses,
+    dates: balanceHistory.historyDateRange,
     sdkPrices: sdkPricesMap,
-    enabled: enableHistoricalPrices && chartDates.length > 0 && allTokenAddresses.length > 0,
+    enabled: enableHistoricalPrices
+      && balanceHistory.historyDateRange.length > 0
+      && balanceHistory.historyTokenAddresses.length > 0,
   })
 
   // 7. Fetch historical yield breakdown data
@@ -160,8 +137,8 @@ export function useDashboardData(
     historicalPrices: {
       data: historicalPrices,
       hasData: historicalPrices.hasHistoricalData,
-      dates: chartDates,
-      tokenAddresses: allTokenAddresses,
+      dates: balanceHistory.historyDateRange,
+      tokenAddresses: balanceHistory.historyTokenAddresses,
       sdkPricesMap,
     },
 

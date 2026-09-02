@@ -4,6 +4,7 @@
  */
 
 import {
+  BalanceHistoryPoint,
   BalanceHistoryRecord,
   ChartDataPoint,
   PositionChange,
@@ -580,7 +581,7 @@ export function calculateBackstopYieldBreakdown(
  * Backend now handles forward-fill with rate recalculation
  */
 export function fillMissingDates(
-  records: BalanceHistoryRecord[],
+  records: BalanceHistoryPoint[],
   includeBaselineDay: boolean = true,
   firstEventDate: string | null = null,
 ): ChartDataPoint[] {
@@ -591,7 +592,7 @@ export function fillMissingDates(
   // Group records by date and pool
   const datePoolMap = new Map<
     string,
-    Map<string, BalanceHistoryRecord>
+    Map<string, BalanceHistoryPoint>
   >()
 
   records.forEach((record) => {
@@ -730,7 +731,7 @@ export function fillMissingDates(
  * Compares btokens between consecutive days
  */
 export function detectPositionChanges(
-  records: BalanceHistoryRecord[],
+  records: BalanceHistoryPoint[],
   threshold: number = 0.01,
 ): PositionChange[] {
   if (records.length <= 1) {
@@ -739,17 +740,14 @@ export function detectPositionChanges(
 
   const changes: PositionChange[] = []
 
-  // Sort by date and ledger sequence
-  const sorted = [...records].sort((a, b) => {
-    const dateComp = a.snapshot_date.localeCompare(
-      b.snapshot_date,
-    )
-    if (dateComp !== 0) return dateComp
-    return a.ledger_sequence - b.ledger_sequence
-  })
+  // Sort by date. Records are summed per date below, so the order within a
+  // date does not affect the result (Array#sort is stable).
+  const sorted = [...records].sort((a, b) =>
+    a.snapshot_date.localeCompare(b.snapshot_date),
+  )
 
   // Group by date
-  const byDate = new Map<string, BalanceHistoryRecord[]>()
+  const byDate = new Map<string, BalanceHistoryPoint[]>()
   sorted.forEach((record) => {
     if (!byDate.has(record.snapshot_date)) {
       byDate.set(record.snapshot_date, [])
