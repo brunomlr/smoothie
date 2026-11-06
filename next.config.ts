@@ -48,6 +48,11 @@ const nextConfig: NextConfig = {
     resolveAlias: {
       // Stub out Node.js-only modules for client-side builds
       "pino": { browser: "./node_modules/pino/browser.js" },
+      // @metamask/connect-stellar (pulled in by the kit's MetaMask module)
+      // imports the kit by its npm name without declaring it as a dependency.
+      // Smoothie installs the kit from JSR as @creit-tech/stellar-wallets-kit,
+      // so point the npm name at that same copy.
+      "@creit.tech/stellar-wallets-kit": "@creit-tech/stellar-wallets-kit",
     },
   },
 };
