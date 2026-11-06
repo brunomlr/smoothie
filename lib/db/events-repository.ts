@@ -17,6 +17,47 @@ function lpFallbackPrice(
   return sdkPrices?.get(token) ?? (token === LP_TOKEN_ADDRESS ? sdkLpPrice : 0)
 }
 
+/**
+ * Liquidation fills (auction_type 0) as position flows, shaped like the events
+ * CTE of the cost-basis batch queries ($1 = user, $2 = timezone,
+ * `pairValues` = the (pool_id, asset) VALUES list). The liquidator acquires
+ * the lot (collateral bTokens) and takes on the bid (debt dTokens); the
+ * liquidated user loses both. Share amounts are converted to underlying with
+ * the forward-filled daily rate, like getLiquidationFlows.
+ */
+function liquidationFlowsSql(side: 'collateral' | 'debt', pairValues: string): string {
+  const asset = side === 'collateral' ? 'lot_asset' : 'bid_asset'
+  const amount = side === 'collateral' ? 'lot_amount' : 'bid_amount'
+  const rate = side === 'collateral' ? 'b_rate' : 'd_rate'
+  const gain = side === 'collateral' ? 'supply_collateral' : 'borrow'
+  const loss = side === 'collateral' ? 'withdraw_collateral' : 'repay'
+  return `
+        SELECT
+          pe.pool_id,
+          pe.${asset} AS asset_address,
+          CASE WHEN pe.filler_address = $1 THEN '${gain}' ELSE '${loss}' END AS action_type,
+          (pe.ledger_closed_at AT TIME ZONE 'UTC' AT TIME ZONE $2)::date::text AS event_date,
+          pe.ledger_closed_at,
+          pe.ledger_sequence,
+          (pe.${amount} / 1e7) * COALESCE(r.${rate}, 1.0) AS tokens,
+          pe.${amount} / 1e7 AS share_tokens
+        FROM parsed_events pe
+        LEFT JOIN LATERAL (
+          SELECT ${rate} FROM daily_rates
+          WHERE pool_id = pe.pool_id
+            AND asset_address = pe.${asset}
+            AND rate_date <= (pe.ledger_closed_at AT TIME ZONE 'UTC')::date
+          ORDER BY rate_date DESC
+          LIMIT 1
+        ) r ON true
+        WHERE pe.action_type = 'fill_auction'
+          AND pe.auction_type = 0
+          AND (pe.user_address = $1 OR pe.filler_address = $1)
+          AND pe.${asset} IS NOT NULL
+          AND pe.${amount} IS NOT NULL
+          AND (pe.pool_id, pe.${asset}) IN (VALUES ${pairValues})`
+}
+
 export class EventsRepository {
   /**
    * Get user action history from parsed_events and backstop_events
@@ -353,6 +394,34 @@ export class EventsRepository {
   }
 
   /**
+   * Pool-asset pairs a user holds (or held) only through liquidation fills:
+   * the lot asset for collateral, the bid asset for debt. Lets cost-basis
+   * callers include positions a liquidator acquired without supplying or
+   * borrowing directly.
+   */
+  async getLiquidationPoolAssetPairs(
+    userAddress: string,
+    side: 'collateral' | 'debt'
+  ): Promise<Array<{ poolId: string; assetAddress: string }>> {
+    if (!pool) {
+      throw new Error('Database pool not initialized')
+    }
+    const asset = side === 'collateral' ? 'lot_asset' : 'bid_asset'
+    const result = await pool.query(
+      `
+      SELECT DISTINCT pool_id, ${asset} AS asset_address
+      FROM parsed_events
+      WHERE (user_address = $1 OR filler_address = $1)
+        AND action_type = 'fill_auction'
+        AND auction_type = 0
+        AND ${asset} IS NOT NULL
+      `,
+      [userAddress]
+    )
+    return result.rows.map((row) => ({ poolId: row.pool_id as string, assetAddress: row.asset_address as string }))
+  }
+
+  /**
    * Every asset address this user has ever touched, including assets that only
    * appear as the lot or bid side of a liquidation auction.
    *
@@ -683,7 +752,7 @@ export class EventsRepository {
           END) OVER (PARTITION BY pool_id ORDER BY ledger_closed_at, ledger_sequence) AS collateral_btokens,
           -- Cumulative debt tokens (borrow/repay + auction bid)
           SUM(CASE
-            WHEN action_type = 'borrow' THEN amount_tokens / 10000000.0
+            WHEN action_type IN ('borrow', 'flash_loan') THEN amount_tokens / 10000000.0
             WHEN action_type = 'repay' THEN -amount_tokens / 10000000.0
             -- Liquidated user LOSES debt (bid) at fill_auction time
             WHEN event_source = 'liquidated_fill' AND bid_asset = $2
@@ -711,7 +780,7 @@ export class EventsRepository {
           END) OVER (PARTITION BY pool_id ORDER BY ledger_closed_at, ledger_sequence) AS total_withdrawals,
           -- Cumulative borrows (for interest tracking) - convert from stroops (7 decimals)
           SUM(CASE
-            WHEN action_type = 'borrow' THEN amount_underlying / 10000000.0
+            WHEN action_type IN ('borrow', 'flash_loan') THEN amount_underlying / 10000000.0
             -- Liquidator gaining debt: convert bid (dTokens) to underlying using d_rate
             WHEN event_source = 'liquidator' AND bid_asset = $2
               THEN (bid_amount / 10000000.0) * COALESCE(implied_rate, 1.0)
@@ -910,7 +979,7 @@ export class EventsRepository {
       FROM parsed_events
       WHERE pool_id = $1
         AND asset_address = $2
-        AND action_type IN ('borrow', 'repay')
+        AND action_type IN ('borrow', 'flash_loan', 'repay')
         AND implied_rate IS NOT NULL
         AND amount_tokens >= 1000000  -- Filter dust like daily_rates does
         AND ledger_closed_at < ($3::date::timestamp AT TIME ZONE $4 AT TIME ZONE 'UTC')
@@ -2112,6 +2181,30 @@ export class EventsRepository {
         FROM parsed_events pe
         ${whereClause}
           AND pe.action_type IN ('supply', 'supply_collateral', 'withdraw', 'withdraw_collateral')
+        UNION ALL
+        -- Liquidation fills: the liquidator acquires the lot (collateral), the
+        -- liquidated user loses it (see liquidationFlowsSql)
+        SELECT
+          pe.pool_id,
+          CASE WHEN pe.filler_address = $1 THEN 'supply_collateral' ELSE 'withdraw_collateral' END AS action_type,
+          (pe.ledger_closed_at AT TIME ZONE 'UTC' AT TIME ZONE $${tzParamIndex})::date::text AS event_date,
+          pe.ledger_closed_at,
+          pe.ledger_sequence,
+          (pe.lot_amount / 1e7) * COALESCE(r.b_rate, 1.0) AS tokens,
+          pe.lot_amount / 1e7 AS share_tokens
+        FROM parsed_events pe
+        LEFT JOIN LATERAL (
+          SELECT b_rate FROM daily_rates
+          WHERE pool_id = pe.pool_id
+            AND asset_address = pe.lot_asset
+            AND rate_date <= (pe.ledger_closed_at AT TIME ZONE 'UTC')::date
+          ORDER BY rate_date DESC
+          LIMIT 1
+        ) r ON true
+        ${whereClause.replace('pe.user_address = $1 AND pe.asset_address = $2', '(pe.user_address = $1 OR pe.filler_address = $1) AND pe.lot_asset = $2')}
+          AND pe.action_type = 'fill_auction'
+          AND pe.auction_type = 0
+          AND pe.lot_amount IS NOT NULL
       )
       SELECT
         e.pool_id,
@@ -3271,6 +3364,8 @@ export class EventsRepository {
         WHERE pe.user_address = $1
           AND pe.action_type IN ('supply', 'supply_collateral', 'withdraw', 'withdraw_collateral')
           AND (pe.pool_id, pe.asset_address) IN (VALUES ${pairValues})
+        UNION ALL
+        ${liquidationFlowsSql('collateral', pairValues)}
       )
       SELECT
         e.pool_id,
@@ -3581,8 +3676,10 @@ export class EventsRepository {
           pe.amount_tokens / 1e7 AS share_tokens
         FROM parsed_events pe
         WHERE pe.user_address = $1
-          AND pe.action_type IN ('borrow', 'repay')
+          AND pe.action_type IN ('borrow', 'flash_loan', 'repay')
           AND (pe.pool_id, pe.asset_address) IN (VALUES ${pairValues})
+        UNION ALL
+        ${liquidationFlowsSql('debt', pairValues)}
       )
       SELECT
         e.pool_id,
@@ -3660,7 +3757,7 @@ export class EventsRepository {
 
       const usdValue = tokens * price
 
-      if (row.action_type === 'borrow') {
+      if ((row.action_type === 'borrow' || row.action_type === 'flash_loan')) {
         entry.borrows.push({
           date: row.event_date,
           tokens,
@@ -3717,14 +3814,14 @@ export class EventsRepository {
           ELSE 0
         END) AS supply_change,
         SUM(CASE
-          WHEN e.action_type = 'borrow' THEN (e.amount_underlying / 1e7) * COALESCE(p.usd_price, 0)
+          WHEN e.action_type IN ('borrow', 'flash_loan') THEN (e.amount_underlying / 1e7) * COALESCE(p.usd_price, 0)
           WHEN e.action_type = 'repay' THEN -(e.amount_underlying / 1e7) * COALESCE(p.usd_price, 0)
           ELSE 0
         END) AS borrow_change
       FROM parsed_events e
       LEFT JOIN latest_prices p ON e.asset_address = p.token_address
       WHERE e.ledger_closed_at >= NOW() - INTERVAL '24 hours'
-        AND e.action_type IN ('supply', 'supply_collateral', 'withdraw', 'withdraw_collateral', 'borrow', 'repay')
+        AND e.action_type IN ('supply', 'supply_collateral', 'withdraw', 'withdraw_collateral', 'borrow', 'flash_loan', 'repay')
       GROUP BY e.pool_id
       `
     )

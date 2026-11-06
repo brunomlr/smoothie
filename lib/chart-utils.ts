@@ -642,6 +642,7 @@ export function getActionIcon(actionType: string): string {
     case 'withdraw_collateral':
       return 'ArrowUpCircle'
     case 'borrow':
+    case 'flash_loan':
       return 'Banknote'
     case 'repay':
       return 'CheckCircle'
@@ -666,6 +667,7 @@ export function getActionColor(actionType: string): string {
     case 'withdraw_collateral':
       return '#ef4444' // red
     case 'borrow':
+    case 'flash_loan':
       return '#f97316' // orange
     case 'repay':
       return '#3b82f6' // blue

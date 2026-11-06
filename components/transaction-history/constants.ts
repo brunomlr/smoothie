@@ -46,6 +46,7 @@ export const ACTION_TYPE_OPTIONS: ActionTypeOption[] = [
   { value: "withdraw", label: "Withdraw" },
   { value: "withdraw_collateral", label: "Withdraw Collateral" },
   { value: "borrow", label: "Borrow" },
+  { value: "flash_loan", label: "Flash Loan" },
   { value: "repay", label: "Repay" },
   { value: "claim", label: "Claim BLND" },
   { value: "new_auction", label: "Liquidation Started" },
@@ -87,6 +88,12 @@ export const ACTION_CONFIG: Record<ActionType, ActionConfig> = {
   },
   borrow: {
     label: "Borrowed",
+    icon: ArrowUpRight,
+    color: "text-orange-600 dark:text-orange-400",
+    bgColor: "bg-orange-100 dark:bg-orange-900/30",
+  },
+  flash_loan: {
+    label: "Flash Loan",
     icon: ArrowUpRight,
     color: "text-orange-600 dark:text-orange-400",
     bgColor: "bg-orange-100 dark:bg-orange-900/30",

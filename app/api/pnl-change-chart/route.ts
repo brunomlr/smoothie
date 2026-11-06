@@ -217,7 +217,7 @@ export async function GET(request: NextRequest) {
     // Fetch all user actions in the period for ALL addresses (including borrow/repay for borrow calculations)
     const allUserActionsPromises = userAddresses.map(addr =>
       eventsRepository.getUserActions(addr, {
-        actionTypes: ['supply', 'supply_collateral', 'withdraw', 'withdraw_collateral', 'claim', 'borrow', 'repay'],
+        actionTypes: ['supply', 'supply_collateral', 'withdraw', 'withdraw_collateral', 'claim', 'borrow', 'flash_loan', 'repay'],
         limit: 1000,
       })
     )
@@ -254,7 +254,7 @@ export async function GET(request: NextRequest) {
         }
 
         // Track borrow positions
-        if (['borrow', 'repay'].includes(action.action_type)) {
+        if (['borrow', 'flash_loan', 'repay'].includes(action.action_type)) {
           if (!borrowPoolAssetPairs.has(compositeKey)) {
             borrowPoolAssetPairs.set(compositeKey, {
               poolId: action.pool_id,
@@ -1132,7 +1132,7 @@ export async function GET(request: NextRequest) {
         })
         const periodBorrowActions = userActions.filter(a => {
           if (a.asset_address !== assetAddress || a.pool_id !== poolId) return false
-          if (!['borrow', 'repay'].includes(a.action_type)) return false
+          if (!['borrow', 'flash_loan', 'repay'].includes(a.action_type)) return false
           const actionDate = dateFormatter.format(new Date(a.ledger_closed_at))
           return actionDate >= boundary.start && actionDate <= boundary.end
         })
@@ -1147,7 +1147,7 @@ export async function GET(request: NextRequest) {
           const decimals = action.asset_decimals || 7
           const tokens = rawAmount / Math.pow(10, decimals)
 
-          if (action.action_type === 'borrow') {
+          if ((action.action_type === 'borrow' || action.action_type === 'flash_loan')) {
             borrowsTokens += tokens
           } else if (action.action_type === 'repay') {
             repaysTokens += tokens
@@ -1217,7 +1217,7 @@ export async function GET(request: NextRequest) {
           const actionDate = dateFormatter.format(new Date(action.ledger_closed_at))
           const priceAtAction = getPriceAtDate(assetAddress, actionDate)
 
-          if (action.action_type === 'borrow') {
+          if ((action.action_type === 'borrow' || action.action_type === 'flash_loan')) {
             debtPriceChangeOnBorrows += tokens * (priceAtEnd - priceAtAction)
           } else if (action.action_type === 'repay') {
             debtPriceChangeOnRepays += tokens * (priceAtEnd - priceAtAction)
@@ -1256,7 +1256,7 @@ export async function GET(request: NextRequest) {
           const priceAtAction = getPriceAtDate(assetAddress, dateFormatter.format(actionDate))
           const daysRemaining = Math.max(0, (periodEndDate.getTime() - actionDate.getTime()) / (1000 * 60 * 60 * 24))
 
-          if (action.action_type === 'borrow') {
+          if ((action.action_type === 'borrow' || action.action_type === 'flash_loan')) {
             // New borrows earn BLND from borrow date to period end
             blndFromBorrow += tokens * priceAtAction * dailyBorrowBlndRate * daysRemaining
           } else if (action.action_type === 'repay') {

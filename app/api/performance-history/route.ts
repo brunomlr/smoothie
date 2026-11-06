@@ -98,6 +98,12 @@ export async function GET(request: NextRequest) {
         poolAssetPairs.set(key, { poolId: action.pool_id, assetAddress: action.asset_address })
       }
     }
+    // Collateral acquired or lost through liquidation fills
+    for (const pair of await eventsRepository.getLiquidationPoolAssetPairs(resolvedUserAddress, 'collateral')) {
+      uniqueAssets.add(pair.assetAddress)
+      const key = `${pair.poolId}-${pair.assetAddress}`
+      if (!poolAssetPairs.has(key)) poolAssetPairs.set(key, pair)
+    }
 
     // Step 2: Get balance history for each asset IN PARALLEL
     const balanceHistoryByAsset = new Map<string, Array<{

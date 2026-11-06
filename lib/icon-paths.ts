@@ -46,6 +46,12 @@ export const EVENT_ICON_PATHS: Record<string, IconPathData> = {
     circles: [{ cx: 12, cy: 12, r: 2 }],
     rects: [{ x: 2, y: 6, width: 20, height: 12, rx: 2 }],
   },
+  // Flash loan is a borrow: same icon
+  flash_loan: {
+    paths: ["M6 12h.01M18 12h.01"],
+    circles: [{ cx: 12, cy: 12, r: 2 }],
+    rects: [{ x: 2, y: 6, width: 20, height: 12, rx: 2 }],
+  },
 
   // CircleCheckBig - repay (blue in history)
   repay: {

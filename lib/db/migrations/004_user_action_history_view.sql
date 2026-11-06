@@ -27,7 +27,7 @@ SELECT
   -- Determine rate type based on action
   CASE
     WHEN e.action_type IN ('supply', 'withdraw', 'supply_collateral', 'withdraw_collateral') THEN 'b_rate'
-    WHEN e.action_type IN ('borrow', 'repay') THEN 'd_rate'
+    WHEN e.action_type IN ('borrow', 'flash_loan', 'repay') THEN 'd_rate'
     WHEN e.action_type IN ('new_auction', 'fill_auction', 'delete_auction') THEN 'auction'
     WHEN e.action_type = 'claim' THEN NULL
     ELSE NULL

@@ -88,7 +88,7 @@ export async function GET(request: NextRequest) {
     // Get all unique assets for ALL addresses
     const allUserActionsPromises = userAddresses.map(addr =>
       eventsRepository.getUserActions(addr, {
-        actionTypes: ['borrow', 'repay'],
+        actionTypes: ['borrow', 'flash_loan', 'repay'],
         limit: 1000,
       })
     )
@@ -107,6 +107,17 @@ export async function GET(request: NextRequest) {
           poolId: action.pool_id,
           assetAddress: action.asset_address,
         })
+      }
+    }
+    // Debt taken on or cleared through liquidation fills
+    const liquidationPairs = await Promise.all(
+      userAddresses.map(addr => eventsRepository.getLiquidationPoolAssetPairs(addr, 'debt'))
+    )
+    for (const pair of liquidationPairs.flat()) {
+      const compositeKey = `${pair.poolId}-${pair.assetAddress}`
+      if (!seenKeys.has(compositeKey)) {
+        seenKeys.add(compositeKey)
+        poolAssetPairs.push(pair)
       }
     }
 

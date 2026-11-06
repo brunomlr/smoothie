@@ -38,6 +38,7 @@ export type ActionType =
   | 'supply_collateral'
   | 'withdraw_collateral'
   | 'borrow'
+  | 'flash_loan' // borrow whose proceeds go to a receiver contract (dTokens minted to the user)
   | 'repay'
   | 'claim'
   | 'liquidate'

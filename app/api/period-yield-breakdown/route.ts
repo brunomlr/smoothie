@@ -286,6 +286,15 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Collateral acquired or lost through liquidation fills
+    for (const pair of await eventsRepository.getLiquidationPoolAssetPairs(resolvedUserAddress, 'collateral')) {
+      const compositeKey = `${pair.poolId}-${pair.assetAddress}`
+      if (!poolAssetPairs.has(compositeKey)) {
+        poolAssetPairs.set(compositeKey, pair)
+        uniqueAssets.add(pair.assetAddress)
+      }
+    }
+
     // Fetch balance history for all unique assets from database IN PARALLEL
     // This is the same data source the chart uses
     const balanceHistoryByAsset = new Map<string, Array<{ snapshot_date: string; supply_balance: number; collateral_balance: number; pool_id: string }>>()

@@ -8,6 +8,7 @@ const ACTION_TYPE_LABELS: Record<ActionType, string> = {
   withdraw: 'Withdraw',
   withdraw_collateral: 'Withdraw Collateral',
   borrow: 'Borrow',
+  flash_loan: 'Flash Loan',
   repay: 'Repay',
   claim: 'Claim BLND',
   liquidate: 'Liquidate',

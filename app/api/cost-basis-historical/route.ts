@@ -103,6 +103,17 @@ export async function GET(request: NextRequest) {
         })
       }
     }
+    // Collateral acquired or lost through liquidation fills
+    const liquidationPairs = await Promise.all(
+      userAddresses.map(addr => eventsRepository.getLiquidationPoolAssetPairs(addr, 'collateral'))
+    )
+    for (const pair of liquidationPairs.flat()) {
+      const compositeKey = `${pair.poolId}-${pair.assetAddress}`
+      if (!seenKeys.has(compositeKey)) {
+        seenKeys.add(compositeKey)
+        poolAssetPairs.push(pair)
+      }
+    }
 
     const byAsset: Record<string, AssetYieldBreakdown> = {}
     let totalCostBasisHistorical = 0
