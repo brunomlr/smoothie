@@ -4,7 +4,7 @@ import { Shield } from "lucide-react"
 import { TokenLogo } from "@/components/token-logo"
 import type { UserAction } from "@/lib/db/types"
 import type { AmountWithCurrencyProps } from "./types"
-import { LP_TOKEN_ADDRESS } from "./constants"
+import { lpTokenForPool } from "@/lib/config/blockchain"
 import { resolveAssetLogo, formatAmount } from "./helpers"
 
 export function getAmountDisplay(action: UserAction, currentUserAddress?: string): React.ReactNode {
@@ -112,8 +112,8 @@ export function AmountWithCurrency({
   let decimals = 7
 
   if (isBackstopEvent) {
-    // For backstop events, use the LP token address (BLND-USDC Comet LP)
-    tokenAddress = LP_TOKEN_ADDRESS
+    // For backstop events, use the pool's backstop LP token (V2.1 → Comet V1.1)
+    tokenAddress = lpTokenForPool(action.pool_id)
     amount = action.lp_tokens
   } else if (isClaimEvent) {
     // For BLND claims, use the BLND token address

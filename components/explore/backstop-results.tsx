@@ -9,6 +9,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { BackstopApySparkline } from "@/components/backstop-apy-sparkline"
 import { BlndApySparkline } from "@/components/blnd-apy-sparkline"
 import { LpPriceSparkline } from "@/components/lp-price-sparkline"
+import { LP_TOKEN_ADDRESS } from "@/lib/config/blockchain"
 import { Q4wSparkline } from "@/components/q4w-sparkline"
 import { useUsdFormatters } from "./use-usd-formatters"
 import type { BackstopExploreItem, SortBy, LpPriceDataPoint } from "@/types/explore"
@@ -84,7 +85,12 @@ function BackstopRowCharts({ item, lpTokenPrice, lpPriceHistory }: { item: Backs
             <TrendingUp className="h-3 w-3 text-purple-400" />
             <span className="text-xs font-medium text-muted-foreground">LP Token Price</span>
           </div>
-          <LpPriceSparkline currentPrice={lpTokenPrice ?? undefined} priceHistory={lpPriceHistory} className="h-12 w-full" />
+          {item.lpTokenAddress && item.lpTokenAddress !== LP_TOKEN_ADDRESS ? (
+            // Own LP token (V2.1 → Comet V1.1): fetch its history
+            <LpPriceSparkline currentPrice={item.lpTokenPrice ?? undefined} tokenAddress={item.lpTokenAddress} className="h-12 w-full" />
+          ) : (
+            <LpPriceSparkline currentPrice={item.lpTokenPrice ?? lpTokenPrice ?? undefined} priceHistory={lpPriceHistory} className="h-12 w-full" />
+          )}
         </div>
 
         {/* 6 months Pool Q4W */}

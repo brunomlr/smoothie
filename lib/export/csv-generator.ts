@@ -1,4 +1,5 @@
 import type { UserAction, ActionType } from '@/lib/db/types'
+import { lpTokenForPool, lpTokenLabel } from '@/lib/config/blockchain'
 
 // Action type labels for human-readable export
 const ACTION_TYPE_LABELS: Record<ActionType, string> = {
@@ -69,7 +70,7 @@ function getActionAmount(action: UserAction): { amount: string; asset: string } 
   if (action.action_type.startsWith('backstop_')) {
     return {
       amount: formatAmount(action.lp_tokens, 7),
-      asset: 'BLND-USDC LP',
+      asset: lpTokenLabel(lpTokenForPool(action.pool_id)),
     }
   }
 

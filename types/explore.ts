@@ -30,6 +30,9 @@ export interface BackstopExploreItem {
   totalDeposited: number | null
   totalQ4w: number | null
   q4wPercent: number | null
+  /** Backstop LP token of this pool's backstop (Comet V1 for V2, V1.1 for V2.1) */
+  lpTokenAddress: string | null
+  lpTokenPrice: number | null
 }
 
 export interface PoolTokenItem {

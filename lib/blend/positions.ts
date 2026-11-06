@@ -27,6 +27,7 @@ import { type TrackedPool } from "./pools";
 import { simulateCometDeposit } from "./comet";
 import type { PriceQuote } from "@/lib/pricing/types";
 import { POOLS } from "@/lib/config/pools";
+import { LP_TOKEN_ADDRESS, areEmissionsEnabled, isBackstopInterestPayable } from "@/lib/config/blockchain";
 
 // Helper to resolve pool name: use config if available, otherwise SDK metadata
 function resolvePoolName(poolId: string, sdkName: string): string {
@@ -90,6 +91,11 @@ export interface BlendBackstopPosition {
   id: string; // Format: backstop-{poolId}
   poolId: string;
   poolName: string;
+  // Backstop this pool sits behind and its LP token (V2: Comet V1, V2.1: Comet V1.1)
+  backstopId: string;
+  backstopTokenId: string | null;
+  lpTokenPrice: number; // USD price of this backstop's LP token
+  blndPerLpToken: number; // BLND per LP token of this backstop's comet
   // Position data
   shares: bigint; // Raw shares (internal accounting unit)
   lpTokens: number; // LP tokens value (shares converted via pool ratio)
@@ -119,6 +125,18 @@ export interface BlendBackstopPosition {
   claimableBlnd: number; // BLND waiting to be claimed for this backstop position
   // Simulated LP tokens from emissions (via on-chain simulation)
   simulatedEmissionsLp: number | null; // LP tokens claimable from emissions, null if simulation failed
+}
+
+// Comet LP data for one backstop contract
+interface BackstopTokenInfo {
+  tokenId: string;
+  blndPrice: number;
+  usdcAmount: number;
+  blndPerLpToken: number;
+  usdcPerLpToken: number;
+  lpTokenPrice: number;
+  blnd: bigint;
+  shares: bigint;
 }
 
 // Per-pool position estimate (health, borrow capacity, etc.)
@@ -484,6 +502,10 @@ function computeBlndEmissionApy(
   const backstop = snapshot.backstop;
   const emissions = reserve.supplyEmissions;
 
+  if (!areEmissionsEnabled(snapshot.metadata.backstop)) {
+    return 0;
+  }
+
   if (!backstop || !emissions || !price || price.usdPrice <= 0) {
     return 0;
   }
@@ -532,6 +554,10 @@ function computeBorrowBlndEmissionApy(
 ): number {
   const backstop = snapshot.backstop;
   const emissions = reserve.borrowEmissions;
+
+  if (!areEmissionsEnabled(snapshot.metadata.backstop)) {
+    return 0;
+  }
 
   if (!backstop || !emissions || !price || price.usdPrice <= 0) {
     return 0;
@@ -1160,6 +1186,10 @@ async function fetchWalletBlendSnapshotInternal(
     if (!snapshot.user || !snapshot.pool) {
       continue;
     }
+    // Unfunded emissions (V2.1) are not claimable, so they are not shown
+    if (!areEmissionsEnabled(snapshot.metadata.backstop)) {
+      continue;
+    }
     try {
       const reserves = Array.from(snapshot.pool.reserves.values());
       // Use our custom function that returns the breakdown
@@ -1219,36 +1249,51 @@ async function fetchWalletBlendSnapshotInternal(
     (position): position is BlendReservePosition => !!position
   );
 
-  // Calculate BLND price and LP token price from first available backstop
-  let blndPrice: number | null = null;
-  let lpTokenPrice: number | null = null;
-  let backstopToken: { blndPerLpToken: number; usdcPerLpToken: number; lpTokenPrice: number; blnd: bigint; shares: bigint } | null = null;
-
+  // Backstop token (comet LP) data per backstop contract. Pools can sit behind
+  // different backstops with different LP tokens (V2 → Comet V1 LP, V2.1 →
+  // Comet V1.1 LP), so each backstop position must be priced with its own.
+  const backstopTokenById = new Map<string, BackstopTokenInfo>();
   for (const poolSnapshot of snapshotsWithUsers) {
-    if (poolSnapshot.backstop?.backstopToken) {
-      try {
-        const bt = poolSnapshot.backstop.backstopToken;
-        const usdcAmount = FixedMath.toFloat(bt.usdc, 7);
-        const blndAmount = FixedMath.toFloat(bt.blnd, 7);
+    const backstop = poolSnapshot.backstop;
+    if (!backstop?.backstopToken || backstopTokenById.has(backstop.id)) continue;
+    try {
+      const bt = backstop.backstopToken;
+      const usdcAmount = FixedMath.toFloat(bt.usdc, 7);
+      const blndAmount = FixedMath.toFloat(bt.blnd, 7);
+      if (blndAmount <= 0) continue;
+      backstopTokenById.set(backstop.id, {
+        tokenId: bt.id,
         // Backstop is 80% BLND / 20% USDC
-        if (blndAmount > 0) {
-          blndPrice = (usdcAmount / 0.2) / (blndAmount / 0.8);
-          lpTokenPrice = bt.lpTokenPrice;
-          backstopToken = {
-            blndPerLpToken: bt.blndPerLpToken,
-            usdcPerLpToken: bt.usdcPerLpToken,
-            lpTokenPrice: bt.lpTokenPrice,
-            // Raw values needed for estSingleSidedDeposit calculation
-            blnd: bt.blnd,
-            shares: bt.shares,
-          };
-          break;
-        }
-      } catch {
-        // Failed to calculate BLND price - continue
-      }
+        blndPrice: (usdcAmount / 0.2) / (blndAmount / 0.8),
+        usdcAmount,
+        blndPerLpToken: bt.blndPerLpToken,
+        usdcPerLpToken: bt.usdcPerLpToken,
+        lpTokenPrice: bt.lpTokenPrice,
+        // Raw values needed for estSingleSidedDeposit calculation
+        blnd: bt.blnd,
+        shares: bt.shares,
+      });
+    } catch {
+      // Failed to read backstop token - continue
     }
   }
+
+  const backstopTokenInfos = [...backstopTokenById.values()];
+  // Snapshot-level LP fields keep describing LP_TOKEN_ADDRESS (consumers key
+  // the price to that address); fall back to the first backstop if absent.
+  const backstopToken =
+    backstopTokenInfos.find((info) => info.tokenId === LP_TOKEN_ADDRESS) ??
+    backstopTokenInfos[0] ??
+    null;
+  const lpTokenPrice: number | null = backstopToken?.lpTokenPrice ?? null;
+  // BLND price from the comet with the deepest USDC side: the Comet V1 LP is
+  // drained (<$1 USDC), so its spot price is trivially movable.
+  const blndPrice: number | null =
+    backstopTokenInfos.length > 0
+      ? backstopTokenInfos.reduce((best, info) =>
+          info.usdcAmount > best.usdcAmount ? info : best
+        ).blndPrice
+      : null;
 
   // Load backstop positions for each pool (parallelized)
   const backstopPositions: BlendBackstopPosition[] = [];
@@ -1309,14 +1354,19 @@ async function fetchWalletBlendSnapshotInternal(
       const q4wLpTokens = backstopPool.sharesToBackstopTokensFloat(totalQ4wShares);
       const unlockedQ4wLpTokens = backstopPool.sharesToBackstopTokensFloat(backstopUser.balance.unlockedQ4W);
 
+      // Price with this pool's own backstop token (V2 and V2.1 differ)
+      const tokenInfo = poolSnapshot.backstop
+        ? backstopTokenById.get(poolSnapshot.backstop.id)
+        : undefined;
+
       // Calculate USD values
-      const tokenPrice = lpTokenPrice ?? 0;
+      const tokenPrice = tokenInfo?.lpTokenPrice ?? 0;
       const lpTokensUsd = lpTokens * tokenPrice;
       const q4wLpTokensUsd = q4wLpTokens * tokenPrice;
 
       // Calculate BLND/USDC breakdown
-      const blndPerLp = backstopToken?.blndPerLpToken ?? 0;
-      const usdcPerLp = backstopToken?.usdcPerLpToken ?? 0;
+      const blndPerLp = tokenInfo?.blndPerLpToken ?? 0;
+      const usdcPerLp = tokenInfo?.usdcPerLpToken ?? 0;
       const blndAmount = lpTokens * blndPerLp;
       const usdcAmount = lpTokens * usdcPerLp;
 
@@ -1342,7 +1392,11 @@ async function fetchWalletBlendSnapshotInternal(
 
       // Calculate emission APY for this pool's backstop
       // emissionPerYearPerBackstopToken() returns BLND per LP token per year
-      const blndEmissionsPerLpToken = backstopPool.emissionPerYearPerBackstopToken();
+      // V2.1 backstop emissions are unfunded and not claimable yet: show none
+      const emissionsEnabled = areEmissionsEnabled(poolSnapshot.backstop?.id ?? poolSnapshot.metadata.backstop);
+      const blndEmissionsPerLpToken = emissionsEnabled
+        ? backstopPool.emissionPerYearPerBackstopToken()
+        : 0;
       // Convert to APY: (BLND emissions × BLND price) / LP token price × 100
       const emissionValueUsd = blndEmissionsPerLpToken * (blndPrice ?? 0);
       const emissionApy = tokenPrice > 0 ? (emissionValueUsd / tokenPrice) * 100 : 0;
@@ -1367,7 +1421,12 @@ async function fetchWalletBlendSnapshotInternal(
           const backstopRateFloat = FixedMath.toFloat(BigInt(poolSnapshot.metadata.backstopRate), 7);
 
           // Calculate APR using Blend UI formula (result is already a decimal, multiply by 100 for %)
-          if (backstopPoolEst.totalSpotValue > 0) {
+          // A broken backstop LP (Comet V1) can't receive interest auctions and
+          // is worth ~$0, which would make the formula explode: report 0.
+          if (
+            backstopPoolEst.totalSpotValue > 0 &&
+            isBackstopInterestPayable(poolSnapshot.backstop.backstopToken.id)
+          ) {
             interestApr = (backstopRateFloat * poolEst.avgBorrowApy * poolEst.totalBorrowed) / backstopPoolEst.totalSpotValue * 100;
           }
 
@@ -1382,18 +1441,20 @@ async function fetchWalletBlendSnapshotInternal(
       // Use BackstopPoolUserEst.build() - the same method the Blend UI uses
       // This ensures we get the exact same calculation
       let backstopClaimableBlnd = 0;
-      try {
-        // Use BackstopPoolUserEst.build() - exactly like the Blend UI does
-        // This handles all the edge cases (undefined emissions, index calculations, etc.)
-        const backstopUserEst = BackstopPoolUserEst.build(
-          poolSnapshot.backstop!,
-          backstopPool,
-          backstopUser
-        );
+      if (emissionsEnabled) {
+        try {
+          // Use BackstopPoolUserEst.build() - exactly like the Blend UI does
+          // This handles all the edge cases (undefined emissions, index calculations, etc.)
+          const backstopUserEst = BackstopPoolUserEst.build(
+            poolSnapshot.backstop!,
+            backstopPool,
+            backstopUser
+          );
 
-        backstopClaimableBlnd = backstopUserEst.emissions;
-      } catch {
-        // Failed to get backstop emissions for pool
+          backstopClaimableBlnd = backstopUserEst.emissions;
+        } catch {
+          // Failed to get backstop emissions for pool
+        }
       }
 
       // Simulate the exact LP tokens from emissions via on-chain RPC
@@ -1424,6 +1485,10 @@ async function fetchWalletBlendSnapshotInternal(
         id: `backstop-${poolId}`,
         poolId,
         poolName: resolvePoolName(poolId, poolSnapshot.metadata.name),
+        backstopId: poolSnapshot.backstop?.id ?? poolSnapshot.metadata.backstop!,
+        backstopTokenId: tokenInfo?.tokenId ?? null,
+        lpTokenPrice: tokenPrice,
+        blndPerLpToken: blndPerLp,
         shares: userShares,
         lpTokens,
         lpTokensUsd,

@@ -4,6 +4,7 @@ import { useMemo } from "react"
 import { detectPositionChanges, calculateEarningsStats } from "@/lib/balance-history-utils"
 import { formatUsdWithSymbol } from "@/lib/format-utils"
 import { LP_TOKEN_ADDRESS } from "@/lib/constants"
+import { lpTokenForPool } from "@/lib/config/blockchain"
 import type { AssetCardData } from "@/types/asset-card"
 import type { BalanceData } from "@/types/wallet-balance"
 import type { ChartDataPoint, EarningsStats, PositionChange } from "@/types/balance-history"
@@ -20,6 +21,8 @@ interface BackstopPosition {
   poolId: string
   costBasisLp?: number
   lpTokensUsd: number
+  /** Current price of this backstop's own LP token (V2.1 → Comet V1.1) */
+  lpTokenPrice?: number
 }
 
 interface BalanceChartDataPoint {
@@ -51,7 +54,14 @@ interface BalanceHistoryQueryResult {
 }
 
 interface BackstopBalanceHistoryQuery {
-  data: { history: Array<{ date: string; lp_tokens: number }> } | undefined
+  data: {
+    history: Array<{
+      date: string
+      lp_tokens: number
+      /** Per-pool LP; pools behind different backstops hold different LP tokens */
+      pools?: Array<{ poolAddress: string; lpTokens: number }>
+    }>
+  } | undefined
   isLoading: boolean
   error: Error | null
 }
@@ -297,9 +307,18 @@ export function useComputedBalance(
 
     // Build a map of backstop history by date for quick lookup
     const backstopByDate = new Map<string, number>()
+    const backstopPoolsByDate = new Map<string, Array<{ poolAddress: string; lpTokens: number }>>()
     backstopBalanceHistoryQuery.data?.history?.forEach((point) => {
       backstopByDate.set(point.date, point.lp_tokens || 0)
+      if (point.pools && point.pools.length > 0) backstopPoolsByDate.set(point.date, point.pools)
     })
+
+    // Current price per backstop LP token: the V1 LP from the snapshot, others
+    // (Comet V1.1 for V2.1 pools) from the positions behind that backstop.
+    const currentLpPrice = (token: string): number => {
+      if (token === LP_TOKEN_ADDRESS) return lpTokenPrice || 0
+      return backstopPositions.find((bp) => lpTokenForPool(bp.poolId) === token)?.lpTokenPrice || 0
+    }
 
     // Hoist invariants used by the per-date loop's fallback branch.
     // Both are independent of `date`, so we'd otherwise recompute them per iteration.
@@ -358,10 +377,17 @@ export function useComputedBalance(
       // When showPriceChanges is OFF, always use current LP price (no historical price impact)
       // When showPriceChanges is ON, use historical LP price if available
       const backstopLpTokens = backstopByDate.get(date) || 0
-      const lpPrice = showPriceChanges && historicalPrices?.hasHistoricalData
-        ? historicalPrices.getPrice(LP_TOKEN_ADDRESS, date)
-        : (lpTokenPrice || 0)
-      const backstopUsdValue = backstopLpTokens * lpPrice
+      const priceOf = (token: string): number =>
+        showPriceChanges && historicalPrices?.hasHistoricalData
+          ? historicalPrices.getPrice(token, date)
+          : currentLpPrice(token)
+      // Value each pool's LP with its own backstop token price
+      const poolsAtDate = backstopPoolsByDate.get(date)
+      const backstopUsdValue = poolsAtDate
+        ? poolsAtDate.reduce((sum, p) => sum + p.lpTokens * priceOf(lpTokenForPool(p.poolAddress)), 0)
+        : backstopLpTokens * priceOf(LP_TOKEN_ADDRESS)
+      // LP-weighted price, for converting the (LP-denominated) cost basis
+      const lpPrice = backstopLpTokens > 0 ? backstopUsdValue / backstopLpTokens : priceOf(LP_TOKEN_ADDRESS)
       totalBalance += backstopUsdValue
 
       // For deposit (cost basis), use historical cost basis if available, otherwise fall back to current

@@ -31,6 +31,7 @@ import {
 } from '@/lib/api'
 import { cacheKey, todayDate, CACHE_TTL } from '@/lib/redis'
 import { LP_TOKEN_ADDRESS } from '@/lib/constants'
+import { areEmissionsEnabled, isBackstopInterestPayable } from '@/lib/config/blockchain'
 import type {
   ApyPeriod,
   SupplyExploreItem,
@@ -181,7 +182,8 @@ async function buildSupplyItems(
 
       // Compute BLND APY from emissions
       let blndApy: number | null = null
-      if (blndPrice && blndPrice > 0 && reserve.supplyEmissions) {
+      // V2.1 emissions are unfunded and not claimable yet: show none
+      if (blndPrice && blndPrice > 0 && reserve.supplyEmissions && areEmissionsEnabled(snapshot.metadata.backstop)) {
         try {
           const totalSupply = reserve.totalSupply()
           const decimals = reserve.config?.decimals ?? 7
@@ -277,7 +279,8 @@ async function buildBackstopItems(
       // Calculate emission APY (always use current since we don't have historical emission data)
       const blndEmissionsPerLpToken = snapshot.backstopPool.emissionPerYearPerBackstopToken()
       let emissionApy = 0
-      if (blndPrice && lpTokenPrice > 0) {
+      // V2.1 emissions are unfunded and not claimable yet: show none
+      if (blndPrice && lpTokenPrice > 0 && areEmissionsEnabled(snapshot.backstop.id)) {
         const emissionValueUsd = blndEmissionsPerLpToken * blndPrice
         emissionApy = (emissionValueUsd / lpTokenPrice) * 100
       }
@@ -301,7 +304,12 @@ async function buildBackstopItems(
           const poolEst = PoolEstimate.build(snapshot.pool.reserves, snapshot.oracle)
           const backstopRateFloat = FixedMath.toFloat(BigInt(snapshot.metadata.backstopRate), 7)
 
-          if (backstopPoolEst.totalSpotValue > 0) {
+          // A broken backstop LP (Comet V1) can't receive interest auctions and
+          // is worth ~$0, which would make the formula explode: report 0.
+          if (
+            backstopPoolEst.totalSpotValue > 0 &&
+            isBackstopInterestPayable(snapshot.backstop.backstopToken?.id)
+          ) {
             interestApr =
               ((backstopRateFloat * poolEst.avgBorrowApy * poolEst.totalBorrowed) /
                 backstopPoolEst.totalSpotValue) *
@@ -331,6 +339,8 @@ async function buildBackstopItems(
         totalDeposited: Number.isFinite(totalDeposited) ? totalDeposited : null,
         totalQ4w: Number.isFinite(totalQ4w) && totalQ4w > 0 ? totalQ4w : null,
         q4wPercent: Number.isFinite(q4wPercent) && q4wPercent > 0 ? q4wPercent : null,
+        lpTokenAddress: snapshot.backstop.backstopToken?.id ?? null,
+        lpTokenPrice: Number.isFinite(lpTokenPrice) ? lpTokenPrice : null,
       })
     } catch (error) {
       console.error(`[Explore API] Failed to build backstop item for ${snapshot.poolId}:`, error)

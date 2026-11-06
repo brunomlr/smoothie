@@ -16,14 +16,16 @@ interface PriceDataPoint {
 interface LpPriceSparklineProps {
   currentPrice?: number // SDK price to use for latest day
   priceHistory?: PriceDataPoint[] // Pre-fetched price history (avoids multiple API calls)
+  tokenAddress?: string | null // Backstop LP token (default: Comet V1 LP)
   className?: string
 }
 
-async function fetchLpPriceHistory(timezone: string): Promise<PriceDataPoint[]> {
+async function fetchLpPriceHistory(timezone: string, tokenAddress?: string | null): Promise<PriceDataPoint[]> {
   const params = new URLSearchParams({
     days: "180", // 6 months
     timezone,
   })
+  if (tokenAddress) params.set("token", tokenAddress)
 
   const response = await fetchWithTimeout(`/api/lp-price-history?${params}`)
   if (!response.ok) {
@@ -47,6 +49,7 @@ const LP_PRICE_CONFIG: SparklineConfig = {
 export function LpPriceSparkline({
   currentPrice,
   priceHistory: providedHistory,
+  tokenAddress,
   className = "",
 }: LpPriceSparklineProps) {
   // Get user's timezone for consistent date handling
@@ -54,8 +57,8 @@ export function LpPriceSparkline({
 
   // Only fetch if no priceHistory was provided
   const { data: fetchedHistory, isLoading: isFetching } = useQuery({
-    queryKey: ["lp-price-history", timezone],
-    queryFn: () => fetchLpPriceHistory(timezone),
+    queryKey: ["lp-price-history", timezone, tokenAddress ?? null],
+    queryFn: () => fetchLpPriceHistory(timezone, tokenAddress),
     staleTime: 60 * 60 * 1000, // 1 hour
     refetchInterval: false,
     enabled: !providedHistory, // Skip fetch if history is provided

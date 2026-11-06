@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Separator } from "@/components/ui/separator"
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
 import { useRealizedYield } from "@/hooks/use-realized-yield"
+import { isBackstopLpToken } from "@/lib/config/blockchain"
 import { useRealizedYieldMulti } from "@/hooks/use-realized-yield-multi"
 import { useBlendPositions } from "@/hooks/use-blend-positions"
 import { useBlendPositionsMulti } from "@/hooks/use-blend-positions-multi"
@@ -287,7 +288,7 @@ function RealizedYieldContent() {
         } else {
           target.usd += tx.amount * (blndPrice ?? 0)
         }
-      } else if (tx.asset === 'BLND-USDC LP') {
+      } else if (isBackstopLpToken(tx.assetAddress)) {
         target.lp += tx.amount
         // LP tokens always use historical price (no setting for LP)
         target.usd += tx.valueUsd

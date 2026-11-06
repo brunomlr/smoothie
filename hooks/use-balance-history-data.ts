@@ -7,7 +7,7 @@ import { fillMissingDates, detectPositionChanges, calculateEarningsStats } from 
 import type { AssetCardData } from "@/types/asset-card"
 import type { BalanceHistoryPoint, ChartDataPoint, EarningsStats, PositionChange } from "@/types/balance-history"
 import { decodeBalanceHistory } from "@/lib/balance-history-codec"
-import { LP_TOKEN_ADDRESS } from "@/lib/constants"
+import { BACKSTOP_LP_TOKENS } from "@/lib/config/blockchain"
 import type { BalanceHistoryBatchResponse } from "@/app/api/balance-history-batch/route"
 
 // localStorage cache for instant repeat loads
@@ -68,6 +68,7 @@ interface BalanceHistoryDataEntry {
 interface BackstopHistoryPoint {
   date: string
   lp_tokens: number
+  pools?: Array<{ poolAddress: string; lpTokens: number }>
 }
 
 interface BackstopBalanceHistoryData {
@@ -337,8 +338,9 @@ export function useBalanceHistoryData(
   // forward-filled prices tolerate.
   const historyTokenAddresses = useMemo(() => {
     const addresses = Array.from(decodedResults.keys())
-    if (!addresses.includes(LP_TOKEN_ADDRESS)) {
-      addresses.push(LP_TOKEN_ADDRESS)
+    // Every backstop LP token (Comet V1 for V2 pools, V1.1 for V2.1 pools)
+    for (const lpToken of BACKSTOP_LP_TOKENS) {
+      if (!addresses.includes(lpToken)) addresses.push(lpToken)
     }
     return addresses
   }, [decodedResults])

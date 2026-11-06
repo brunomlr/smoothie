@@ -70,9 +70,15 @@ export function useDashboardData(
     if (positions.lpTokenPrice && positions.lpTokenPrice > 0) {
       map.set(LP_TOKEN_ADDRESS, positions.lpTokenPrice)
     }
+    // Other backstop LP tokens (Comet V1.1 for V2.1 pools)
+    positions.backstopPositions?.forEach(bp => {
+      if (bp.backstopTokenId && bp.backstopTokenId !== LP_TOKEN_ADDRESS && bp.lpTokenPrice > 0) {
+        map.set(bp.backstopTokenId, bp.lpTokenPrice)
+      }
+    })
 
     return map
-  }, [positions.data, positions.lpTokenPrice])
+  }, [positions.data, positions.lpTokenPrice, positions.backstopPositions])
 
   // 4/5. Token set and date span for historical prices. Both come from the
   // history response alone (supersets of what the chart plots), so this request

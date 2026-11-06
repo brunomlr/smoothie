@@ -5,6 +5,8 @@ export interface BackstopPositionData {
   simulatedEmissionsLp?: number | null // LP tokens claimable from emissions (via on-chain simulation)
   emissionApy?: number // APY from BLND emissions for this pool's backstop (in %)
   lpTokensUsd?: number // USD value of LP tokens in this backstop position
+  lpTokenPrice?: number // USD price of this backstop's own LP token
+  blndPerLpToken?: number // BLND per LP token of this backstop's comet
 }
 
 export interface BlndRewardsCardProps {

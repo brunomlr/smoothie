@@ -17,6 +17,7 @@ import { fetchWithTimeout } from "@/lib/fetch-utils"
 import { useCurrencyPreference } from "@/hooks/use-currency-preference"
 import { useDisplayPreferences } from "@/contexts/display-preferences-context"
 import { getPoolName as getConfigPoolName } from "@/lib/config/pools"
+import { LP_TOKEN_ADDRESS, lpTokenForPool } from "@/lib/config/blockchain"
 
 import type { BlndRewardsCardProps, TableRow } from "./types"
 import { formatNumber, formatCompact } from "./helpers"
@@ -128,9 +129,18 @@ export function BlndRewardsCard({
       // Use historical LP token prices from API
       return backstopClaimedUsdHistorical
     }
-    // Use current LP price
-    return totalClaimedLp * (lpTokenPrice || 0)
-  }, [displayPreferences.useHistoricalBlndPrices, backstopClaimedUsdHistorical, totalClaimedLp, lpTokenPrice])
+    // Current price of each pool's own backstop LP token (V2.1 → Comet V1.1)
+    const claims: Array<{ pool_address: string; total_claimed_lp: number }> =
+      backstopClaimsData?.backstop_claims ?? []
+    const total = claims.reduce((sum, claim) => {
+      const position = backstopPositions.find((bp) => bp.poolId === claim.pool_address)
+      const price =
+        position?.lpTokenPrice ||
+        (lpTokenForPool(claim.pool_address) === LP_TOKEN_ADDRESS ? lpTokenPrice || 0 : 0)
+      return sum + (claim.total_claimed_lp || 0) * price
+    }, 0)
+    return Math.max(0, total)
+  }, [displayPreferences.useHistoricalBlndPrices, backstopClaimedUsdHistorical, backstopClaimsData, backstopPositions, lpTokenPrice])
 
   // Calculate total pending LP from backstop emissions
   const totalPendingLp = useMemo(() => {
@@ -140,14 +150,30 @@ export function BlndRewardsCard({
         return sum + bp.simulatedEmissionsLp
       }
       // Fallback: rough conversion if simulation unavailable
-      if (bp.claimableBlnd && blndPerLpToken > 0) {
-        return sum + (bp.claimableBlnd / blndPerLpToken)
+      const bpBlndPerLp = bp.blndPerLpToken || blndPerLpToken
+      if (bp.claimableBlnd && bpBlndPerLp > 0) {
+        return sum + (bp.claimableBlnd / bpBlndPerLp)
       }
       return sum
     }, 0)
     // Ensure non-negative (can go slightly negative after claiming due to tx fees)
     return Math.max(0, total)
   }, [backstopPositions, blndPerLpToken])
+
+  // USD value of pending LP, priced per position: each backstop has its own
+  // LP token (V2 → Comet V1 LP, V2.1 → Comet V1.1 LP).
+  const totalPendingLpUsd = useMemo(() => {
+    const total = backstopPositions.reduce((sum, bp) => {
+      const bpBlndPerLp = bp.blndPerLpToken || blndPerLpToken
+      const pendingLp = bp.simulatedEmissionsLp != null && bp.simulatedEmissionsLp > 0
+        ? bp.simulatedEmissionsLp
+        : bp.claimableBlnd && bpBlndPerLp > 0
+          ? bp.claimableBlnd / bpBlndPerLp
+          : 0
+      return sum + pendingLp * (bp.lpTokenPrice || lpTokenPrice || 0)
+    }, 0)
+    return Math.max(0, total)
+  }, [backstopPositions, blndPerLpToken, lpTokenPrice])
 
   // Calculate combined weighted APY (BLND from supply/borrow + LP emissions from backstop)
   const combinedApy = useMemo(() => {
@@ -262,9 +288,10 @@ export function BlndRewardsCard({
       // Backstop row - show LP tokens (not BLND)
       const backstopPos = backstopPositions.find(bp => bp.poolId === poolId)
       // Use simulatedEmissionsLp if available, otherwise convert claimableBlnd to LP
+      const posBlndPerLp = backstopPos?.blndPerLpToken || blndPerLpToken
       const backstopClaimableLp = backstopPos?.simulatedEmissionsLp ??
-        (backstopPos?.claimableBlnd && blndPerLpToken > 0
-          ? backstopPos.claimableBlnd / blndPerLpToken
+        (backstopPos?.claimableBlnd && posBlndPerLp > 0
+          ? backstopPos.claimableBlnd / posBlndPerLp
           : 0)
       const backstopClaimedLp = backstopClaimsMap.get(poolId) || 0 // Already in LP
 
@@ -334,7 +361,7 @@ export function BlndRewardsCard({
             {(() => {
               const hasBothRewards = totalPendingBlnd > 0 && totalPendingLp > 0
               const blndUsd = blndPrice ? totalPendingBlnd * blndPrice : 0
-              const lpUsd = lpTokenPrice ? totalPendingLp * lpTokenPrice : 0
+              const lpUsd = totalPendingLpUsd
               const combinedUsd = blndUsd + lpUsd
 
               return (
@@ -534,9 +561,9 @@ export function BlndRewardsCard({
                 </div>
                 <div className="w-20 text-right">
                   <div className="tabular-nums">{formatNumber(totalPendingLp, 2)}</div>
-                  {lpTokenPrice && totalPendingLp > 0 && (
+                  {totalPendingLpUsd > 0 && totalPendingLp > 0 && (
                     <div className="text-xs text-muted-foreground font-normal">
-                      {formatUsd(totalPendingLp * lpTokenPrice)}
+                      {formatUsd(totalPendingLpUsd)}
                     </div>
                   )}
                 </div>
@@ -560,7 +587,7 @@ export function BlndRewardsCard({
                 {/* Combined Total USD */}
                 {(() => {
                   const blndTotalUsd = blndPrice ? (totalPendingBlnd * blndPrice) + poolClaimedUsdDisplay : 0
-                  const lpTotalUsd = lpTokenPrice ? (totalPendingLp * lpTokenPrice) + backstopClaimedUsdDisplay : 0
+                  const lpTotalUsd = totalPendingLpUsd + backstopClaimedUsdDisplay
                   const combinedTotalUsd = blndTotalUsd + lpTotalUsd
                   if (combinedTotalUsd > 0) {
                     return (

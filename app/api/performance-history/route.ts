@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { eventsRepository } from '@/lib/db/events-repository'
 import { LP_TOKEN_ADDRESS } from '@/lib/constants'
+import { BACKSTOP_LP_TOKENS, lpTokenForPool } from '@/lib/config/blockchain'
 import { getAllDatesBetween, getToday } from '@/lib/date-utils'
 import { resolveWalletAddress, getTimezone } from '@/lib/api'
 
@@ -181,13 +182,16 @@ export async function GET(request: NextRequest) {
       pricesByAsset.set(assetAddress, prices)
     }
 
-    // Get LP token prices
-    const lpPrices = await eventsRepository.getHistoricalPricesForDateRange(
-      LP_TOKEN_ADDRESS,
-      startDate,
-      today,
-      lpTokenPrice
-    )
+    // Get LP token prices for every backstop LP token (V2: Comet V1, V2.1: V1.1)
+    const lpPricesByToken = new Map<string, Map<string, { price: number; source: string }>>()
+    for (const lpToken of BACKSTOP_LP_TOKENS) {
+      lpPricesByToken.set(lpToken, await eventsRepository.getHistoricalPricesForDateRange(
+        lpToken,
+        startDate,
+        today,
+        lpToken === LP_TOKEN_ADDRESS ? lpTokenPrice : sdkPrices[lpToken] || 0
+      ))
+    }
 
     // Step 5: Get deposit/withdrawal events for cost basis calculation
     const depositEventsMap = await eventsRepository.getDepositEventsWithPricesBatch(
@@ -512,21 +516,25 @@ export async function GET(request: NextRequest) {
       let backstopProtocolYield = 0
       let backstopCostBasis = 0
 
-      const lpPriceData = lpPrices.get(date)
-      const lpPrice = lpPriceData?.price || 0
-
-      // Sum backstop LP tokens across all pools
+      // Sum backstop LP tokens across all pools, valuing each pool's LP with
+      // its own backstop token price
       let totalBackstopLpTokens = 0
-      for (const [, carriedMap] of backstopCarriedByPoolByDate) {
+      let totalBackstopLpUsd = 0
+      for (const [poolAddress, carriedMap] of backstopCarriedByPoolByDate) {
         const lpTokens = carriedMap.get(date) || 0
         totalBackstopLpTokens += lpTokens
+        totalBackstopLpUsd += lpTokens * (lpPricesByToken.get(lpTokenForPool(poolAddress))?.get(date)?.price || 0)
       }
+      // LP-weighted price, for converting LP-denominated yield to USD
+      const lpPrice = totalBackstopLpTokens > 0
+        ? totalBackstopLpUsd / totalBackstopLpTokens
+        : lpPricesByToken.get(LP_TOKEN_ADDRESS)?.get(date)?.price || 0
 
       const backstopStateAtDate = backstopStateByDate.get(date)
         || { principal: 0, cost: 0, realizedYieldUsd: 0 }
       const backstopEarnedTokens = totalBackstopLpTokens - backstopStateAtDate.principal
 
-      backstopValue = totalBackstopLpTokens * lpPrice
+      backstopValue = totalBackstopLpUsd
       backstopProtocolYield = backstopEarnedTokens * lpPrice
       backstopCostBasis = backstopStateAtDate.cost
 

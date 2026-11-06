@@ -880,6 +880,7 @@ function BackstopSection({
             </div>
             <LpPriceSparkline
               currentPrice={lpTokenPrice || undefined}
+              tokenAddress={position.backstopTokenId}
               className="h-12 w-full"
             />
           </div>
@@ -1177,7 +1178,8 @@ export default function PoolDetailsPage() {
     activeWallet?.publicKey,
     poolPositions,
     poolBackstopPositions,
-    snapshot?.lpTokenPrice || null,
+    // This pool's backstop LP price (V2.1 backstop uses a different LP token)
+    poolBackstopPositions[0]?.lpTokenPrice || snapshot?.lpTokenPrice || null,
   );
 
   const poolData = useMemo(() => {
@@ -1354,7 +1356,9 @@ export default function PoolDetailsPage() {
       backstopPosition,
       backstopYieldBreakdown,
       backstopClaimedLp: backstopClaimData?.total_claimed_lp || 0,
-      blndPerLpToken: snapshot?.blndPerLpToken || 0,
+      // This pool's own backstop comet (V2.1 uses a different LP than V2)
+      blndPerLpToken:
+        rawBackstopPosition?.blndPerLpToken || snapshot?.blndPerLpToken || 0,
       poolName:
         positionsWithYield[0]?.poolName ||
         backstopPosition?.poolName ||

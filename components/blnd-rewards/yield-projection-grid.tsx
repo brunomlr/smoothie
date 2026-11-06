@@ -6,6 +6,7 @@ import { formatNumber } from "./helpers"
 interface BackstopPositionLite {
   lpTokensUsd?: number
   emissionApy?: number
+  lpTokenPrice?: number // USD price of this backstop's own LP token
 }
 
 export interface YieldProjectionGridProps {
@@ -37,11 +38,16 @@ export function YieldProjectionGrid({
   // Backstop totals weighted by position USD value
   let totalBackstopUsd = 0
   let weightedBackstopApy = 0
+  // LP tokens are counted per position: each backstop has its own LP token
+  // and price (V2 → Comet V1 LP, V2.1 → Comet V1.1 LP).
+  let annualLpFromPositions = 0
   backstopPositions.forEach(bp => {
     const posUsd = bp.lpTokensUsd || 0
     const posApy = bp.emissionApy || 0
     totalBackstopUsd += posUsd
     weightedBackstopApy += posUsd * posApy
+    const posLpPrice = bp.lpTokenPrice || lpTokenPrice || 0
+    if (posLpPrice > 0) annualLpFromPositions += (posUsd * (posApy / 100)) / posLpPrice
   })
   const backstopApy = totalBackstopUsd > 0 ? weightedBackstopApy / totalBackstopUsd : 0
 
@@ -54,13 +60,13 @@ export function YieldProjectionGrid({
 
   // LP yield: backstop position value × emission APY → USD → LP tokens
   const annualLpUsd = totalBackstopUsd * (backstopApy / 100)
-  const annualLp = lpTokenPrice && lpTokenPrice > 0 ? annualLpUsd / lpTokenPrice : 0
+  const annualLp = annualLpFromPositions
   const monthlyLp = annualLp / 12
   const dailyLp = annualLp / 365
 
   // Combined USD totals
   const dailyBlndUsd = dailyBlnd * blndPrice
-  const dailyLpUsd = dailyLp * (lpTokenPrice || 0)
+  const dailyLpUsd = annualLpUsd / 365
   const dailyTotalUsd = dailyBlndUsd + dailyLpUsd
   const annualTotalUsd = dailyTotalUsd * 365
   // annual/12 to match the monthly token amounts shown beneath (x30 days disagreed by ~1.4%)

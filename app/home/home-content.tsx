@@ -87,6 +87,12 @@ export function HomeContent() {
     if (lpTokenPrice && lpTokenPrice > 0) {
       map.set(LP_TOKEN_ADDRESS, lpTokenPrice)
     }
+    // Other backstop LP tokens (Comet V1.1 for V2.1 pools)
+    blendSnapshot.backstopPositions?.forEach(bp => {
+      if (bp.backstopTokenId && bp.backstopTokenId !== LP_TOKEN_ADDRESS && bp.lpTokenPrice > 0) {
+        map.set(bp.backstopTokenId, bp.lpTokenPrice)
+      }
+    })
 
     return map
   }, [blendSnapshot, lpTokenPrice])

@@ -21,6 +21,8 @@ interface BlendPosition {
 interface BackstopPosition {
   poolId: string
   lpTokens: number
+  /** Price of this backstop's own LP token (V2.1 uses the Comet V1.1 LP) */
+  lpTokenPrice?: number
   lpTokensUsd: number
   costBasisLp?: number
   q4wLpTokens?: number  // LP tokens in queue-for-withdrawal (21-day lock)
@@ -377,7 +379,7 @@ export function useHistoricalYieldBreakdown(
 
       // Pre-aggregate backstop positions by poolId (for multi-wallet support)
       // This ensures we sum LP tokens from all wallets for the same pool
-      const aggregatedBackstopByPool = new Map<string, { lpTokens: number; q4wLpTokens: number; costBasisLp: number }>()
+      const aggregatedBackstopByPool = new Map<string, { lpTokens: number; q4wLpTokens: number; costBasisLp: number; lpTokenPrice: number }>()
       for (const bp of backstopPositions) {
         const existing = aggregatedBackstopByPool.get(bp.poolId)
         if (existing) {
@@ -389,6 +391,8 @@ export function useHistoricalYieldBreakdown(
             lpTokens: bp.lpTokens,
             q4wLpTokens: bp.q4wLpTokens || 0,
             costBasisLp: bp.costBasisLp || 0,
+            // Each pool's backstop has its own LP token (V2: Comet V1, V2.1: V1.1)
+            lpTokenPrice: bp.lpTokenPrice || lpTokenPrice,
           })
         }
       }
@@ -399,6 +403,7 @@ export function useHistoricalYieldBreakdown(
         // and still earning yield, just locked for 21 days
         const totalLpTokens = aggregatedBp.lpTokens + aggregatedBp.q4wLpTokens
         if (totalLpTokens <= 0) continue
+        const poolLpPrice = aggregatedBp.lpTokenPrice
 
         // Filter events for this specific pool
         const poolDeposits = backstopEvents?.deposits.filter(d => d.poolAddress === poolId) || []
@@ -425,7 +430,7 @@ export function useHistoricalYieldBreakdown(
 
           const breakdown = calculateHistoricalYieldBreakdown(
             totalLpTokens,
-            lpTokenPrice,
+            poolLpPrice,
             deposits,
             withdrawals
           )
@@ -446,16 +451,16 @@ export function useHistoricalYieldBreakdown(
           // Price change will be 0 since we don't know the historical price.
           // The protocol yield = (current LP - net deposited) × current price
           const yieldLpTokens = totalLpTokens - netDepositedLpTokens
-          const protocolYieldUsd = yieldLpTokens * lpTokenPrice
-          const currentValueUsd = totalLpTokens * lpTokenPrice
+          const protocolYieldUsd = yieldLpTokens * poolLpPrice
+          const currentValueUsd = totalLpTokens * poolLpPrice
 
           // Since we don't have historical price, assume same as current (no price change)
           // Cost basis = net deposited tokens × current price (best estimate)
-          const costBasisHistorical = netDepositedLpTokens * lpTokenPrice
+          const costBasisHistorical = netDepositedLpTokens * poolLpPrice
 
           poolBreakdown = {
             costBasisHistorical,
-            weightedAvgDepositPrice: lpTokenPrice,
+            weightedAvgDepositPrice: poolLpPrice,
             netDepositedTokens: netDepositedLpTokens,
             protocolYieldTokens: yieldLpTokens,
             protocolYieldUsd,

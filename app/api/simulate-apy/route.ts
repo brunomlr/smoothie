@@ -23,6 +23,7 @@ import {
   type ReserveConfig,
 } from "@/lib/blend/apy-simulator";
 import { createApiHandler, requireString } from "@/lib/api";
+import { areEmissionsEnabled } from "@/lib/config/blockchain";
 
 interface ReserveConfigResponse {
   poolId: string;
@@ -145,7 +146,8 @@ async function loadReserveConfig(
 
     // Calculate BLND emissions per year for this reserve
     let blndEmissionsPerYear: number | null = null;
-    if (reserve.supplyEmissions) {
+    // V2.1 emissions are unfunded and not claimable yet: show none
+    if (reserve.supplyEmissions && areEmissionsEnabled(metadata.backstop)) {
       try {
         const totalSupplyRaw = reserve.totalSupply();
         const decimals = config.decimals ?? 7;

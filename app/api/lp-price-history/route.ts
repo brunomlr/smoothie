@@ -1,6 +1,7 @@
 /**
  * LP Token Price History API Route
- * Fetches daily LP token prices from the database
+ * Fetches daily LP token prices from the database.
+ * `token` selects the backstop LP (default Comet V1; V2.1 uses Comet V1.1).
  */
 
 import { NextRequest } from 'next/server'
@@ -9,9 +10,11 @@ import {
   createApiHandler,
   optionalInt,
   CACHE_CONFIGS,
+  ValidationError,
 } from '@/lib/api'
 import { cacheKey, todayDate, CACHE_TTL } from '@/lib/redis'
 import { LP_TOKEN_ADDRESS } from '@/lib/constants'
+import { isBackstopLpToken } from '@/lib/config/blockchain'
 
 export interface LpPriceDataPoint {
   date: string
@@ -34,13 +37,18 @@ export const GET = createApiHandler<LpPriceHistoryResponse>({
     getKey: (request) => {
       const params = request.nextUrl.searchParams
       const timezone = params.get('timezone') || 'UTC'
-      return cacheKey('lp-price-history', params.get('days') || '180', timezone, todayDate())
+      const token = params.get('token') || LP_TOKEN_ADDRESS
+      return cacheKey('lp-price-history', token, params.get('days') || '180', timezone, todayDate())
     },
   },
 
   async handler(_request: NextRequest, { searchParams }) {
     const days = optionalInt(searchParams, 'days', 180, { min: 1 })
     const timezone = searchParams.get('timezone') || 'UTC'
+    const tokenAddress = searchParams.get('token') || LP_TOKEN_ADDRESS
+    if (!isBackstopLpToken(tokenAddress)) {
+      throw new ValidationError(`Unsupported LP token: ${tokenAddress}`, 'token')
+    }
 
     if (!pool) {
       throw new Error('Database not configured')
@@ -88,7 +96,7 @@ export const GET = createApiHandler<LpPriceHistoryResponse>({
       WHERE d.date <= (SELECT today FROM today_in_tz)
       ORDER BY d.date ASC
       `,
-      [days, LP_TOKEN_ADDRESS, timezone]
+      [days, tokenAddress, timezone]
     )
 
     const history: LpPriceDataPoint[] = result.rows
@@ -99,7 +107,7 @@ export const GET = createApiHandler<LpPriceHistoryResponse>({
       }))
 
     return {
-      token_address: LP_TOKEN_ADDRESS,
+      token_address: tokenAddress,
       days,
       count: history.length,
       history,

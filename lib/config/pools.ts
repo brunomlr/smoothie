@@ -35,6 +35,12 @@ export const POOLS: Record<string, PoolConfig> = {
     color: '#eab308', // Yellow
     icon: 'forex',
   },
+  // Blend V2.1 pool (V2.1 backstop, Comet V1.1 LP as backstop token)
+  'CBAKAZUEJBAFA2DCGBRS2WKJT3FNIMJBHTFL76AY7XMAVEINQNNIQWAO': {
+    name: 'Fixed v2.1',
+    color: '#14b8a6', // Teal
+    icon: 'fixed',
+  },
 } as const
 
 // Helper functions

@@ -22,7 +22,7 @@ import { useCurrencyPreference } from "@/hooks/use-currency-preference"
 import { useTokensOnly } from "@/hooks/use-metadata"
 import type { HistoricalPricesResponse } from "@/app/api/historical-prices/route"
 import type { TransactionHistoryProps, GroupedAction } from "./types"
-import { LP_TOKEN_ADDRESS } from "./constants"
+import { lpTokenForPool } from "@/lib/config/blockchain"
 import { TransactionRow, MobileTransactionCard } from "./transaction-row"
 import { Filters } from "./filters"
 
@@ -109,8 +109,8 @@ export function TransactionHistory({
       const isClaimEvent = action.action_type === "claim"
 
       if (isBackstopEvent) {
-        // For backstop events, use the LP token address (BLND-USDC Comet LP)
-        tokenSet.add(LP_TOKEN_ADDRESS)
+        // For backstop events, use the pool's backstop LP token (V2.1 → Comet V1.1)
+        tokenSet.add(lpTokenForPool(action.pool_id))
         dateSet.add(date)
       } else if (isClaimEvent) {
         // For BLND claims, use the BLND token address

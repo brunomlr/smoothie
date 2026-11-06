@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { eventsRepository } from '@/lib/db/events-repository'
 import { LP_TOKEN_ADDRESS } from '@/lib/constants'
+import { BACKSTOP_LP_TOKENS, lpTokenForPool } from '@/lib/config/blockchain'
 import { resolveWalletAddress, getTimezone } from '@/lib/api'
 
 export type PeriodType = '1W' | '1M' | '1Y' | 'All'
@@ -309,8 +310,12 @@ export async function GET(request: NextRequest) {
     for (const assetAddress of uniqueAssets) {
       priceRequests.push({ tokenAddress: assetAddress, targetDate: periodStartDate })
     }
-    // Also add LP token price request
-    priceRequests.push({ tokenAddress: LP_TOKEN_ADDRESS, targetDate: periodStartDate })
+    // Also add LP token price requests: every backstop LP token at period start,
+    // plus today's stored price as the "now" fallback for non-V1 LP tokens
+    for (const lpToken of BACKSTOP_LP_TOKENS) {
+      priceRequests.push({ tokenAddress: lpToken, targetDate: periodStartDate })
+      if (lpToken !== LP_TOKEN_ADDRESS) priceRequests.push({ tokenAddress: lpToken, targetDate: todayStr })
+    }
 
     const sdkPricesMap = new Map<string, number>(Object.entries(sdkPrices))
     const batchedPrices = await eventsRepository.getHistoricalPricesForMultipleTokensAndDates(
@@ -471,11 +476,9 @@ export async function GET(request: NextRequest) {
         timezone // Use user's timezone to match chart data
       )
 
-      // Get LP token price at period start from batched prices
+      // V1 LP price at period start from batched prices (per-pool tokens resolved below)
       const lpPrices = batchedPrices.get(LP_TOKEN_ADDRESS)
       const lpPriceData = lpPrices?.get(periodStartDate) || { price: lpTokenPrice, source: 'sdk_fallback' as const }
-      const lpPriceAtStart = lpPriceData.price
-      const lpPriceSource = lpPriceData.source
 
       // Get backstop events within period for net deposited calculation
       const backstopEventsData = await eventsRepository.getBackstopEventsWithPrices(
@@ -502,6 +505,17 @@ export async function GET(request: NextRequest) {
       // Process each backstop pool
       for (const poolAddress of backstopPoolAddresses) {
         const lpTokensNow = backstopPositions[poolAddress] || 0
+
+        // Price with this pool's own backstop LP token (V2: Comet V1, V2.1: V1.1)
+        const poolLpToken = lpTokenForPool(poolAddress)
+        const poolPriceNow = poolLpToken === LP_TOKEN_ADDRESS
+          ? lpTokenPrice
+          : sdkPricesMap.get(poolLpToken) || batchedPrices.get(poolLpToken)?.get(todayStr)?.price || 0
+        const poolPriceStartData = poolLpToken === LP_TOKEN_ADDRESS
+          ? lpPriceData
+          : batchedPrices.get(poolLpToken)?.get(periodStartDate) || { price: poolPriceNow, source: 'sdk_fallback' as const }
+        const poolPriceAtStart = poolPriceStartData.price
+        const poolPriceSource = poolPriceStartData.source
 
         // Find LP tokens BEFORE period start from history
         // Since balance history is END-OF-DAY snapshots, we look for balance STRICTLY BEFORE
@@ -550,22 +564,22 @@ export async function GET(request: NextRequest) {
         // Calculate price change on deposits made during period
         // Each deposit was made at a historical price, price change = tokens * (currentPrice - depositPrice)
         const priceChangeOnDeposits = poolDepositsInPeriod.reduce((sum, d) => {
-          return sum + d.lpTokens * (lpTokenPrice - d.priceAtDeposit)
+          return sum + d.lpTokens * (poolPriceNow - d.priceAtDeposit)
         }, 0)
         // Withdrawals: we "lost" the price appreciation on those tokens
         const priceChangeLostOnWithdrawals = poolWithdrawalsInPeriod.reduce((sum, w) => {
-          return sum + w.lpTokens * (lpTokenPrice - w.priceAtWithdrawal)
+          return sum + w.lpTokens * (poolPriceNow - w.priceAtWithdrawal)
         }, 0)
 
         // Calculate breakdown
         const interestEarnedLpTokens = lpTokensNow - lpTokensAtStart - netDepositedInPeriod
-        const protocolYieldUsd = interestEarnedLpTokens * lpTokenPrice
+        const protocolYieldUsd = interestEarnedLpTokens * poolPriceNow
         // Price change = change on tokens at start + change on deposits - change lost on withdrawals
-        const priceChangeOnStartTokens = lpTokensAtStart * (lpTokenPrice - lpPriceAtStart)
+        const priceChangeOnStartTokens = lpTokensAtStart * (poolPriceNow - poolPriceAtStart)
         const priceChangeUsd = priceChangeOnStartTokens + priceChangeOnDeposits - priceChangeLostOnWithdrawals
         const backstopTotalEarned = protocolYieldUsd + priceChangeUsd
-        const valueAtStart = lpTokensAtStart * lpPriceAtStart
-        const valueNow = lpTokensNow * lpTokenPrice
+        const valueAtStart = lpTokensAtStart * poolPriceAtStart
+        const valueNow = lpTokensNow * poolPriceNow
 
         byBackstop[poolAddress] = {
           poolAddress,
@@ -573,9 +587,9 @@ export async function GET(request: NextRequest) {
           lpTokensNow,
           netDepositedInPeriod,
           interestEarnedLpTokens,
-          priceAtStart: lpPriceAtStart,
-          priceNow: lpTokenPrice,
-          priceSource: lpPriceSource,
+          priceAtStart: poolPriceAtStart,
+          priceNow: poolPriceNow,
+          priceSource: poolPriceSource,
           valueAtStart,
           valueNow,
           protocolYieldUsd,
@@ -588,7 +602,7 @@ export async function GET(request: NextRequest) {
         totalValueNow += valueNow
         totalProtocolYieldUsd += protocolYieldUsd
         totalPriceChangeUsd += priceChangeUsd
-        priceSourceCounts[lpPriceSource]++
+        priceSourceCounts[poolPriceSource]++
         backstopCount++
       }
     }

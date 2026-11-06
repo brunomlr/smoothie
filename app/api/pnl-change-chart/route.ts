@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { eventsRepository } from '@/lib/db/events-repository'
 import { LP_TOKEN_ADDRESS, BLND_TOKEN_ADDRESS } from '@/lib/constants'
+import { BACKSTOP_LP_TOKENS, lpTokenForPool } from '@/lib/config/blockchain'
 import { resolveWalletAddress, getTimezone } from '@/lib/api'
 
 export type PnlPeriodType = '1W' | '1M' | '6M'
@@ -426,9 +427,11 @@ export async function GET(request: NextRequest) {
         priceRequests.push({ tokenAddress: assetAddress, targetDate: date })
       }
     }
-    // Add LP token prices
-    for (const date of allDates) {
-      priceRequests.push({ tokenAddress: LP_TOKEN_ADDRESS, targetDate: date })
+    // Add LP token prices (every backstop LP token: Comet V1 and V1.1)
+    for (const lpToken of BACKSTOP_LP_TOKENS) {
+      for (const date of allDates) {
+        priceRequests.push({ tokenAddress: lpToken, targetDate: date })
+      }
     }
     // Add BLND token prices
     for (const date of allDates) {
@@ -920,6 +923,9 @@ export async function GET(request: NextRequest) {
       // The balance history tracks lp_tokens_value = shares × share_rate
       // To calculate yield correctly, we use shares from both history and events
       for (const poolAddress of backstopPoolAddresses) {
+        // Each pool's backstop has its own LP token (V2: Comet V1, V2.1: V1.1)
+        const poolLpToken = lpTokenForPool(poolAddress)
+        const poolSdkLpPrice = poolLpToken === LP_TOKEN_ADDRESS ? sdkLpPrice : sdkPricesMap.get(poolLpToken) || 0
         const positionAtStart = getBackstopPositionAtDate(poolAddress, dayBeforeStr)
         let lpAtEnd: number
         let sharesAtEnd: number
@@ -972,10 +978,10 @@ export async function GET(request: NextRequest) {
 
         // Get LP prices
         // Use day before period start for consistent period-over-period comparison (both live and historical)
-        const lpPriceAtStart = getPriceAtDate(LP_TOKEN_ADDRESS, dayBeforeStr)
-        const lpPriceAtEnd = isLive && sdkLpPrice > 0
-          ? sdkLpPrice
-          : getPriceAtDate(LP_TOKEN_ADDRESS, boundary.end)
+        const lpPriceAtStart = getPriceAtDate(poolLpToken, dayBeforeStr)
+        const lpPriceAtEnd = isLive && poolSdkLpPrice > 0
+          ? poolSdkLpPrice
+          : getPriceAtDate(poolLpToken, boundary.end)
 
         if (lpPriceAtEnd <= 0) continue
 
@@ -1034,7 +1040,7 @@ export async function GET(request: NextRequest) {
         // BLND on deposits (pro-rated from deposit date to period end)
         for (const deposit of periodDeposits) {
           const depositDate = new Date(deposit.timestamp)
-          const lpPriceAtDeposit = getPriceAtDate(LP_TOKEN_ADDRESS, backstopDateFormatter.format(depositDate))
+          const lpPriceAtDeposit = getPriceAtDate(poolLpToken, backstopDateFormatter.format(depositDate))
           const daysRemaining = Math.max(0, (periodEndDate.getTime() - depositDate.getTime()) / (1000 * 60 * 60 * 24))
           backstopBlndEarnings += deposit.lpTokens * lpPriceAtDeposit * dailyBackstopBlndRate * daysRemaining
         }
@@ -1042,7 +1048,7 @@ export async function GET(request: NextRequest) {
         // Subtract BLND that would have been earned on withdrawals
         for (const withdrawal of periodWithdrawals) {
           const withdrawDate = new Date(withdrawal.timestamp)
-          const lpPriceAtWithdraw = getPriceAtDate(LP_TOKEN_ADDRESS, backstopDateFormatter.format(withdrawDate))
+          const lpPriceAtWithdraw = getPriceAtDate(poolLpToken, backstopDateFormatter.format(withdrawDate))
           const daysRemaining = Math.max(0, (periodEndDate.getTime() - withdrawDate.getTime()) / (1000 * 60 * 60 * 24))
           backstopBlndEarnings -= withdrawal.lpTokens * lpPriceAtWithdraw * dailyBackstopBlndRate * daysRemaining
         }
@@ -1058,7 +1064,7 @@ export async function GET(request: NextRequest) {
         for (const deposit of periodDeposits) {
           // Get LP price at the date of deposit
           const depositDate = backstopDateFormatter.format(new Date(deposit.timestamp))
-          const lpPriceAtDeposit = getPriceAtDate(LP_TOKEN_ADDRESS, depositDate)
+          const lpPriceAtDeposit = getPriceAtDate(poolLpToken, depositDate)
           lpPriceChangeOnDeposits += deposit.lpTokens * (lpPriceAtEnd - lpPriceAtDeposit)
         }
 
@@ -1066,7 +1072,7 @@ export async function GET(request: NextRequest) {
         let lpPriceChangeLostOnWithdrawals = 0
         for (const withdrawal of periodWithdrawals) {
           const withdrawDate = backstopDateFormatter.format(new Date(withdrawal.timestamp))
-          const lpPriceAtWithdraw = getPriceAtDate(LP_TOKEN_ADDRESS, withdrawDate)
+          const lpPriceAtWithdraw = getPriceAtDate(poolLpToken, withdrawDate)
           lpPriceChangeLostOnWithdrawals += withdrawal.lpTokens * (lpPriceAtEnd - lpPriceAtWithdraw)
         }
 

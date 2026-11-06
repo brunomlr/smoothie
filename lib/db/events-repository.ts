@@ -1,6 +1,21 @@
 import { pool } from './config'
 import { UserBalance, UserAction, Pool, Token, DailyRate, BackstopPoolState, BackstopUserBalance, BackstopCostBasis, BackstopYield } from './types'
 import { LP_TOKEN_ADDRESS } from '@/lib/constants'
+import { lpTokenForPool, lpTokenLabel, lpTokenSqlCase } from '@/lib/config/blockchain'
+
+/**
+ * Current-price fallback for a backstop LP row without a stored daily price.
+ * `sdkLpPrice` is the snapshot price of the V1 LP (LP_TOKEN_ADDRESS); other
+ * backstop LP tokens fall back only to an explicitly provided price.
+ */
+function lpFallbackPrice(
+  poolAddress: string | null | undefined,
+  sdkLpPrice: number,
+  sdkPrices?: Map<string, number>
+): number {
+  const token = lpTokenForPool(poolAddress)
+  return sdkPrices?.get(token) ?? (token === LP_TOKEN_ADDRESS ? sdkLpPrice : 0)
+}
 
 export class EventsRepository {
   /**
@@ -1913,7 +1928,7 @@ export class EventsRepository {
       LEFT JOIN LATERAL (
         SELECT usd_price, price_date::text
         FROM daily_token_prices
-        WHERE token_address = $2
+        WHERE token_address = ${lpTokenSqlCase('c.pool_address')}
           AND price_date <= c.claim_date::date
         ORDER BY price_date DESC
         LIMIT 1
@@ -1921,7 +1936,7 @@ export class EventsRepository {
       WHERE c.pool_address IS NOT NULL
       ORDER BY c.ledger_closed_at
       `,
-      [userAddress, LP_TOKEN_ADDRESS]
+      [userAddress]
     )
 
     let totalClaimedLp = 0
@@ -1938,7 +1953,7 @@ export class EventsRepository {
     for (const row of result.rows) {
       const lpAmount = parseFloat(row.lp_tokens) || 0
       const historicalPrice = row.price ? parseFloat(row.price) : null
-      const priceAtClaim = historicalPrice ?? sdkLpPrice
+      const priceAtClaim = historicalPrice ?? lpFallbackPrice(row.pool_address, sdkLpPrice)
       const usdValueAtClaim = lpAmount * priceAtClaim
 
       totalClaimedLp += lpAmount
@@ -2335,7 +2350,7 @@ export class EventsRepository {
       LEFT JOIN LATERAL (
         SELECT usd_price, price_date::text
         FROM daily_token_prices
-        WHERE token_address = '${LP_TOKEN_ADDRESS}'
+        WHERE token_address = ${lpTokenSqlCase('e.pool_address')}
           AND price_date <= e.event_date::date
         ORDER BY price_date DESC
         LIMIT 1
@@ -2370,7 +2385,8 @@ export class EventsRepository {
     for (const row of result.rows) {
       const lpTokens = parseFloat(row.lp_tokens) || 0
       const shares = parseFloat(row.shares) || 0
-      let price = row.price ? parseFloat(row.price) : sdkLpPrice
+      const fallbackPrice = lpFallbackPrice(row.pool_address, sdkLpPrice)
+      let price = row.price ? parseFloat(row.price) : fallbackPrice
       let priceSource: 'daily_token_prices' | 'forward_fill' | 'sdk_fallback'
 
       if (row.price !== null) {
@@ -2380,7 +2396,7 @@ export class EventsRepository {
           priceSource = 'forward_fill'
         }
       } else {
-        price = sdkLpPrice
+        price = fallbackPrice
         priceSource = 'sdk_fallback'
       }
 
@@ -2773,14 +2789,14 @@ export class EventsRepository {
       LEFT JOIN LATERAL (
         SELECT usd_price, price_date::text
         FROM daily_token_prices
-        WHERE token_address = $2
+        WHERE token_address = ${lpTokenSqlCase('e.pool_address')}
           AND price_date <= e.event_date::date
         ORDER BY price_date DESC
         LIMIT 1
       ) price_data ON true
       ORDER BY e.ledger_closed_at
       `,
-      [userAddress, LP_TOKEN_ADDRESS]
+      [userAddress]
     )
 
     // Get BLND claims from pools with historical prices
@@ -2862,7 +2878,7 @@ export class EventsRepository {
       LEFT JOIN LATERAL (
         SELECT usd_price, price_date::text
         FROM daily_token_prices
-        WHERE token_address = $2
+        WHERE token_address = ${lpTokenSqlCase('c.pool_address')}
           AND price_date <= c.claim_date::date
         ORDER BY price_date DESC
         LIMIT 1
@@ -2870,7 +2886,7 @@ export class EventsRepository {
       WHERE c.pool_address IS NOT NULL
       ORDER BY c.ledger_closed_at
       `,
-      [userAddress, LP_TOKEN_ADDRESS]
+      [userAddress]
     )
 
     // Get user-liquidation fills (auction_type 0) with the collateral (lot)
@@ -2989,7 +3005,8 @@ export class EventsRepository {
 
     for (const row of backstopEventsResult.rows) {
       let lpTokens = parseFloat(row.lp_tokens) || 0
-      const price = row.price ? parseFloat(row.price) : sdkLpPrice
+      const price = row.price ? parseFloat(row.price) : lpFallbackPrice(row.pool_address, sdkLpPrice, sdkPrices)
+      const lpToken = lpTokenForPool(row.pool_address)
 
       if (row.action_type === 'deposit') {
         // Skip the restaked portion (claim LP auto-compounded in the same tx)
@@ -3009,8 +3026,8 @@ export class EventsRepository {
         date: row.event_date,
         type: row.action_type === 'deposit' ? 'deposit' : 'withdraw',
         source: 'backstop',
-        asset: 'BLND-USDC LP',
-        assetAddress: LP_TOKEN_ADDRESS,
+        asset: lpTokenLabel(lpToken),
+        assetAddress: lpToken,
         amount: lpTokens,
         priceUsd: price,
         valueUsd: lpTokens * price,
@@ -3106,7 +3123,8 @@ export class EventsRepository {
 
     for (const row of backstopClaimsResult.rows) {
       const lpTokens = parseFloat(row.lp_tokens) || 0
-      const price = row.price ? parseFloat(row.price) : sdkLpPrice
+      const price = row.price ? parseFloat(row.price) : lpFallbackPrice(row.pool_address, sdkLpPrice, sdkPrices)
+      const lpToken = lpTokenForPool(row.pool_address)
 
       lpClaimed += lpTokens
       lpClaimsUsd += lpTokens * price
@@ -3121,8 +3139,8 @@ export class EventsRepository {
         date: row.claim_date as string,
         type: 'claim' as const,
         source: 'backstop' as const,
-        asset: 'BLND-USDC LP',
-        assetAddress: LP_TOKEN_ADDRESS,
+        asset: lpTokenLabel(lpToken),
+        assetAddress: lpToken,
         priceUsd: price,
         txHash: row.transaction_hash as string,
         poolId: row.pool_address as string,
