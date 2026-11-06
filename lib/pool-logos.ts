@@ -6,6 +6,7 @@ export const POOL_LOGO_MAP: Record<string, string> = {
   "Orbit": "/pools/orbit.png",
   "YieldBlox": "/pools/yieldblox.png",
   "Fixed": "/pools/fixed.png",
+  "Fixed v2.1": "/pools/fixed.png", // Blend V2.1 Fixed pool: same brand as Fixed
   "Forex": "/pools/forex.png",
   "Etherfuse": "/pools/etherfuse.png",
 }
